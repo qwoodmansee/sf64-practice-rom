@@ -3,14 +3,14 @@
 #ifdef PRACTICE_ROM
 
 static u16 sPracticeBindings[PACTION_MAX] = {
-    U_JPAD,  /* PACTION_QUICK_RESTART: L + D-Pad Up */
-    D_JPAD,  /* PACTION_OPEN_MENU:     L + D-Pad Down */
-    L_JPAD,  /* PACTION_SAVE_POS:      L + D-Pad Left */
-    R_JPAD,  /* PACTION_RESTORE_POS:   L + D-Pad Right */
+    U_JPAD,  /* PACTION_OPEN_MENU_FROZEN: L + D-Pad Up */
+    D_JPAD,  /* PACTION_OPEN_MENU:        L + D-Pad Down */
+    L_JPAD,  /* PACTION_SAVE_POS:         L + D-Pad Left */
+    R_JPAD,  /* PACTION_RESTORE_POS:      L + D-Pad Right */
 };
 
 static const char* sPracticeActionNames[PACTION_MAX] = {
-    "RESTART",
+    "MENU (FROZEN)",
     "MENU",
     "SAVE POS",
     "LOAD POS",

@@ -518,13 +518,25 @@ void Game_Update(void) {
                 OvlMenu_CallFunction(OVLCALL_OPTION_UPDATE, NULL);
                 break;
             case GSTATE_MAP:
+#ifdef PRACTICE_ROM
+                if (gPracticeScreen == PSCREEN_LEVEL_SELECT) {
+                    gDrawMode = DRAW_NONE;
+                    break;
+                }
+#endif
                 Map_Main();
                 break;
             case GSTATE_VS_INIT:
                 Versus_StartMatch();
                 break;
             case GSTATE_PLAY:
+#ifdef PRACTICE_ROM
+                if (gPracticeMenuState != PMENU_OPEN_FROZEN) {
+                    Play_Main();
+                }
+#else
                 Play_Main();
+#endif
                 break;
             case GSTATE_GAME_OVER:
                 OvlMenu_CallFunction(OVLCALL_GAME_OVER_UPDATE, NULL);

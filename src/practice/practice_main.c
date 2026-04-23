@@ -28,13 +28,13 @@ void Practice_Update(void) {
             Practice_LevelSelect_Update();
             break;
         case PSCREEN_GAMEPLAY:
-            if (gPracticeMenuState == PMENU_OPEN) {
+            if (gPracticeMenuState != PMENU_CLOSED) {
                 Practice_Menu_Update();
             } else {
                 if (Practice_InputTriggered(PACTION_OPEN_MENU)) {
                     Practice_Menu_Open();
-                } else if (Practice_InputTriggered(PACTION_QUICK_RESTART)) {
-                    Practice_LaunchLevel(gCurrentLevel, gLevelPhase);
+                } else if (Practice_InputTriggered(PACTION_OPEN_MENU_FROZEN)) {
+                    Practice_Menu_OpenFrozen();
                 } else if (Practice_InputTriggered(PACTION_SAVE_POS)) {
                     Practice_SaveState();
                 } else if (Practice_InputTriggered(PACTION_RESTORE_POS)) {
@@ -54,7 +54,7 @@ void Practice_Draw(void) {
             if (gPracticeConfig.showInputDisplay) {
                 Practice_InputDisplay_Draw();
             }
-            if (gPracticeMenuState == PMENU_OPEN) {
+            if (gPracticeMenuState != PMENU_CLOSED) {
                 Practice_Menu_Draw();
             }
             break;
@@ -77,6 +77,31 @@ void Practice_ApplyStartConditions(void) {
     }
     if (!gPracticeConfig.peppyAlive) {
         gTeamShields[TEAM_ID_PEPPY] = 0;
+    }
+
+    if (gPracticeConfig.skipCutscenes) {
+        gCsWasNotSkipped = false;
+
+        switch (gCurrentLevel) {
+            case LEVEL_CORNERIA:  AUDIO_PLAY_BGM(NA_BGM_STAGE_CO); break;
+            case LEVEL_METEO:     AUDIO_PLAY_BGM(NA_BGM_STAGE_ME); break;
+            case LEVEL_SECTOR_Y:  AUDIO_PLAY_BGM(NA_BGM_STAGE_SY); break;
+            case LEVEL_FORTUNA:   AUDIO_PLAY_BGM(NA_BGM_STAGE_FO); break;
+            case LEVEL_KATINA:    AUDIO_PLAY_BGM(NA_BGM_STAGE_KA); break;
+            case LEVEL_AQUAS:     AUDIO_PLAY_BGM(NA_BGM_STAGE_AQ); break;
+            case LEVEL_SECTOR_X:  AUDIO_PLAY_BGM(NA_BGM_STAGE_SX); break;
+            case LEVEL_SOLAR:     AUDIO_PLAY_BGM(NA_BGM_STAGE_SO); break;
+            case LEVEL_ZONESS:    AUDIO_PLAY_BGM(NA_BGM_STAGE_ZO); break;
+            case LEVEL_TITANIA:   AUDIO_PLAY_BGM(NA_BGM_STAGE_TI); break;
+            case LEVEL_MACBETH:   AUDIO_PLAY_BGM(NA_BGM_STAGE_MA); break;
+            case LEVEL_SECTOR_Z:  AUDIO_PLAY_BGM(NA_BGM_STAGE_SZ); break;
+            case LEVEL_BOLSE:     AUDIO_PLAY_BGM(NA_BGM_STAGE_BO); break;
+            case LEVEL_AREA_6:    AUDIO_PLAY_BGM(NA_BGM_STAGE_A6); break;
+            case LEVEL_VENOM_1:
+            case LEVEL_VENOM_2:   AUDIO_PLAY_BGM(NA_BGM_STAGE_VE1); break;
+            case LEVEL_TRAINING:  AUDIO_PLAY_BGM(NA_BGM_TRAINING); break;
+            default: break;
+        }
     }
 }
 

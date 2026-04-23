@@ -5899,6 +5899,8 @@ void Player_Update(Player* player) {
                 gPracticeScreen = PSCREEN_LEVEL_SELECT;
                 gGameState = GSTATE_MAP;
                 gDrawMode = DRAW_NONE;
+                Audio_FadeOutAll(1);
+                Audio_ClearVoice();
                 break;
             }
 #endif

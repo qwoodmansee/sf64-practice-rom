@@ -8,6 +8,7 @@
 typedef enum PracticeMenuState {
     PMENU_CLOSED,
     PMENU_OPEN,
+    PMENU_OPEN_FROZEN,
 } PracticeMenuState;
 
 typedef enum PracticeScreen {
@@ -28,8 +29,13 @@ typedef struct PracticeConfig {
     bool skipCutscenes;
 } PracticeConfig;
 
+typedef enum PracticeSubMenu {
+    PSUBMENU_LOADOUT,
+    PSUBMENU_OPTIONS,
+} PracticeSubMenu;
+
 typedef enum PracticeAction {
-    PACTION_QUICK_RESTART,
+    PACTION_OPEN_MENU_FROZEN,
     PACTION_OPEN_MENU,
     PACTION_SAVE_POS,
     PACTION_RESTORE_POS,
@@ -69,13 +75,14 @@ s32 Practice_GetSelectedPhase(void);
 
 /* practice_state.c */
 bool Practice_StateMenuIsOpen(void);
-void Practice_StateMenu_Open(void);
+void Practice_StateMenu_Open(PracticeSubMenu subMenu);
 void Practice_StateMenu_Close(void);
 void Practice_StateMenu_Update(void);
 void Practice_StateMenu_Draw(void);
 
 /* practice_menu.c */
 void Practice_Menu_Open(void);
+void Practice_Menu_OpenFrozen(void);
 void Practice_Menu_Close(void);
 void Practice_Menu_Update(void);
 void Practice_Menu_Draw(void);

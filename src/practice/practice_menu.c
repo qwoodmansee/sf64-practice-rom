@@ -7,7 +7,8 @@ typedef enum MenuOption {
     MOPT_SAVE_POS,
     MOPT_RESTORE_POS,
     MOPT_LEVEL_SELECT,
-    MOPT_SETTINGS,
+    MOPT_LOADOUT,
+    MOPT_OPTIONS,
     MOPT_CLOSE,
     MOPT_MAX,
 } MenuOption;
@@ -16,6 +17,11 @@ static s32 sMenuCursor = 0;
 
 void Practice_Menu_Open(void) {
     gPracticeMenuState = PMENU_OPEN;
+    sMenuCursor = 0;
+}
+
+void Practice_Menu_OpenFrozen(void) {
+    gPracticeMenuState = PMENU_OPEN_FROZEN;
     sMenuCursor = 0;
 }
 
@@ -67,9 +73,14 @@ void Practice_Menu_Update(void) {
                 gPracticeScreen = PSCREEN_LEVEL_SELECT;
                 gGameState = GSTATE_MAP;
                 gDrawMode = DRAW_NONE;
+                Audio_FadeOutAll(1);
+                Audio_ClearVoice();
                 break;
-            case MOPT_SETTINGS:
-                Practice_StateMenu_Open();
+            case MOPT_LOADOUT:
+                Practice_StateMenu_Open(PSUBMENU_LOADOUT);
+                break;
+            case MOPT_OPTIONS:
+                Practice_StateMenu_Open(PSUBMENU_OPTIONS);
                 break;
             case MOPT_CLOSE:
                 Practice_Menu_Close();
@@ -86,11 +97,12 @@ void Practice_Menu_Draw(void) {
         "SAVE POSITION",
         "RESTORE POSITION",
         "LEVEL SELECT",
-        "SETTINGS",
+        "LOADOUT",
+        "OPTIONS",
         "CLOSE",
     };
 
-    Practice_DrawBox(60, 50, 200, 140, 0, 0, 0, 200);
+    Practice_DrawBox(60, 50, 200, 150, 0, 0, 0, 200);
 
     Practice_DrawTextColor(70, 54, "PRACTICE MENU", 0, 255, 128);
 
