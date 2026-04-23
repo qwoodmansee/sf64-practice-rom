@@ -3,6 +3,9 @@
 #include "sf64dma.h"
 #include "assets/ast_logo.h"
 #include "mods.h"
+#ifdef PRACTICE_ROM
+#include "practice.h"
+#endif
 
 f32 gNextVsViewScale;
 f32 gVsViewScale;
@@ -56,6 +59,18 @@ void Game_Initialize(void) {
     Rand_SetSeed(1, 29000, 9876);
     gGameState = GSTATE_BOOT;
 #ifdef MODS_BOOT_STATE
+    gNextGameState = GSTATE_INIT;
+    if (Save_Read() != 0) {
+#ifdef AVOID_UB
+        gSaveFile.save = gDefaultSave;
+        gSaveFile.backup = gDefaultSave;
+#else
+        gSaveFile = *((SaveFile*) &gDefaultSave);
+#endif
+        Save_Write();
+    }
+#endif
+#ifdef PRACTICE_ROM
     gNextGameState = GSTATE_INIT;
     if (Save_Read() != 0) {
 #ifdef AVOID_UB
@@ -432,6 +447,10 @@ void Game_Update(void) {
 #ifdef MODS_BOOT_STATE
                 gNextGameState = MODS_BOOT_STATE;
 #endif
+#ifdef PRACTICE_ROM
+                Practice_Init();
+                gNextGameState = GSTATE_MAP;
+#endif
                 for (i = 0; i < 4; i++) {
                     gBoostButton[i] = L_CBUTTONS;
                     gBrakeButton[i] = D_CBUTTONS;
@@ -617,6 +636,10 @@ void Game_Update(void) {
 #endif
 #if MODS_SPAWNER == 1
         Spawner();
+#endif
+#ifdef PRACTICE_ROM
+        Practice_Update();
+        Practice_Draw();
 #endif
     }
 }

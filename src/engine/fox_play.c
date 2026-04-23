@@ -21,6 +21,9 @@
 #include "assets/ast_versus.h"
 #include "assets/ast_area_6.h"
 #include "assets/ast_zoness.h"
+#ifdef PRACTICE_ROM
+#include "practice.h"
+#endif
 
 UNK_TYPE D_800D2F50 = 0; // unused
 s32 sOverheadCam = 0;
@@ -4773,6 +4776,10 @@ void Player_Setup(Player* playerx) {
         gClearPlayerInfo = true;
     }
 
+#ifdef PRACTICE_ROM
+    Practice_ApplyStartConditions();
+#endif
+
     player->sfx.levelType = gLevelType;
     player->sfx.form = player->form;
 
@@ -5886,6 +5893,15 @@ void Player_Update(Player* player) {
             break;
 
         case PLAYERSTATE_LEVEL_COMPLETE:
+#ifdef PRACTICE_ROM
+            if (gPracticeConfig.skipCutscenes) {
+                Practice_Menu_Close();
+                gPracticeScreen = PSCREEN_LEVEL_SELECT;
+                gGameState = GSTATE_MAP;
+                gDrawMode = DRAW_NONE;
+                break;
+            }
+#endif
             player->alternateView = false;
             gPauseEnabled = false;
             Player_UpdateShields(player);
@@ -7020,7 +7036,11 @@ void Play_Main(void) {
 
             if ((gControllerPress[gMainController].button & START_BUTTON) &&
                 (gPlayer[0].state == PLAYERSTATE_LEVEL_INTRO) &&
+#ifdef PRACTICE_ROM
+                true) {
+#else
                 gSaveFile.save.data.planet[sSaveSlotFromLevel[gCurrentLevel]].normalClear) {
+#endif
                 Audio_ClearVoice();
                 Audio_SetEnvSfxReverb(0);
                 Play_ClearObjectData();

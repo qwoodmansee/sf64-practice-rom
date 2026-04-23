@@ -148,6 +148,11 @@ ifeq ($(NON_MATCHING),1)
     CPPFLAGS += -DNON_MATCHING -DAVOID_UB
 endif
 
+ifeq ($(PRACTICE_ROM),1)
+    BUILD_DEFINES   += -DPRACTICE_ROM=1 -DAVOID_UB
+    COMPARE := 0
+endif
+
 MAKE = make
 CPPFLAGS += -fno-dollars-in-identifiers -P
 LDFLAGS  := --no-check-sections --accept-unknown-input-arch --emit-relocs
@@ -470,6 +475,9 @@ assets:
 
 mod:
 	@$(TORCH) modding import code $(BASEROM_UNCOMPRESSED)
+
+practice:
+	$(MAKE) PRACTICE_ROM=1
 
 clean:
 	rm -f torch.hash.yml
