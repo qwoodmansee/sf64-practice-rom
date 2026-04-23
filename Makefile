@@ -466,6 +466,7 @@ extract:
 	@$(CAT) yamls/$(VERSION)/$(REV)/header.yaml yamls/$(VERSION)/$(REV)/main.yaml yamls/$(VERSION)/$(REV)/assets.yaml yamls/$(VERSION)/$(REV)/overlays.yaml > $(SPLAT_YAML)
 	@echo "Extracting..."
 	@$(SPLAT) $(SPLAT_YAML)
+	@$(PYTHON) tools/patch_linker_script.py
 
 assets:
 	@echo "Extracting assets from ROM..."
@@ -477,6 +478,7 @@ mod:
 	@$(TORCH) modding import code $(BASEROM_UNCOMPRESSED)
 
 practice:
+	@$(PYTHON) tools/patch_linker_script.py
 	$(MAKE) PRACTICE_ROM=1
 
 clean:
