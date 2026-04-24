@@ -1,0 +1,23 @@
+CLAUDE.md
+  8a167f3874b19446 53-122
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "918280260062533097bcb7c7ce031e872c6b986f",
+  "prompts": {
+    "8a167f3874b19446": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "67683a80-52e4-4e76-adb5-5cd69a4804f2",
+        "model": "unknown"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 70,
+      "total_deletions": 0,
+      "accepted_lines": 695,
+      "overriden_lines": 0
+    }
+  }
+}
