@@ -50,3 +50,73 @@ This is a C codebase targeting the N64 (MIPS). Use the project's existing
 conventions: `gCamelCase` for globals, `sCamelCase` for file statics,
 `PascalCase` for types, `UPPER_CASE` for defines/enums. Use `bcopy(src, dst, len)`
 instead of `memcpy` — it's the N64 SDK equivalent.
+
+## CRITICAL: gPlayer is a pointer, not an array
+
+`gPlayer` (`Player*`) is dynamically allocated in `Play_Init()` via
+`MEM_ARRAY_ALLOCATE`. It is **NULL** until `gPlayState == PLAY_UPDATE`.
+The game sets `gGameState = GSTATE_PLAY` 3 frames before `Play_Init` runs
+(due to `gNextGameStateTimer = 3`).
+
+**Any code that accesses `gPlayer[0]` must guard with:**
+```c
+if ((gGameState != GSTATE_PLAY) || (gPlayState != PLAY_UPDATE)) {
+    return;
+}
+```
+Checking `gGameState == GSTATE_PLAY` alone is NOT sufficient.
+Checking `gPlayer[0].state == PLAYERSTATE_ACTIVE` alone is NOT sufficient
+(the pointer itself is NULL).
+
+## MIPS float safety
+
+On MIPS, converting a NaN or uninitialized float to integer (`(s32)value`)
+triggers a floating point exception that freezes the N64. Before doing float
+math on game state that may be uninitialized:
+
+1. Ensure the owning struct is actually allocated (see gPlayer above)
+2. Optionally check raw bits: `*(u32*)&floatVal` — exponent 0xFF = NaN/inf
+
+`Practice_DrawFloat` has a NaN guard (`value != value`) but this only works
+if the float is in a valid memory location.
+
+## Adding a new practice source file (checklist)
+
+1. Create `src/practice/practice_<name>.c` (wrap in `#ifdef PRACTICE_ROM`)
+2. Add function declarations to `include/practice.h`
+3. Add any config fields to `PracticeConfig` struct in `include/practice.h`
+4. Initialize config defaults in `Practice_Init()` (`src/practice/practice_main.c`)
+5. Wire Update/Draw calls into `Practice_Update()`/`Practice_Draw()` in `practice_main.c`
+6. Add menu entries: enum in `OptionsOption`, toggle in `StateMenu_UpdateOptions()`,
+   draw in `StateMenu_DrawOptions()` (all in `src/practice/practice_state.c`)
+7. Add filename (no extension) to `PRACTICE_OBJS` in `tools/patch_linker_script.py`
+8. If linker script is already patched (contains `practice_main`), manually add
+   the `.o` to all four sections (`.text`, `.data`, `.rodata`, `.bss`)
+
+## Worktree setup
+
+Git worktrees miss gitignored build dependencies. Symlink from main repo:
+- `asm/`, `bin/`, `baserom/`, `baserom.us.rev1.*.z64`, `starfox64.us.rev1.yaml`,
+  `torch.hash.yml`, `tools/ido-recomp`, `tools/mio0`, `include/assets/*.h`
+- **Copy** (not symlink) `linker_scripts/us/rev1/starfox64.ld` — it gets modified
+- Symlink `build/bin/us/rev1/*.o` and `build/src/assets/` from main repo build dir
+- Run `git submodule update --init` for tool submodules
+
+## Key game state variables
+
+| Variable | Type | Notes |
+|----------|------|-------|
+| `gHitCount` | `s32` | Current level hit count |
+| `gGameFrameCount` | `s32` | Master frame counter |
+| `gPlayer[0].baseSpeed` | `f32` | Base movement speed |
+| `gPlayer[0].boostSpeed` | `f32` | Boost/brake modifier |
+| `gPlayer[0].csState` | `s32` | Charge shot state (0 = idle) |
+| `gArwingSpeed` | `f32` | Global arwing speed |
+| `gControllerHold[gMainController]` | `OSContPad` | Current held buttons |
+| `gControllerPress[gMainController]` | `OSContPad` | Buttons pressed this frame |
+
+## Text rendering
+
+`Graphics_DisplaySmallText` supports: ` ABCDEFGHIJKLMNOPQRSTUVWXYZ!:-.0123456789`
+(defined in `sSmallChars[]` in `fox_std_lib.c`). Lowercase and most punctuation
+are NOT supported. Screen is 320x240.
