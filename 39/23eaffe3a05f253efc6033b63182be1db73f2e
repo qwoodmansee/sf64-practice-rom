@@ -1,0 +1,35 @@
+src/practice/practice_draw.c
+  8a167f3874b19446 58-127
+src/practice/practice_hud.c
+  8a167f3874b19446 1-143
+src/practice/practice_state.c
+  8a167f3874b19446 21-25,148-162,280-304,314-315,317,322,325
+src/practice/practice_level.c
+  8a167f3874b19446 200
+tools/patch_linker_script.py
+  8a167f3874b19446 20
+include/practice.h
+  8a167f3874b19446 30-34,65,96-100
+src/practice/practice_main.c
+  8a167f3874b19446 23-27,36,60
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "3923eaffe3a05f253efc6033b63182be1db73f2e",
+  "prompts": {
+    "8a167f3874b19446": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "67683a80-52e4-4e76-adb5-5cd69a4804f2",
+        "model": "unknown"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 999,
+      "total_deletions": 94,
+      "accepted_lines": 908,
+      "overriden_lines": 0
+    }
+  }
+}
