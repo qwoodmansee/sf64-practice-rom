@@ -1,0 +1,31 @@
+src/practice/practice_main.c
+  ff0cd71cd6eab86f 28
+src/practice/practice_hud.c
+  ff0cd71cd6eab86f 17,23-26,31,37-40,73-74,81,105,151-168
+include/practice.h
+  ff0cd71cd6eab86f 35,54-57
+src/practice/practice_state.c
+  ff0cd71cd6eab86f 26,164-166,309-313,323-324
+src/engine/fox_enmy.c
+  ff0cd71cd6eab86f 22-24,1765-1774,2720-2724
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "5e202f08126dce1700851f56bdcfb2654d374500",
+  "prompts": {
+    "ff0cd71cd6eab86f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "aee08446-3465-46c8-a87e-2c8091ec03a9",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 87,
+      "total_deletions": 23,
+      "accepted_lines": 67,
+      "overriden_lines": 0
+    }
+  }
+}
