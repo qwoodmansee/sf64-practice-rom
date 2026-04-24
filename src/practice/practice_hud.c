@@ -14,22 +14,30 @@ static bool Practice_FloatIsValid(f32* fp) {
 
 static s32 sLastGameFrame = -1;
 static s32 sLagFrameCount = 0;
-static s32 sLastCsState = 0;
+static s32 sLastChargeTimer = 0;
 static s32 sChargeStartFrame = 0;
 static s32 sLastChargeShotGap = 0;
 static s32 sChargeCount = 0;
 static s32 sMissedInputCount = 0;
 static s32 sLastInputPollFrame = -1;
+s32 gPracticeDirectHits = 0;
+s32 gPracticeIndirectCount = 0;
+s32 gPracticeIndirectBonus = 0;
+s32 gPracticeDespawns = 0;
 
 void Practice_Hud_Reset(void) {
     sLastGameFrame = -1;
     sLagFrameCount = 0;
-    sLastCsState = 0;
+    sLastChargeTimer = 0;
     sChargeStartFrame = 0;
     sLastChargeShotGap = 0;
     sChargeCount = 0;
     sMissedInputCount = 0;
     sLastInputPollFrame = -1;
+    gPracticeDirectHits = 0;
+    gPracticeIndirectCount = 0;
+    gPracticeIndirectBonus = 0;
+    gPracticeDespawns = 0;
 }
 
 void Practice_Hud_Update(void) {
@@ -62,14 +70,15 @@ void Practice_Hud_Update(void) {
     sLastGameFrame = gGameFrameCount;
 
     if (gPracticeConfig.showChargeTiming) {
-        if (player->csState != 0 && sLastCsState == 0) {
+        s32 chargeTimer = gChargeTimers[0];
+        if ((sLastChargeTimer > 10) && (chargeTimer == 0)) {
             if (sChargeCount > 0 && sChargeStartFrame > 0) {
                 sLastChargeShotGap = gGameFrameCount - sChargeStartFrame;
             }
             sChargeStartFrame = gGameFrameCount;
             sChargeCount++;
         }
-        sLastCsState = player->csState;
+        sLastChargeTimer = chargeTimer;
     }
 }
 
@@ -93,6 +102,7 @@ void Practice_Hud_Draw(void) {
     if (gPracticeConfig.showSpeed) { lineCount++; }
     if (gPracticeConfig.showChargeTiming) { lineCount += 2; }
     if (gPracticeConfig.showMissedInputs) { lineCount++; }
+    if (gPracticeConfig.showHitTracking) { lineCount += 4; }
 
     if (lineCount == 0) {
         return;
@@ -136,6 +146,24 @@ void Practice_Hud_Draw(void) {
     if (gPracticeConfig.showMissedInputs) {
         Practice_DrawTextColor(labelX, y, "MISSED:", 180, 180, 180);
         Practice_DrawNumber(valueX, y, sMissedInputCount);
+        y += HUD_LINE_H;
+    }
+
+    if (gPracticeConfig.showHitTracking) {
+        Practice_DrawTextColor(labelX, y, "DIRECT:", 180, 180, 180);
+        Practice_DrawNumber(valueX, y, gPracticeDirectHits);
+        y += HUD_LINE_H;
+
+        Practice_DrawTextColor(labelX, y, "INDRCT:", 180, 180, 180);
+        Practice_DrawNumber(valueX, y, gPracticeIndirectCount);
+        y += HUD_LINE_H;
+
+        Practice_DrawTextColor(labelX, y, " BONUS:", 180, 180, 180);
+        Practice_DrawNumber(valueX, y, gPracticeIndirectBonus);
+        y += HUD_LINE_H;
+
+        Practice_DrawTextColor(labelX, y, "DESPWN:", 180, 180, 180);
+        Practice_DrawNumber(valueX, y, gPracticeDespawns);
         y += HUD_LINE_H;
     }
 }

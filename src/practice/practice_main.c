@@ -25,6 +25,7 @@ void Practice_Init(void) {
     gPracticeConfig.showSpeed = true;
     gPracticeConfig.showChargeTiming = false;
     gPracticeConfig.showMissedInputs = false;
+    gPracticeConfig.showHitTracking = true;
 }
 
 void Practice_Update(void) {

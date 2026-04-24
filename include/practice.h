@@ -32,6 +32,7 @@ typedef struct PracticeConfig {
     bool showSpeed;
     bool showChargeTiming;
     bool showMissedInputs;
+    bool showHitTracking;
 } PracticeConfig;
 
 typedef enum PracticeSubMenu {
@@ -50,6 +51,10 @@ typedef enum PracticeAction {
 extern PracticeScreen gPracticeScreen;
 extern PracticeConfig gPracticeConfig;
 extern PracticeMenuState gPracticeMenuState;
+extern s32 gPracticeDirectHits;
+extern s32 gPracticeIndirectCount;
+extern s32 gPracticeIndirectBonus;
+extern s32 gPracticeDespawns;
 
 /* practice_main.c */
 void Practice_Init(void);

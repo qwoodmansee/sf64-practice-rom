@@ -19,6 +19,9 @@
 #include "assets/ast_versus.h"
 #include "assets/ast_zoness.h"
 #include "actordebris.h"
+#ifdef PRACTICE_ROM
+#include "practice.h"
+#endif
 
 s32 gTeamChaseTimers[4];
 s32 gLastPathChange;
@@ -1759,6 +1762,16 @@ void Actor_Despawn(Actor* this) {
         if ((this->dmgSource == AI360_FOX + 1) && (this->info.bonus != 0)) {
             gHitCount += this->info.bonus;
             D_ctx_80177850 = 15;
+#ifdef PRACTICE_ROM
+            if (gPracticeConfig.showHitTracking) {
+                if (this->dmgType == DMG_BEAM) {
+                    gPracticeDirectHits += this->info.bonus;
+                } else {
+                    gPracticeIndirectCount++;
+                    gPracticeIndirectBonus += this->info.bonus;
+                }
+            }
+#endif
 
             if ((gLevelMode == LEVELMODE_ALL_RANGE) && (gDropHitCountItem != 0)) {
                 switch (gDropHitCountItem) {
@@ -2704,6 +2717,11 @@ void Actor_Move(Actor* this) {
         ((gPlayer[0].yPath + var_fv0) < this->obj.pos.y) || ((gPlayer[0].xPath + var_fv0) < this->obj.pos.x) ||
         (this->obj.pos.x < (gPlayer[0].xPath - var_fv0))) {
         Object_Kill(&this->obj, this->sfxSource);
+#ifdef PRACTICE_ROM
+        if (gPracticeConfig.showHitTracking && (this->info.bonus > 0)) {
+            gPracticeDespawns++;
+        }
+#endif
 
         switch (this->obj.id) {
             case OBJ_ACTOR_ZO_DODORA:

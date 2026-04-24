@@ -23,6 +23,7 @@ typedef enum OptionsOption {
     OOPT_SPEED,
     OOPT_CHARGE_TIMING,
     OOPT_MISSED_INPUTS,
+    OOPT_HIT_TRACKING,
     OOPT_BACK,
     OOPT_MAX,
 } OptionsOption;
@@ -159,6 +160,9 @@ static void StateMenu_UpdateOptions(u16 buttons) {
                 break;
             case OOPT_MISSED_INPUTS:
                 gPracticeConfig.showMissedInputs ^= true;
+                break;
+            case OOPT_HIT_TRACKING:
+                gPracticeConfig.showHitTracking ^= true;
                 break;
         }
     }
@@ -302,6 +306,11 @@ static void StateMenu_DrawOptions(void) {
                 Practice_DrawTextColor(120, y, gPracticeConfig.showMissedInputs ? "ON" : "OFF",
                     gPracticeConfig.showMissedInputs ? 0 : 255, gPracticeConfig.showMissedInputs ? 255 : 100, 0);
                 break;
+            case OOPT_HIT_TRACKING:
+                Practice_DrawText(54, y, "  HITS:");
+                Practice_DrawTextColor(120, y, gPracticeConfig.showHitTracking ? "ON" : "OFF",
+                    gPracticeConfig.showHitTracking ? 0 : 255, gPracticeConfig.showHitTracking ? 255 : 100, 0);
+                break;
             case OOPT_BACK:
                 Practice_DrawTextColor(54, y, "BACK", 150, 150, 150);
                 break;
@@ -311,8 +320,8 @@ static void StateMenu_DrawOptions(void) {
 
 void Practice_StateMenu_Draw(void) {
     const char* title = (sActiveSubMenu == PSUBMENU_LOADOUT) ? "LOADOUT" : "OPTIONS";
-    s32 boxHeight = (sActiveSubMenu == PSUBMENU_LOADOUT) ? 115 : 185;
-    s32 helpY = (sActiveSubMenu == PSUBMENU_LOADOUT) ? 148 : 218;
+    s32 boxHeight = (sActiveSubMenu == PSUBMENU_LOADOUT) ? 115 : 199;
+    s32 helpY = (sActiveSubMenu == PSUBMENU_LOADOUT) ? 148 : 232;
 
     Practice_DrawBox(40, 40, 240, boxHeight, 0, 0, 60, 200);
     Practice_DrawTextColor(50, 44, title, 0, 255, 128);
