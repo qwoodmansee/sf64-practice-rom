@@ -110,10 +110,60 @@ Git worktrees miss gitignored build dependencies. Symlink from main repo:
 | `gGameFrameCount` | `s32` | Master frame counter |
 | `gPlayer[0].baseSpeed` | `f32` | Base movement speed |
 | `gPlayer[0].boostSpeed` | `f32` | Boost/brake modifier |
-| `gPlayer[0].csState` | `s32` | Charge shot state (0 = idle) |
+| `gPlayer[0].csState` | `s32` | **Cutscene** state — NOT charge shot (see below) |
+| `gChargeTimers[N]` | `s32` | Charge level for player N (0-21). >20 = lock search active |
 | `gArwingSpeed` | `f32` | Global arwing speed |
 | `gControllerHold[gMainController]` | `OSContPad` | Current held buttons |
 | `gControllerPress[gMainController]` | `OSContPad` | Buttons pressed this frame |
+
+## Misleading field names
+
+- `Player.csState` is the **cutscene** state (level intro/complete sequencing),
+  NOT charge shot state. It is always 0 during normal gameplay. Do not use it
+  to detect charge shots.
+- `gChargeTimers[playerNum]` is the actual charge level. It increments while A
+  is held (caps at 21). At 20+, lock-on search begins. When A is released and
+  `gChargeTimers > 10`, a `PLAYERSHOT_LOCK_ON` fires and the timer resets to 0.
+  Detect a charge shot firing by: `(lastChargeTimer > 10) && (chargeTimer == 0)`.
+- `Actor_Despawn` is misleadingly named — it is the **death/scoring handler**
+  called when an actor is killed. It awards `gHitCount += info.bonus` when the
+  player killed it. The actual off-screen despawn (no scoring) happens in
+  `Actor_Move` when actors go out of range.
+
+## Hooking engine code for practice features
+
+Add `#ifdef PRACTICE_ROM` / `#include "practice.h"` blocks in engine files
+(`src/engine/`). Existing hooks live in `fox_game.c`, `fox_play.c`, `fox_enmy.c`,
+and `fox_beam.c`. Prefer incrementing extern globals from engine hooks rather
+than calling practice functions — simpler and avoids stack/calling-convention issues.
+
+## Enemy scoring system
+
+| Path | What it does |
+|------|-------------|
+| `Actor_Despawn` (`fox_enmy.c`) | Main scoring — awards `info.bonus` to `gHitCount` when `dmgSource == AI360_FOX + 1` |
+| `PlayerShot_UpdateShot` (`fox_beam.c`) | Charge shot multi-kill bonus — `gHitCount += shot->bonus` (1 per actor caught in blast) |
+| Level-specific `gHitCount +=` | Scattered across overlay files (`fox_co.c`, `fox_me.c`, etc.) for bosses and special kills |
+
+Damage types on actors (`this->dmgType`):
+- `DMG_BEAM (1)` — laser/hyper laser direct hit
+- `DMG_EXPLOSION (2)` — charge shot blast radius, nearby explosion
+- `DMG_COLLISION (3)` — physical collision
+- `DMG_BOMB (-1)` — bomb hit
+
+Note: a lock-on charge shot sets `DMG_EXPLOSION` on ALL actors in the blast
+radius, including the primary target. The game does not distinguish the lock-on
+target from collateral kills.
+
+## Adding a new HUD overlay field
+
+1. Add `bool showMyField` to `PracticeConfig` in `include/practice.h`
+2. Set default in `Practice_Init()` (`practice_main.c`)
+3. Add `OOPT_MY_FIELD` enum in `practice_state.c`, add toggle in
+   `StateMenu_UpdateOptions()`, add draw in `StateMenu_DrawOptions()`
+4. Update `boxHeight`/`helpY` in `Practice_StateMenu_Draw()` if menu grows
+5. In `practice_hud.c`: add to `lineCount`, add draw block, reset any
+   counters in `Practice_Hud_Reset()`
 
 ## Text rendering
 
