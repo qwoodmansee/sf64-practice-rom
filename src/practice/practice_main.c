@@ -20,6 +20,11 @@ void Practice_Init(void) {
     gPracticeConfig.peppyAlive = true;
     gPracticeConfig.showInputDisplay = false;
     gPracticeConfig.skipCutscenes = true;
+    gPracticeConfig.showHudOverlay = true;
+    gPracticeConfig.showLagFrames = true;
+    gPracticeConfig.showSpeed = true;
+    gPracticeConfig.showChargeTiming = false;
+    gPracticeConfig.showMissedInputs = false;
 }
 
 void Practice_Update(void) {
@@ -28,6 +33,7 @@ void Practice_Update(void) {
             Practice_LevelSelect_Update();
             break;
         case PSCREEN_GAMEPLAY:
+            Practice_Hud_Update();
             if (gPracticeMenuState != PMENU_CLOSED) {
                 Practice_Menu_Update();
             } else {
@@ -51,6 +57,7 @@ void Practice_Draw(void) {
             Practice_LevelSelect_Draw();
             break;
         case PSCREEN_GAMEPLAY:
+            Practice_Hud_Draw();
             if (gPracticeConfig.showInputDisplay) {
                 Practice_InputDisplay_Draw();
             }

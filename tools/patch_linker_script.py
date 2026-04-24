@@ -17,6 +17,7 @@ PRACTICE_OBJS = [
     "practice_menu",
     "practice_save",
     "practice_input_display",
+    "practice_hud",
 ]
 
 ANCHOR = "build/src/engine/fox_save.o"

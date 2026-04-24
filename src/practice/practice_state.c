@@ -18,6 +18,11 @@ typedef enum OptionsOption {
     OOPT_PEPPY,
     OOPT_SKIP_CUTSCENES,
     OOPT_INPUT_DISPLAY,
+    OOPT_HUD_OVERLAY,
+    OOPT_LAG_FRAMES,
+    OOPT_SPEED,
+    OOPT_CHARGE_TIMING,
+    OOPT_MISSED_INPUTS,
     OOPT_BACK,
     OOPT_MAX,
 } OptionsOption;
@@ -140,6 +145,21 @@ static void StateMenu_UpdateOptions(u16 buttons) {
             case OOPT_INPUT_DISPLAY:
                 gPracticeConfig.showInputDisplay ^= true;
                 break;
+            case OOPT_HUD_OVERLAY:
+                gPracticeConfig.showHudOverlay ^= true;
+                break;
+            case OOPT_LAG_FRAMES:
+                gPracticeConfig.showLagFrames ^= true;
+                break;
+            case OOPT_SPEED:
+                gPracticeConfig.showSpeed ^= true;
+                break;
+            case OOPT_CHARGE_TIMING:
+                gPracticeConfig.showChargeTiming ^= true;
+                break;
+            case OOPT_MISSED_INPUTS:
+                gPracticeConfig.showMissedInputs ^= true;
+                break;
         }
     }
 }
@@ -257,6 +277,31 @@ static void StateMenu_DrawOptions(void) {
                 Practice_DrawTextColor(120, y, gPracticeConfig.showInputDisplay ? "ON" : "OFF",
                     gPracticeConfig.showInputDisplay ? 0 : 255, gPracticeConfig.showInputDisplay ? 255 : 100, 0);
                 break;
+            case OOPT_HUD_OVERLAY:
+                Practice_DrawText(54, y, "HUD:");
+                Practice_DrawTextColor(120, y, gPracticeConfig.showHudOverlay ? "ON" : "OFF",
+                    gPracticeConfig.showHudOverlay ? 0 : 255, gPracticeConfig.showHudOverlay ? 255 : 100, 0);
+                break;
+            case OOPT_LAG_FRAMES:
+                Practice_DrawText(54, y, "  LAG:");
+                Practice_DrawTextColor(120, y, gPracticeConfig.showLagFrames ? "ON" : "OFF",
+                    gPracticeConfig.showLagFrames ? 0 : 255, gPracticeConfig.showLagFrames ? 255 : 100, 0);
+                break;
+            case OOPT_SPEED:
+                Practice_DrawText(54, y, "  SPEED:");
+                Practice_DrawTextColor(120, y, gPracticeConfig.showSpeed ? "ON" : "OFF",
+                    gPracticeConfig.showSpeed ? 0 : 255, gPracticeConfig.showSpeed ? 255 : 100, 0);
+                break;
+            case OOPT_CHARGE_TIMING:
+                Practice_DrawText(54, y, "  CHARGE:");
+                Practice_DrawTextColor(120, y, gPracticeConfig.showChargeTiming ? "ON" : "OFF",
+                    gPracticeConfig.showChargeTiming ? 0 : 255, gPracticeConfig.showChargeTiming ? 255 : 100, 0);
+                break;
+            case OOPT_MISSED_INPUTS:
+                Practice_DrawText(54, y, "  MISSED:");
+                Practice_DrawTextColor(120, y, gPracticeConfig.showMissedInputs ? "ON" : "OFF",
+                    gPracticeConfig.showMissedInputs ? 0 : 255, gPracticeConfig.showMissedInputs ? 255 : 100, 0);
+                break;
             case OOPT_BACK:
                 Practice_DrawTextColor(54, y, "BACK", 150, 150, 150);
                 break;
@@ -266,16 +311,18 @@ static void StateMenu_DrawOptions(void) {
 
 void Practice_StateMenu_Draw(void) {
     const char* title = (sActiveSubMenu == PSUBMENU_LOADOUT) ? "LOADOUT" : "OPTIONS";
+    s32 boxHeight = (sActiveSubMenu == PSUBMENU_LOADOUT) ? 115 : 185;
+    s32 helpY = (sActiveSubMenu == PSUBMENU_LOADOUT) ? 148 : 218;
 
-    Practice_DrawBox(40, 40, 240, 115, 0, 0, 60, 200);
+    Practice_DrawBox(40, 40, 240, boxHeight, 0, 0, 60, 200);
     Practice_DrawTextColor(50, 44, title, 0, 255, 128);
 
     if (sActiveSubMenu == PSUBMENU_LOADOUT) {
         StateMenu_DrawLoadout();
-        Practice_DrawTextColor(50, 148, "D-PAD:CHANGE  B:BACK", 150, 150, 150);
+        Practice_DrawTextColor(50, helpY, "D-PAD:CHANGE  B:BACK", 150, 150, 150);
     } else {
         StateMenu_DrawOptions();
-        Practice_DrawTextColor(50, 148, "A:TOGGLE  B:BACK", 150, 150, 150);
+        Practice_DrawTextColor(50, helpY, "A:TOGGLE  B:BACK", 150, 150, 150);
     }
 }
 

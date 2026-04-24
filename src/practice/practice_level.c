@@ -197,6 +197,7 @@ void Practice_LaunchLevel(LevelId levelId, s32 phase) {
     gDrawMode = DRAW_NONE;
 
     Practice_ClearCheckpoint();
+    Practice_Hud_Reset();
     gPracticeScreen = PSCREEN_GAMEPLAY;
 }
 
