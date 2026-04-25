@@ -11,6 +11,7 @@ typedef enum LoadoutOption {
     LOPT_FALCO,
     LOPT_SLIPPY,
     LOPT_PEPPY,
+    LOPT_EXPERT,
     LOPT_BACK,
     LOPT_MAX,
 } LoadoutOption;
@@ -147,6 +148,9 @@ static void StateMenu_UpdateLoadout(u16 buttons) {
             case LOPT_PEPPY:
                 gPracticeConfig.peppyAlive ^= true;
                 break;
+            case LOPT_EXPERT:
+                gPracticeConfig.expertMode ^= true;
+                break;
         }
     }
 
@@ -193,6 +197,9 @@ static void StateMenu_UpdateLoadout(u16 buttons) {
                 break;
             case LOPT_PEPPY:
                 gPracticeConfig.peppyAlive ^= true;
+                break;
+            case LOPT_EXPERT:
+                gPracticeConfig.expertMode ^= true;
                 break;
         }
     }
@@ -392,6 +399,11 @@ static void StateMenu_DrawLoadout(void) {
                 Practice_DrawTextColor(120, y, gPracticeConfig.peppyAlive ? "ALIVE" : "DOWN",
                     gPracticeConfig.peppyAlive ? 0 : 255, gPracticeConfig.peppyAlive ? 255 : 100, 0);
                 break;
+            case LOPT_EXPERT:
+                Practice_DrawText(54, y, "EXPERT:");
+                Practice_DrawTextColor(120, y, gPracticeConfig.expertMode ? "ON" : "OFF",
+                    gPracticeConfig.expertMode ? 0 : 255, gPracticeConfig.expertMode ? 255 : 100, 0);
+                break;
             case LOPT_BACK:
                 Practice_DrawTextColor(54, y, "BACK", 150, 150, 150);
                 break;
@@ -545,8 +557,8 @@ void Practice_StateMenu_Draw(void) {
     switch (sActiveSubMenu) {
         case PSUBMENU_LOADOUT:
             title = "LOADOUT";
-            boxHeight = 165;
-            helpY = 196;
+            boxHeight = 179;
+            helpY = 210;
             break;
         case PSUBMENU_DISPLAY:
             title = "DISPLAY";

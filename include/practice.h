@@ -40,6 +40,7 @@ typedef struct PracticeConfig {
     bool showHitboxPlayer;
     bool showHitboxFlash;
     bool showSpawnZones;
+    bool expertMode;
 } PracticeConfig;
 
 typedef enum PracticeSubMenu {

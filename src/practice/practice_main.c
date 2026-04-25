@@ -33,6 +33,7 @@ void Practice_Init(void) {
     gPracticeConfig.showHitboxPlayer = false;
     gPracticeConfig.showHitboxFlash = false;
     gPracticeConfig.showSpawnZones = false;
+    gPracticeConfig.expertMode = false;
 }
 
 void Practice_Update(void) {
@@ -97,6 +98,8 @@ void Practice_ApplyStartConditions(void) {
     if (!gPracticeConfig.peppyAlive) {
         gTeamShields[TEAM_ID_PEPPY] = 0;
     }
+
+    gExpertMode = gPracticeConfig.expertMode;
 
     if (gPracticeConfig.skipCutscenes) {
         switch (gCurrentLevel) {
