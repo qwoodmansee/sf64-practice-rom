@@ -125,6 +125,14 @@ void Practice_DrawFloat(s32 x, s32 y, f32 value, s32 decimals) {
     Practice_DrawText(x, y, buf);
 }
 
+void Practice_DrawTextOutline(s32 x, s32 y, const char* text, u8 r, u8 g, u8 b) {
+    Practice_DrawTextColor(x - 1, y, text, 0, 0, 0);
+    Practice_DrawTextColor(x + 1, y, text, 0, 0, 0);
+    Practice_DrawTextColor(x, y - 1, text, 0, 0, 0);
+    Practice_DrawTextColor(x, y + 1, text, 0, 0, 0);
+    Practice_DrawTextColor(x, y, text, r, g, b);
+}
+
 void Practice_DrawCursor(s32 x, s32 y) {
     Practice_DrawTextColor(x, y, "-", 255, 255, 0);
 }

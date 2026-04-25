@@ -8,26 +8,26 @@ typedef enum LoadoutOption {
     LOPT_LIVES,
     LOPT_RIGHT_WING,
     LOPT_LEFT_WING,
+    LOPT_FALCO,
+    LOPT_SLIPPY,
+    LOPT_PEPPY,
     LOPT_BACK,
     LOPT_MAX,
 } LoadoutOption;
 
-typedef enum OptionsOption {
-    OOPT_FALCO,
-    OOPT_SLIPPY,
-    OOPT_PEPPY,
-    OOPT_SKIP_CUTSCENES,
-    OOPT_INPUT_DISPLAY,
-    OOPT_HUD_OVERLAY,
-    OOPT_LAG_FRAMES,
-    OOPT_SPEED,
-    OOPT_CHARGE_TIMING,
-    OOPT_MISSED_INPUTS,
-    OOPT_HIT_TRACKING,
-    OOPT_HITBOX_MENU,
-    OOPT_BACK,
-    OOPT_MAX,
-} OptionsOption;
+typedef enum DisplayOption {
+    DOPT_SKIP_CUTSCENES,
+    DOPT_INPUT_DISPLAY,
+    DOPT_HUD_OVERLAY,
+    DOPT_LAG_FRAMES,
+    DOPT_SPEED,
+    DOPT_CHARGE_TIMING,
+    DOPT_MISSED_INPUTS,
+    DOPT_HIT_TRACKING,
+    DOPT_HITBOX_MENU,
+    DOPT_BACK,
+    DOPT_MAX,
+} DisplayOption;
 
 typedef enum HitboxOption {
     HOPT_MASTER,
@@ -64,7 +64,7 @@ void Practice_StateMenu_Close(void) {
 static s32 StateMenu_GetOptionCount(void) {
     switch (sActiveSubMenu) {
         case PSUBMENU_LOADOUT: return LOPT_MAX;
-        case PSUBMENU_OPTIONS: return OOPT_MAX;
+        case PSUBMENU_DISPLAY: return DOPT_MAX;
         case PSUBMENU_HITBOX:  return HOPT_MAX;
         default:               return 0;
     }
@@ -102,6 +102,15 @@ static void StateMenu_UpdateLoadout(u16 buttons) {
                 if (gPracticeConfig.leftWingState > WINGSTATE_INTACT) {
                     gPracticeConfig.leftWingState = WINGSTATE_NONE;
                 }
+                break;
+            case LOPT_FALCO:
+                gPracticeConfig.falcoAlive ^= true;
+                break;
+            case LOPT_SLIPPY:
+                gPracticeConfig.slippyAlive ^= true;
+                break;
+            case LOPT_PEPPY:
+                gPracticeConfig.peppyAlive ^= true;
                 break;
         }
     }
@@ -141,44 +150,44 @@ static void StateMenu_UpdateLoadout(u16 buttons) {
                     gPracticeConfig.leftWingState--;
                 }
                 break;
+            case LOPT_FALCO:
+                gPracticeConfig.falcoAlive ^= true;
+                break;
+            case LOPT_SLIPPY:
+                gPracticeConfig.slippyAlive ^= true;
+                break;
+            case LOPT_PEPPY:
+                gPracticeConfig.peppyAlive ^= true;
+                break;
         }
     }
 }
 
-static void StateMenu_UpdateOptions(u16 buttons) {
+static void StateMenu_UpdateDisplay(u16 buttons) {
     if ((buttons & R_JPAD) || (buttons & A_BUTTON) || (buttons & L_JPAD)) {
         switch (sSelectedOption) {
-            case OOPT_FALCO:
-                gPracticeConfig.falcoAlive ^= true;
-                break;
-            case OOPT_SLIPPY:
-                gPracticeConfig.slippyAlive ^= true;
-                break;
-            case OOPT_PEPPY:
-                gPracticeConfig.peppyAlive ^= true;
-                break;
-            case OOPT_SKIP_CUTSCENES:
+            case DOPT_SKIP_CUTSCENES:
                 gPracticeConfig.skipCutscenes ^= true;
                 break;
-            case OOPT_INPUT_DISPLAY:
+            case DOPT_INPUT_DISPLAY:
                 gPracticeConfig.showInputDisplay ^= true;
                 break;
-            case OOPT_HUD_OVERLAY:
+            case DOPT_HUD_OVERLAY:
                 gPracticeConfig.showHudOverlay ^= true;
                 break;
-            case OOPT_LAG_FRAMES:
+            case DOPT_LAG_FRAMES:
                 gPracticeConfig.showLagFrames ^= true;
                 break;
-            case OOPT_SPEED:
+            case DOPT_SPEED:
                 gPracticeConfig.showSpeed ^= true;
                 break;
-            case OOPT_CHARGE_TIMING:
+            case DOPT_CHARGE_TIMING:
                 gPracticeConfig.showChargeTiming ^= true;
                 break;
-            case OOPT_MISSED_INPUTS:
+            case DOPT_MISSED_INPUTS:
                 gPracticeConfig.showMissedInputs ^= true;
                 break;
-            case OOPT_HIT_TRACKING:
+            case DOPT_HIT_TRACKING:
                 gPracticeConfig.showHitTracking ^= true;
                 break;
         }
@@ -216,8 +225,8 @@ void Practice_StateMenu_Update(void) {
 
     if (press->button & B_BUTTON) {
         if (sActiveSubMenu == PSUBMENU_HITBOX) {
-            sActiveSubMenu = PSUBMENU_OPTIONS;
-            sSelectedOption = OOPT_HITBOX_MENU;
+            sActiveSubMenu = PSUBMENU_DISPLAY;
+            sSelectedOption = DOPT_HITBOX_MENU;
             return;
         }
         Practice_StateMenu_Close();
@@ -242,18 +251,18 @@ void Practice_StateMenu_Update(void) {
             Practice_StateMenu_Close();
             return;
         }
-        if (sActiveSubMenu == PSUBMENU_OPTIONS && sSelectedOption == OOPT_BACK) {
+        if (sActiveSubMenu == PSUBMENU_DISPLAY && sSelectedOption == DOPT_BACK) {
             Practice_StateMenu_Close();
             return;
         }
-        if (sActiveSubMenu == PSUBMENU_OPTIONS && sSelectedOption == OOPT_HITBOX_MENU) {
+        if (sActiveSubMenu == PSUBMENU_DISPLAY && sSelectedOption == DOPT_HITBOX_MENU) {
             sActiveSubMenu = PSUBMENU_HITBOX;
             sSelectedOption = 0;
             return;
         }
         if (sActiveSubMenu == PSUBMENU_HITBOX && sSelectedOption == HOPT_BACK) {
-            sActiveSubMenu = PSUBMENU_OPTIONS;
-            sSelectedOption = OOPT_HITBOX_MENU;
+            sActiveSubMenu = PSUBMENU_DISPLAY;
+            sSelectedOption = DOPT_HITBOX_MENU;
             return;
         }
     }
@@ -262,8 +271,8 @@ void Practice_StateMenu_Update(void) {
         case PSUBMENU_LOADOUT:
             StateMenu_UpdateLoadout(press->button);
             break;
-        case PSUBMENU_OPTIONS:
-            StateMenu_UpdateOptions(press->button);
+        case PSUBMENU_DISPLAY:
+            StateMenu_UpdateDisplay(press->button);
             break;
         case PSUBMENU_HITBOX:
             StateMenu_UpdateHitbox(press->button);
@@ -303,6 +312,21 @@ static void StateMenu_DrawLoadout(void) {
                 Practice_DrawText(54, y, "L WING:");
                 Practice_DrawTextColor(120, y, sWingNames[gPracticeConfig.leftWingState], 255, 255, 0);
                 break;
+            case LOPT_FALCO:
+                Practice_DrawText(54, y, "FALCO:");
+                Practice_DrawTextColor(120, y, gPracticeConfig.falcoAlive ? "ALIVE" : "DOWN",
+                    gPracticeConfig.falcoAlive ? 0 : 255, gPracticeConfig.falcoAlive ? 255 : 100, 0);
+                break;
+            case LOPT_SLIPPY:
+                Practice_DrawText(54, y, "SLIPPY:");
+                Practice_DrawTextColor(120, y, gPracticeConfig.slippyAlive ? "ALIVE" : "DOWN",
+                    gPracticeConfig.slippyAlive ? 0 : 255, gPracticeConfig.slippyAlive ? 255 : 100, 0);
+                break;
+            case LOPT_PEPPY:
+                Practice_DrawText(54, y, "PEPPY:");
+                Practice_DrawTextColor(120, y, gPracticeConfig.peppyAlive ? "ALIVE" : "DOWN",
+                    gPracticeConfig.peppyAlive ? 0 : 255, gPracticeConfig.peppyAlive ? 255 : 100, 0);
+                break;
             case LOPT_BACK:
                 Practice_DrawTextColor(54, y, "BACK", 150, 150, 150);
                 break;
@@ -310,11 +334,11 @@ static void StateMenu_DrawLoadout(void) {
     }
 }
 
-static void StateMenu_DrawOptions(void) {
+static void StateMenu_DrawDisplay(void) {
     s32 y;
     s32 i;
 
-    for (i = 0; i < OOPT_MAX; i++) {
+    for (i = 0; i < DOPT_MAX; i++) {
         y = 60 + (i * 14);
 
         if (i == sSelectedOption) {
@@ -322,65 +346,50 @@ static void StateMenu_DrawOptions(void) {
         }
 
         switch (i) {
-            case OOPT_FALCO:
-                Practice_DrawText(54, y, "FALCO:");
-                Practice_DrawTextColor(120, y, gPracticeConfig.falcoAlive ? "ALIVE" : "DOWN",
-                    gPracticeConfig.falcoAlive ? 0 : 255, gPracticeConfig.falcoAlive ? 255 : 100, 0);
-                break;
-            case OOPT_SLIPPY:
-                Practice_DrawText(54, y, "SLIPPY:");
-                Practice_DrawTextColor(120, y, gPracticeConfig.slippyAlive ? "ALIVE" : "DOWN",
-                    gPracticeConfig.slippyAlive ? 0 : 255, gPracticeConfig.slippyAlive ? 255 : 100, 0);
-                break;
-            case OOPT_PEPPY:
-                Practice_DrawText(54, y, "PEPPY:");
-                Practice_DrawTextColor(120, y, gPracticeConfig.peppyAlive ? "ALIVE" : "DOWN",
-                    gPracticeConfig.peppyAlive ? 0 : 255, gPracticeConfig.peppyAlive ? 255 : 100, 0);
-                break;
-            case OOPT_SKIP_CUTSCENES:
+            case DOPT_SKIP_CUTSCENES:
                 Practice_DrawText(54, y, "SCENES:");
                 Practice_DrawTextColor(120, y, gPracticeConfig.skipCutscenes ? "SKIP" : "PLAY",
                     gPracticeConfig.skipCutscenes ? 0 : 255, gPracticeConfig.skipCutscenes ? 255 : 100, 0);
                 break;
-            case OOPT_INPUT_DISPLAY:
+            case DOPT_INPUT_DISPLAY:
                 Practice_DrawText(54, y, "INPUT:");
                 Practice_DrawTextColor(120, y, gPracticeConfig.showInputDisplay ? "ON" : "OFF",
                     gPracticeConfig.showInputDisplay ? 0 : 255, gPracticeConfig.showInputDisplay ? 255 : 100, 0);
                 break;
-            case OOPT_HUD_OVERLAY:
+            case DOPT_HUD_OVERLAY:
                 Practice_DrawText(54, y, "HUD:");
                 Practice_DrawTextColor(120, y, gPracticeConfig.showHudOverlay ? "ON" : "OFF",
                     gPracticeConfig.showHudOverlay ? 0 : 255, gPracticeConfig.showHudOverlay ? 255 : 100, 0);
                 break;
-            case OOPT_LAG_FRAMES:
+            case DOPT_LAG_FRAMES:
                 Practice_DrawText(54, y, "  LAG:");
                 Practice_DrawTextColor(120, y, gPracticeConfig.showLagFrames ? "ON" : "OFF",
                     gPracticeConfig.showLagFrames ? 0 : 255, gPracticeConfig.showLagFrames ? 255 : 100, 0);
                 break;
-            case OOPT_SPEED:
+            case DOPT_SPEED:
                 Practice_DrawText(54, y, "  SPEED:");
                 Practice_DrawTextColor(120, y, gPracticeConfig.showSpeed ? "ON" : "OFF",
                     gPracticeConfig.showSpeed ? 0 : 255, gPracticeConfig.showSpeed ? 255 : 100, 0);
                 break;
-            case OOPT_CHARGE_TIMING:
+            case DOPT_CHARGE_TIMING:
                 Practice_DrawText(54, y, "  CHARGE:");
                 Practice_DrawTextColor(120, y, gPracticeConfig.showChargeTiming ? "ON" : "OFF",
                     gPracticeConfig.showChargeTiming ? 0 : 255, gPracticeConfig.showChargeTiming ? 255 : 100, 0);
                 break;
-            case OOPT_MISSED_INPUTS:
+            case DOPT_MISSED_INPUTS:
                 Practice_DrawText(54, y, "  MISSED:");
                 Practice_DrawTextColor(120, y, gPracticeConfig.showMissedInputs ? "ON" : "OFF",
                     gPracticeConfig.showMissedInputs ? 0 : 255, gPracticeConfig.showMissedInputs ? 255 : 100, 0);
                 break;
-            case OOPT_HIT_TRACKING:
+            case DOPT_HIT_TRACKING:
                 Practice_DrawText(54, y, "  HITS:");
                 Practice_DrawTextColor(120, y, gPracticeConfig.showHitTracking ? "ON" : "OFF",
                     gPracticeConfig.showHitTracking ? 0 : 255, gPracticeConfig.showHitTracking ? 255 : 100, 0);
                 break;
-            case OOPT_HITBOX_MENU:
+            case DOPT_HITBOX_MENU:
                 Practice_DrawTextColor(54, y, "HITBOX VIEWER...", 200, 200, 255);
                 break;
-            case OOPT_BACK:
+            case DOPT_BACK:
                 Practice_DrawTextColor(54, y, "BACK", 150, 150, 150);
                 break;
         }
@@ -444,13 +453,13 @@ void Practice_StateMenu_Draw(void) {
     switch (sActiveSubMenu) {
         case PSUBMENU_LOADOUT:
             title = "LOADOUT";
-            boxHeight = 115;
-            helpY = 148;
+            boxHeight = 165;
+            helpY = 196;
             break;
-        case PSUBMENU_OPTIONS:
-            title = "OPTIONS";
-            boxHeight = 213;
-            helpY = 246;
+        case PSUBMENU_DISPLAY:
+            title = "DISPLAY";
+            boxHeight = 193;
+            helpY = 224;
             break;
         case PSUBMENU_HITBOX:
             title = "HITBOX VIEWER";
@@ -469,8 +478,8 @@ void Practice_StateMenu_Draw(void) {
             StateMenu_DrawLoadout();
             Practice_DrawTextColor(50, helpY, "D-PAD:CHANGE  B:BACK", 150, 150, 150);
             break;
-        case PSUBMENU_OPTIONS:
-            StateMenu_DrawOptions();
+        case PSUBMENU_DISPLAY:
+            StateMenu_DrawDisplay();
             Practice_DrawTextColor(50, helpY, "A:TOGGLE  B:BACK", 150, 150, 150);
             break;
         case PSUBMENU_HITBOX:

@@ -2,15 +2,18 @@
 
 #ifdef PRACTICE_ROM
 
-static u16 sPracticeBindings[PACTION_MAX] = {
-    U_JPAD,  /* PACTION_OPEN_MENU_FROZEN: L + D-Pad Up */
-    D_JPAD,  /* PACTION_OPEN_MENU:        L + D-Pad Down */
-    L_JPAD,  /* PACTION_SAVE_POS:         L + D-Pad Left */
-    R_JPAD,  /* PACTION_RESTORE_POS:      L + D-Pad Right */
+typedef struct PracticeBinding {
+    u16 modifier;
+    u16 button;
+} PracticeBinding;
+
+static PracticeBinding sPracticeBindings[PACTION_MAX] = {
+    { R_TRIG, R_JPAD },  /* PACTION_OPEN_MENU:   R + D-Pad Right */
+    { L_TRIG, L_JPAD },  /* PACTION_SAVE_POS:    L + D-Pad Left */
+    { L_TRIG, R_JPAD },  /* PACTION_RESTORE_POS: L + D-Pad Right */
 };
 
 static const char* sPracticeActionNames[PACTION_MAX] = {
-    "MENU (FROZEN)",
     "MENU",
     "SAVE POS",
     "LOAD POS",
@@ -19,19 +22,24 @@ static const char* sPracticeActionNames[PACTION_MAX] = {
 bool Practice_InputTriggered(PracticeAction action) {
     OSContPad* press = &gControllerPress[gMainController];
     OSContPad* hold = &gControllerHold[gMainController];
+    u16 mod = sPracticeBindings[action].modifier;
+    u16 btn = sPracticeBindings[action].button;
 
-    if (!(hold->button & L_TRIG)) {
-        return false;
+    if ((hold->button & mod) && (press->button & btn)) {
+        return true;
     }
-    return (press->button & sPracticeBindings[action]) != 0;
+    if ((hold->button & btn) && (press->button & mod)) {
+        return true;
+    }
+    return false;
 }
 
 u16 Practice_GetBinding(PracticeAction action) {
-    return sPracticeBindings[action];
+    return sPracticeBindings[action].button;
 }
 
 void Practice_SetBinding(PracticeAction action, u16 button) {
-    sPracticeBindings[action] = button;
+    sPracticeBindings[action].button = button;
 }
 
 const char* Practice_GetActionName(PracticeAction action) {

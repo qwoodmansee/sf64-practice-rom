@@ -45,8 +45,6 @@ void Practice_Update(void) {
                 Practice_Menu_Update();
             } else {
                 if (Practice_InputTriggered(PACTION_OPEN_MENU)) {
-                    Practice_Menu_Open();
-                } else if (Practice_InputTriggered(PACTION_OPEN_MENU_FROZEN)) {
                     Practice_Menu_OpenFrozen();
                 } else if (Practice_InputTriggered(PACTION_SAVE_POS)) {
                     Practice_SaveState();
@@ -94,8 +92,6 @@ void Practice_ApplyStartConditions(void) {
     }
 
     if (gPracticeConfig.skipCutscenes) {
-        gCsWasNotSkipped = false;
-
         switch (gCurrentLevel) {
             case LEVEL_CORNERIA:  AUDIO_PLAY_BGM(NA_BGM_STAGE_CO); break;
             case LEVEL_METEO:     AUDIO_PLAY_BGM(NA_BGM_STAGE_ME); break;

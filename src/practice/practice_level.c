@@ -191,7 +191,10 @@ void Practice_LaunchLevel(LevelId levelId, s32 phase) {
     gNextLevelPhase = phase;
     gClearPlayerInfo = true;
 
-    Map_LevelStart_AudioSpecSetup(levelId);
+    // Map_LevelStart_AudioSpecSetup is in the menu overlay -- only callable from GSTATE_MAP.
+    if (gGameState != GSTATE_PLAY) {
+        Map_LevelStart_AudioSpecSetup(levelId);
+    }
 
     gNextGameState = GSTATE_PLAY;
     gDrawMode = DRAW_NONE;

@@ -43,12 +43,11 @@ typedef struct PracticeConfig {
 
 typedef enum PracticeSubMenu {
     PSUBMENU_LOADOUT,
-    PSUBMENU_OPTIONS,
+    PSUBMENU_DISPLAY,
     PSUBMENU_HITBOX,
 } PracticeSubMenu;
 
 typedef enum PracticeAction {
-    PACTION_OPEN_MENU_FROZEN,
     PACTION_OPEN_MENU,
     PACTION_SAVE_POS,
     PACTION_RESTORE_POS,
@@ -75,6 +74,7 @@ void Practice_DrawText(s32 x, s32 y, const char* text);
 void Practice_DrawTextColor(s32 x, s32 y, const char* text, u8 r, u8 g, u8 b);
 void Practice_DrawNumber(s32 x, s32 y, s32 value);
 void Practice_DrawFloat(s32 x, s32 y, f32 value, s32 decimals);
+void Practice_DrawTextOutline(s32 x, s32 y, const char* text, u8 r, u8 g, u8 b);
 void Practice_DrawCursor(s32 x, s32 y);
 
 /* practice_input.c */
