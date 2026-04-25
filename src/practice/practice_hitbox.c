@@ -35,7 +35,7 @@ static void Hitbox_DrawWireframeBox(f32 posX, f32 posY, f32 posZ,
 
     Matrix_Push(&gGfxMatrix);
 
-    Matrix_Translate(gGfxMatrix, posX, posY, posZ, MTXF_APPLY);
+    Matrix_Translate(gGfxMatrix, posX, posY, posZ + gPathProgress, MTXF_APPLY);
     Matrix_RotateY(gGfxMatrix, rotY * M_DTOR, MTXF_APPLY);
     Matrix_RotateX(gGfxMatrix, rotX * M_DTOR, MTXF_APPLY);
     Matrix_RotateZ(gGfxMatrix, rotZ * M_DTOR, MTXF_APPLY);

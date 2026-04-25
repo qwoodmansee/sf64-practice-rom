@@ -112,6 +112,11 @@ void Game_SetGameState(void) {
             if ((gLevelPhase != 0) && (gCurrentLevel != LEVEL_VENOM_ANDROSS)) {
                 gCsWasNotSkipped = false;
             }
+#ifdef PRACTICE_ROM
+            if (gPracticeConfig.skipCutscenes) {
+                gCsWasNotSkipped = false;
+            }
+#endif
             break;
         case GSTATE_MAP:
             gMapState = 0;
