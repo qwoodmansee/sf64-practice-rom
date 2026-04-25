@@ -1,0 +1,36 @@
+src/practice/practice_menu.c
+  07cf27cf65be7efe 41-42,47,53,99-112,205-211
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "c31cdec065499317463532b5f6bf1604a333928f",
+  "prompts": {
+    "07cf27cf65be7efe": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "8a209bf7-86a4-410a-9a69-3173aaa77c6d",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 28,
+      "total_deletions": 3,
+      "accepted_lines": 25,
+      "overriden_lines": 0
+    },
+    "4269ec5259bf78e7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "bc024e9e-d34f-4444-8068-1a630c0b1aa9",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 27,
+      "total_deletions": 0,
+      "accepted_lines": 2956,
+      "overriden_lines": 0
+    }
+  }
+}
