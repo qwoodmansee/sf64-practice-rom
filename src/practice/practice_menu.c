@@ -38,15 +38,19 @@ static RadialEntry sRadialEntries[RSLICE_MAX] = {
 };
 
 static RadialSlice sHoveredSlice = RSLICE_NONE;
+static s32 sStartHoldTimer = 0;
+#define START_HOLD_FRAMES 45
 
 void Practice_Menu_Open(void) {
     gPracticeMenuState = PMENU_OPEN;
     sHoveredSlice = RSLICE_NONE;
+    sStartHoldTimer = 0;
 }
 
 void Practice_Menu_OpenFrozen(void) {
     gPracticeMenuState = PMENU_OPEN_FROZEN;
     sHoveredSlice = RSLICE_NONE;
+    sStartHoldTimer = 0;
 }
 
 void Practice_Menu_Close(void) {
@@ -90,6 +94,20 @@ void Practice_Menu_Update(void) {
     if (Practice_StateMenuIsOpen()) {
         Practice_StateMenu_Update();
         return;
+    }
+
+    if (hold->button & START_BUTTON) {
+        sStartHoldTimer++;
+        if (sStartHoldTimer >= START_HOLD_FRAMES) {
+            Practice_Menu_Close();
+            gGameState = GSTATE_MENU;
+            gDrawMode = DRAW_NONE;
+            Audio_FadeOutAll(1);
+            Audio_ClearVoice();
+            return;
+        }
+    } else {
+        sStartHoldTimer = 0;
     }
 
     if (press->button & B_BUTTON) {
@@ -182,6 +200,13 @@ void Practice_Menu_Draw(void) {
         Practice_DrawTextColor(RADIAL_CENTER_X - 36, RADIAL_CENTER_Y - 12, "PRACTICE", 0, 255, 128);
         Practice_DrawText(RADIAL_CENTER_X - 24, RADIAL_CENTER_Y + 2, "HITS:");
         Practice_DrawNumber(RADIAL_CENTER_X + 16, RADIAL_CENTER_Y + 2, gHitCount);
+    }
+
+    if (sStartHoldTimer > 0) {
+        s32 barW = (sStartHoldTimer * 160) / START_HOLD_FRAMES;
+        Practice_DrawBox(80, 210, 160, 6, 50, 50, 50, 160);
+        Practice_DrawBox(80, 210, barW, 6, 255, 100, 100, 220);
+        Practice_DrawTextColor(92, 218, "HOLD START: TITLE", 255, 100, 100);
     }
 
     Practice_DrawTextColor(56, 198, "STICK:SELECT  A:GO  B:CLOSE", 150, 150, 150);
