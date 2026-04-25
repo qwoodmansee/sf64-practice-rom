@@ -1762,6 +1762,15 @@ void Display_Update(void) {
     tempVec.z = 0.0f;
     Matrix_MultVec3f(gCalcMatrix, &tempVec, &playerCamUp);
 
+#ifdef PRACTICE_ROM
+    if (Practice_FreeCam_IsActive()) {
+        Practice_FreeCam_GetView(&gPlayCamEye, &gPlayCamAt);
+        playerCamUp.x = 0.0f;
+        playerCamUp.y = 100.0f;
+        playerCamUp.z = 0.0f;
+    }
+#endif
+
     if (gStarCount != 0) {
         gStarfieldRoll = DEG_TO_RAD(gPlayer[0].camRoll);
         Camera_SetStarfieldPos(gPlayCamEye.x, gPlayCamEye.y, gPlayCamEye.z, gPlayCamAt.x, gPlayCamAt.y, gPlayCamAt.z);

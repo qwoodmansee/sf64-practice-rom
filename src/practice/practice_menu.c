@@ -14,6 +14,7 @@ typedef enum RadialSlice {
     RSLICE_LEVELS,
     RSLICE_LOADOUT,
     RSLICE_DISPLAY,
+    RSLICE_CAMERA,
     RSLICE_MAX,
 } RadialSlice;
 
@@ -29,12 +30,13 @@ typedef struct RadialEntry {
 } RadialEntry;
 
 static RadialEntry sRadialEntries[RSLICE_MAX] = {
-    { "RESTART",  "RESTART LEVEL",     132, 52,  7,  180, 60, 60  },
-    { "SAVE",     "SAVE POSITION",     214, 82,  4,  60, 140, 180 },
-    { "LOAD",     "LOAD POSITION",     214, 148, 4,  60, 180, 100 },
-    { "LEVELS",   "LEVEL SELECT",      136, 178, 6,  180, 140, 60 },
-    { "LOADOUT",  "LOADOUT...",         68, 148, 10, 140, 60, 180 },
-    { "DISPLAY",  "DISPLAY...",         68, 82,  10, 60, 160, 160 },
+    { "RESTART",  "RESTART LEVEL",     132, 52,  7,  180, 60,  60  },
+    { "SAVE",     "SAVE POSITION",     214, 74,  4,  60,  140, 180 },
+    { "LOAD",     "LOAD POSITION",     214, 152, 4,  60,  180, 100 },
+    { "LEVELS",   "LEVEL SELECT",      136, 178, 6,  180, 140, 60  },
+    { "LOADOUT",  "LOADOUT...",         68, 148, 10, 140, 60,  180 },
+    { "DISPLAY",  "DISPLAY...",         68, 82,  10, 60,  160, 160 },
+    { "CAMERA",   "FREE CAMERA",       222, 108, 6,  60,  200, 200 },
 };
 
 static RadialSlice sHoveredSlice = RSLICE_NONE;
@@ -75,6 +77,9 @@ static RadialSlice RadialMenu_GetSlice(s8 stickX, s8 stickY) {
     }
 
     if (x > 0) {
+        if ((ay * 100) < (ax * 58)) {
+            return RSLICE_CAMERA;
+        }
         if (y > 0) {
             return RSLICE_SAVE;
         }
@@ -143,6 +148,11 @@ void Practice_Menu_Update(void) {
                 break;
             case RSLICE_DISPLAY:
                 Practice_StateMenu_Open(PSUBMENU_DISPLAY);
+                break;
+            case RSLICE_CAMERA:
+                if (gPracticeMenuState == PMENU_OPEN_FROZEN) {
+                    Practice_FreeCam_Enter();
+                }
                 break;
             default:
                 break;

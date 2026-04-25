@@ -80,6 +80,8 @@ def check_engine_hooks():
         (FOX_GAME, "Practice_Draw", "Practice_Draw() must be called from fox_game.c"),
         (FOX_PLAY, "Practice_ApplyStartConditions", "Practice_ApplyStartConditions() must be called from fox_play.c"),
         (FOX_DISPLAY, "Practice_Hitbox_Draw", "Practice_Hitbox_Draw() must be called from fox_display.c"),
+        (FOX_DISPLAY, "Practice_FreeCam_IsActive", "Practice_FreeCam_IsActive() hook must exist in fox_display.c"),
+        (FOX_DISPLAY, "Practice_FreeCam_GetView", "Practice_FreeCam_GetView() hook must exist in fox_display.c"),
     ]
     for filepath, symbol, msg in hooks:
         src = read(filepath)

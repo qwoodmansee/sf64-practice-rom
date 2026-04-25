@@ -39,12 +39,14 @@ typedef struct PracticeConfig {
     bool showHitboxItems;
     bool showHitboxPlayer;
     bool showHitboxFlash;
+    bool showSpawnZones;
 } PracticeConfig;
 
 typedef enum PracticeSubMenu {
     PSUBMENU_LOADOUT,
     PSUBMENU_DISPLAY,
-    PSUBMENU_HITBOX,
+    PSUBMENU_STATS,
+    PSUBMENU_VISUALIZERS,
 } PracticeSubMenu;
 
 typedef enum PracticeAction {
@@ -115,6 +117,15 @@ void Practice_InputDisplay_Draw(void);
 
 /* practice_hitbox.c */
 void Practice_Hitbox_Draw(void);
+
+/* practice_freecam.c */
+bool Practice_FreeCam_IsActive(void);
+bool Practice_FreeCam_OverlayVisible(void);
+void Practice_FreeCam_Enter(void);
+void Practice_FreeCam_Exit(void);
+void Practice_FreeCam_GetView(Vec3f* eye, Vec3f* at);
+void Practice_FreeCam_Update(void);
+void Practice_FreeCam_Draw(void);
 
 /* practice_save.c */
 void Practice_SaveState(void);

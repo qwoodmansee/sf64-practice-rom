@@ -32,6 +32,7 @@ void Practice_Init(void) {
     gPracticeConfig.showHitboxItems = false;
     gPracticeConfig.showHitboxPlayer = false;
     gPracticeConfig.showHitboxFlash = false;
+    gPracticeConfig.showSpawnZones = false;
 }
 
 void Practice_Update(void) {
@@ -41,7 +42,9 @@ void Practice_Update(void) {
             break;
         case PSCREEN_GAMEPLAY:
             Practice_Hud_Update();
-            if (gPracticeMenuState != PMENU_CLOSED) {
+            if (Practice_FreeCam_IsActive()) {
+                Practice_FreeCam_Update();
+            } else if (gPracticeMenuState != PMENU_CLOSED) {
                 Practice_Menu_Update();
             } else {
                 if (Practice_InputTriggered(PACTION_OPEN_MENU)) {
@@ -62,11 +65,15 @@ void Practice_Draw(void) {
             Practice_LevelSelect_Draw();
             break;
         case PSCREEN_GAMEPLAY:
-            Practice_Hud_Draw();
-            if (gPracticeConfig.showInputDisplay) {
-                Practice_InputDisplay_Draw();
+            if (!Practice_FreeCam_IsActive() || Practice_FreeCam_OverlayVisible()) {
+                Practice_Hud_Draw();
+                if (gPracticeConfig.showInputDisplay) {
+                    Practice_InputDisplay_Draw();
+                }
             }
-            if (gPracticeMenuState != PMENU_CLOSED) {
+            if (Practice_FreeCam_IsActive()) {
+                Practice_FreeCam_Draw();
+            } else if (gPracticeMenuState != PMENU_CLOSED) {
                 Practice_Menu_Draw();
             }
             break;

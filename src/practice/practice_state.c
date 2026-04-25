@@ -18,27 +18,34 @@ typedef enum LoadoutOption {
 typedef enum DisplayOption {
     DOPT_SKIP_CUTSCENES,
     DOPT_INPUT_DISPLAY,
-    DOPT_HUD_OVERLAY,
-    DOPT_LAG_FRAMES,
-    DOPT_SPEED,
-    DOPT_CHARGE_TIMING,
-    DOPT_MISSED_INPUTS,
-    DOPT_HIT_TRACKING,
-    DOPT_HITBOX_MENU,
+    DOPT_STATS_MENU,
+    DOPT_VIS_MENU,
     DOPT_BACK,
     DOPT_MAX,
 } DisplayOption;
 
-typedef enum HitboxOption {
-    HOPT_MASTER,
-    HOPT_ACTORS,
-    HOPT_SCENERY,
-    HOPT_ITEMS,
-    HOPT_PLAYER,
-    HOPT_FLASH,
-    HOPT_BACK,
-    HOPT_MAX,
-} HitboxOption;
+typedef enum StatsOption {
+    SOPT_HUD_OVERLAY,
+    SOPT_LAG_FRAMES,
+    SOPT_SPEED,
+    SOPT_CHARGE_TIMING,
+    SOPT_MISSED_INPUTS,
+    SOPT_HIT_TRACKING,
+    SOPT_BACK,
+    SOPT_MAX,
+} StatsOption;
+
+typedef enum VisualizerOption {
+    VOPT_HITBOXES,
+    VOPT_ACTORS,
+    VOPT_SCENERY,
+    VOPT_ITEMS,
+    VOPT_PLAYER,
+    VOPT_FLASH,
+    VOPT_SPAWN_ZONES,
+    VOPT_BACK,
+    VOPT_MAX,
+} VisualizerOption;
 
 static s32 sSelectedOption = 0;
 static bool sStateMenuOpen = false;
@@ -63,10 +70,11 @@ void Practice_StateMenu_Close(void) {
 
 static s32 StateMenu_GetOptionCount(void) {
     switch (sActiveSubMenu) {
-        case PSUBMENU_LOADOUT: return LOPT_MAX;
-        case PSUBMENU_DISPLAY: return DOPT_MAX;
-        case PSUBMENU_HITBOX:  return HOPT_MAX;
-        default:               return 0;
+        case PSUBMENU_LOADOUT:     return LOPT_MAX;
+        case PSUBMENU_DISPLAY:     return DOPT_MAX;
+        case PSUBMENU_STATS:       return SOPT_MAX;
+        case PSUBMENU_VISUALIZERS: return VOPT_MAX;
+        default:                   return 0;
     }
 }
 
@@ -201,48 +209,58 @@ static void StateMenu_UpdateDisplay(u16 buttons) {
             case DOPT_INPUT_DISPLAY:
                 gPracticeConfig.showInputDisplay ^= true;
                 break;
-            case DOPT_HUD_OVERLAY:
+        }
+    }
+}
+
+static void StateMenu_UpdateStats(u16 buttons) {
+    if ((buttons & R_JPAD) || (buttons & A_BUTTON) || (buttons & L_JPAD)) {
+        switch (sSelectedOption) {
+            case SOPT_HUD_OVERLAY:
                 gPracticeConfig.showHudOverlay ^= true;
                 break;
-            case DOPT_LAG_FRAMES:
+            case SOPT_LAG_FRAMES:
                 gPracticeConfig.showLagFrames ^= true;
                 break;
-            case DOPT_SPEED:
+            case SOPT_SPEED:
                 gPracticeConfig.showSpeed ^= true;
                 break;
-            case DOPT_CHARGE_TIMING:
+            case SOPT_CHARGE_TIMING:
                 gPracticeConfig.showChargeTiming ^= true;
                 break;
-            case DOPT_MISSED_INPUTS:
+            case SOPT_MISSED_INPUTS:
                 gPracticeConfig.showMissedInputs ^= true;
                 break;
-            case DOPT_HIT_TRACKING:
+            case SOPT_HIT_TRACKING:
                 gPracticeConfig.showHitTracking ^= true;
                 break;
         }
     }
 }
 
-static void StateMenu_UpdateHitbox(u16 buttons) {
+static void StateMenu_UpdateVisualizers(u16 buttons) {
     if ((buttons & R_JPAD) || (buttons & A_BUTTON) || (buttons & L_JPAD)) {
         switch (sSelectedOption) {
-            case HOPT_MASTER:
+            case VOPT_HITBOXES:
                 gPracticeConfig.showHitboxes ^= true;
                 break;
-            case HOPT_ACTORS:
+            case VOPT_ACTORS:
                 gPracticeConfig.showHitboxActors ^= true;
                 break;
-            case HOPT_SCENERY:
+            case VOPT_SCENERY:
                 gPracticeConfig.showHitboxScenery ^= true;
                 break;
-            case HOPT_ITEMS:
+            case VOPT_ITEMS:
                 gPracticeConfig.showHitboxItems ^= true;
                 break;
-            case HOPT_PLAYER:
+            case VOPT_PLAYER:
                 gPracticeConfig.showHitboxPlayer ^= true;
                 break;
-            case HOPT_FLASH:
+            case VOPT_FLASH:
                 gPracticeConfig.showHitboxFlash ^= true;
+                break;
+            case VOPT_SPAWN_ZONES:
+                gPracticeConfig.showSpawnZones ^= true;
                 break;
         }
     }
@@ -253,9 +271,14 @@ void Practice_StateMenu_Update(void) {
     s32 optCount = StateMenu_GetOptionCount();
 
     if (press->button & B_BUTTON) {
-        if (sActiveSubMenu == PSUBMENU_HITBOX) {
+        if (sActiveSubMenu == PSUBMENU_STATS) {
             sActiveSubMenu = PSUBMENU_DISPLAY;
-            sSelectedOption = DOPT_HITBOX_MENU;
+            sSelectedOption = DOPT_STATS_MENU;
+            return;
+        }
+        if (sActiveSubMenu == PSUBMENU_VISUALIZERS) {
+            sActiveSubMenu = PSUBMENU_DISPLAY;
+            sSelectedOption = DOPT_VIS_MENU;
             return;
         }
         Practice_StateMenu_Close();
@@ -284,14 +307,24 @@ void Practice_StateMenu_Update(void) {
             Practice_StateMenu_Close();
             return;
         }
-        if (sActiveSubMenu == PSUBMENU_DISPLAY && sSelectedOption == DOPT_HITBOX_MENU) {
-            sActiveSubMenu = PSUBMENU_HITBOX;
+        if (sActiveSubMenu == PSUBMENU_DISPLAY && sSelectedOption == DOPT_STATS_MENU) {
+            sActiveSubMenu = PSUBMENU_STATS;
             sSelectedOption = 0;
             return;
         }
-        if (sActiveSubMenu == PSUBMENU_HITBOX && sSelectedOption == HOPT_BACK) {
+        if (sActiveSubMenu == PSUBMENU_DISPLAY && sSelectedOption == DOPT_VIS_MENU) {
+            sActiveSubMenu = PSUBMENU_VISUALIZERS;
+            sSelectedOption = 0;
+            return;
+        }
+        if (sActiveSubMenu == PSUBMENU_STATS && sSelectedOption == SOPT_BACK) {
             sActiveSubMenu = PSUBMENU_DISPLAY;
-            sSelectedOption = DOPT_HITBOX_MENU;
+            sSelectedOption = DOPT_STATS_MENU;
+            return;
+        }
+        if (sActiveSubMenu == PSUBMENU_VISUALIZERS && sSelectedOption == VOPT_BACK) {
+            sActiveSubMenu = PSUBMENU_DISPLAY;
+            sSelectedOption = DOPT_VIS_MENU;
             return;
         }
     }
@@ -303,8 +336,11 @@ void Practice_StateMenu_Update(void) {
         case PSUBMENU_DISPLAY:
             StateMenu_UpdateDisplay(press->button);
             break;
-        case PSUBMENU_HITBOX:
-            StateMenu_UpdateHitbox(press->button);
+        case PSUBMENU_STATS:
+            StateMenu_UpdateStats(press->button);
+            break;
+        case PSUBMENU_VISUALIZERS:
+            StateMenu_UpdateVisualizers(press->button);
             break;
     }
 }
@@ -385,38 +421,11 @@ static void StateMenu_DrawDisplay(void) {
                 Practice_DrawTextColor(120, y, gPracticeConfig.showInputDisplay ? "ON" : "OFF",
                     gPracticeConfig.showInputDisplay ? 0 : 255, gPracticeConfig.showInputDisplay ? 255 : 100, 0);
                 break;
-            case DOPT_HUD_OVERLAY:
-                Practice_DrawText(54, y, "HUD:");
-                Practice_DrawTextColor(120, y, gPracticeConfig.showHudOverlay ? "ON" : "OFF",
-                    gPracticeConfig.showHudOverlay ? 0 : 255, gPracticeConfig.showHudOverlay ? 255 : 100, 0);
+            case DOPT_STATS_MENU:
+                Practice_DrawTextColor(54, y, "STATS...", 200, 200, 255);
                 break;
-            case DOPT_LAG_FRAMES:
-                Practice_DrawText(54, y, "  LAG:");
-                Practice_DrawTextColor(120, y, gPracticeConfig.showLagFrames ? "ON" : "OFF",
-                    gPracticeConfig.showLagFrames ? 0 : 255, gPracticeConfig.showLagFrames ? 255 : 100, 0);
-                break;
-            case DOPT_SPEED:
-                Practice_DrawText(54, y, "  SPEED:");
-                Practice_DrawTextColor(120, y, gPracticeConfig.showSpeed ? "ON" : "OFF",
-                    gPracticeConfig.showSpeed ? 0 : 255, gPracticeConfig.showSpeed ? 255 : 100, 0);
-                break;
-            case DOPT_CHARGE_TIMING:
-                Practice_DrawText(54, y, "  CHARGE:");
-                Practice_DrawTextColor(120, y, gPracticeConfig.showChargeTiming ? "ON" : "OFF",
-                    gPracticeConfig.showChargeTiming ? 0 : 255, gPracticeConfig.showChargeTiming ? 255 : 100, 0);
-                break;
-            case DOPT_MISSED_INPUTS:
-                Practice_DrawText(54, y, "  MISSED:");
-                Practice_DrawTextColor(120, y, gPracticeConfig.showMissedInputs ? "ON" : "OFF",
-                    gPracticeConfig.showMissedInputs ? 0 : 255, gPracticeConfig.showMissedInputs ? 255 : 100, 0);
-                break;
-            case DOPT_HIT_TRACKING:
-                Practice_DrawText(54, y, "  HITS:");
-                Practice_DrawTextColor(120, y, gPracticeConfig.showHitTracking ? "ON" : "OFF",
-                    gPracticeConfig.showHitTracking ? 0 : 255, gPracticeConfig.showHitTracking ? 255 : 100, 0);
-                break;
-            case DOPT_HITBOX_MENU:
-                Practice_DrawTextColor(54, y, "HITBOX VIEWER...", 200, 200, 255);
+            case DOPT_VIS_MENU:
+                Practice_DrawTextColor(54, y, "VISUALIZERS...", 200, 200, 255);
                 break;
             case DOPT_BACK:
                 Practice_DrawTextColor(54, y, "BACK", 150, 150, 150);
@@ -425,11 +434,11 @@ static void StateMenu_DrawDisplay(void) {
     }
 }
 
-static void StateMenu_DrawHitbox(void) {
+static void StateMenu_DrawStats(void) {
     s32 y;
     s32 i;
 
-    for (i = 0; i < HOPT_MAX; i++) {
+    for (i = 0; i < SOPT_MAX; i++) {
         y = 60 + (i * 14);
 
         if (i == sSelectedOption) {
@@ -437,37 +446,91 @@ static void StateMenu_DrawHitbox(void) {
         }
 
         switch (i) {
-            case HOPT_MASTER:
+            case SOPT_HUD_OVERLAY:
+                Practice_DrawText(54, y, "HUD:");
+                Practice_DrawTextColor(120, y, gPracticeConfig.showHudOverlay ? "ON" : "OFF",
+                    gPracticeConfig.showHudOverlay ? 0 : 255, gPracticeConfig.showHudOverlay ? 255 : 100, 0);
+                break;
+            case SOPT_LAG_FRAMES:
+                Practice_DrawText(54, y, "  LAG:");
+                Practice_DrawTextColor(120, y, gPracticeConfig.showLagFrames ? "ON" : "OFF",
+                    gPracticeConfig.showLagFrames ? 0 : 255, gPracticeConfig.showLagFrames ? 255 : 100, 0);
+                break;
+            case SOPT_SPEED:
+                Practice_DrawText(54, y, "  SPEED:");
+                Practice_DrawTextColor(120, y, gPracticeConfig.showSpeed ? "ON" : "OFF",
+                    gPracticeConfig.showSpeed ? 0 : 255, gPracticeConfig.showSpeed ? 255 : 100, 0);
+                break;
+            case SOPT_CHARGE_TIMING:
+                Practice_DrawText(54, y, "  CHARGE:");
+                Practice_DrawTextColor(120, y, gPracticeConfig.showChargeTiming ? "ON" : "OFF",
+                    gPracticeConfig.showChargeTiming ? 0 : 255, gPracticeConfig.showChargeTiming ? 255 : 100, 0);
+                break;
+            case SOPT_MISSED_INPUTS:
+                Practice_DrawText(54, y, "  MISSED:");
+                Practice_DrawTextColor(120, y, gPracticeConfig.showMissedInputs ? "ON" : "OFF",
+                    gPracticeConfig.showMissedInputs ? 0 : 255, gPracticeConfig.showMissedInputs ? 255 : 100, 0);
+                break;
+            case SOPT_HIT_TRACKING:
+                Practice_DrawText(54, y, "  HITS:");
+                Practice_DrawTextColor(120, y, gPracticeConfig.showHitTracking ? "ON" : "OFF",
+                    gPracticeConfig.showHitTracking ? 0 : 255, gPracticeConfig.showHitTracking ? 255 : 100, 0);
+                break;
+            case SOPT_BACK:
+                Practice_DrawTextColor(54, y, "BACK", 150, 150, 150);
+                break;
+        }
+    }
+}
+
+static void StateMenu_DrawVisualizers(void) {
+    s32 y;
+    s32 i;
+
+    for (i = 0; i < VOPT_MAX; i++) {
+        y = 60 + (i * 14);
+
+        if (i == sSelectedOption) {
+            Practice_DrawBox(42, y - 1, 230, 12, 255, 255, 255, 60);
+        }
+
+        switch (i) {
+            case VOPT_HITBOXES:
                 Practice_DrawText(54, y, "HITBOXES:");
                 Practice_DrawTextColor(150, y, gPracticeConfig.showHitboxes ? "ON" : "OFF",
                     gPracticeConfig.showHitboxes ? 0 : 255, gPracticeConfig.showHitboxes ? 255 : 100, 0);
                 break;
-            case HOPT_ACTORS:
+            case VOPT_ACTORS:
                 Practice_DrawText(54, y, "  ACTORS:");
                 Practice_DrawTextColor(150, y, gPracticeConfig.showHitboxActors ? "ON" : "OFF",
                     gPracticeConfig.showHitboxActors ? 0 : 255, gPracticeConfig.showHitboxActors ? 255 : 100, 0);
                 break;
-            case HOPT_SCENERY:
+            case VOPT_SCENERY:
                 Practice_DrawText(54, y, "  SCENERY:");
                 Practice_DrawTextColor(150, y, gPracticeConfig.showHitboxScenery ? "ON" : "OFF",
                     gPracticeConfig.showHitboxScenery ? 0 : 255, gPracticeConfig.showHitboxScenery ? 255 : 100, 0);
                 break;
-            case HOPT_ITEMS:
+            case VOPT_ITEMS:
                 Practice_DrawText(54, y, "  ITEMS:");
                 Practice_DrawTextColor(150, y, gPracticeConfig.showHitboxItems ? "ON" : "OFF",
                     gPracticeConfig.showHitboxItems ? 0 : 255, gPracticeConfig.showHitboxItems ? 255 : 100, 0);
                 break;
-            case HOPT_PLAYER:
+            case VOPT_PLAYER:
                 Practice_DrawText(54, y, "  PLAYER:");
                 Practice_DrawTextColor(150, y, gPracticeConfig.showHitboxPlayer ? "ON" : "OFF",
                     gPracticeConfig.showHitboxPlayer ? 0 : 255, gPracticeConfig.showHitboxPlayer ? 255 : 100, 0);
                 break;
-            case HOPT_FLASH:
+            case VOPT_FLASH:
                 Practice_DrawText(54, y, "  FLASH:");
                 Practice_DrawTextColor(150, y, gPracticeConfig.showHitboxFlash ? "ON" : "OFF",
                     gPracticeConfig.showHitboxFlash ? 0 : 255, gPracticeConfig.showHitboxFlash ? 255 : 100, 0);
                 break;
-            case HOPT_BACK:
+            case VOPT_SPAWN_ZONES:
+                Practice_DrawText(54, y, "SPAWN ZONES:");
+                Practice_DrawTextColor(150, y, gPracticeConfig.showSpawnZones ? "ON" : "OFF",
+                    gPracticeConfig.showSpawnZones ? 0 : 255, gPracticeConfig.showSpawnZones ? 255 : 100, 0);
+                break;
+            case VOPT_BACK:
                 Practice_DrawTextColor(54, y, "BACK", 150, 150, 150);
                 break;
         }
@@ -487,13 +550,18 @@ void Practice_StateMenu_Draw(void) {
             break;
         case PSUBMENU_DISPLAY:
             title = "DISPLAY";
-            boxHeight = 193;
-            helpY = 224;
+            boxHeight = 96;
+            helpY = 128;
             break;
-        case PSUBMENU_HITBOX:
-            title = "HITBOX VIEWER";
-            boxHeight = 143;
-            helpY = 176;
+        case PSUBMENU_STATS:
+            title = "STATS";
+            boxHeight = 124;
+            helpY = 156;
+            break;
+        case PSUBMENU_VISUALIZERS:
+            title = "VISUALIZERS";
+            boxHeight = 138;
+            helpY = 170;
             break;
         default:
             return;
@@ -509,10 +577,14 @@ void Practice_StateMenu_Draw(void) {
             break;
         case PSUBMENU_DISPLAY:
             StateMenu_DrawDisplay();
+            Practice_DrawTextColor(50, helpY, "A:SELECT  B:BACK", 150, 150, 150);
+            break;
+        case PSUBMENU_STATS:
+            StateMenu_DrawStats();
             Practice_DrawTextColor(50, helpY, "A:TOGGLE  B:BACK", 150, 150, 150);
             break;
-        case PSUBMENU_HITBOX:
-            StateMenu_DrawHitbox();
+        case PSUBMENU_VISUALIZERS:
+            StateMenu_DrawVisualizers();
             Practice_DrawTextColor(50, helpY, "A:TOGGLE  B:BACK", 150, 150, 150);
             break;
     }

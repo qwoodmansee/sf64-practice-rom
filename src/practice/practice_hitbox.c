@@ -151,12 +151,43 @@ static void Hitbox_DrawObjectHitboxes(Object* obj, f32* hitboxData, u8 r, u8 g, 
     }
 }
 
+static void Hitbox_DrawSpawnZones(void) {
+    ObjectInit* entry;
+    s32 i;
+    s32 count;
+
+    if (gLevelMode != LEVELMODE_ON_RAILS) {
+        return;
+    }
+
+    count = 0;
+    for (i = gObjectLoadIndex; count < 50; i++) {
+        entry = &gLevelObjects[i];
+        if (entry->id <= OBJ_INVALID) {
+            break;
+        }
+        if (entry->zPos1 > gPathProgress + 5000.0f) {
+            break;
+        }
+        if (entry->zPos1 < gPathProgress) {
+            continue;
+        }
+        Hitbox_DrawWireframeBox(
+            (f32)entry->xPos, (f32)entry->yPos,
+            -entry->zPos1 - 3000.0f + (f32)entry->zPos2,
+            0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, false,
+            0.0f, 50.0f, 0.0f, 50.0f, 0.0f, 50.0f,
+            255, 200, 0, 200);
+        count++;
+    }
+}
+
 void Practice_Hitbox_Draw(void) {
     s32 i;
     f32 dx, dy, dz, distSq;
     Player* player;
 
-    if (!gPracticeConfig.showHitboxes) {
+    if (!gPracticeConfig.showHitboxes && !gPracticeConfig.showSpawnZones) {
         return;
     }
     if ((gGameState != GSTATE_PLAY) || (gPlayState != PLAY_UPDATE)) {
@@ -167,6 +198,7 @@ void Practice_Hitbox_Draw(void) {
 
     Hitbox_SetupRCP();
 
+    if (gPracticeConfig.showHitboxes) {
     if (gPracticeConfig.showHitboxActors) {
         for (i = 0; i < 60; i++) {
             if (gActors[i].obj.status == OBJ_FREE) {
@@ -247,6 +279,11 @@ void Practice_Hitbox_Draw(void) {
             0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, false,
             0.0f, 10.0f, 0.0f, 10.0f, 0.0f, 10.0f,
             255, 255, 255, 200);
+    }
+    } /* end showHitboxes */
+
+    if (gPracticeConfig.showSpawnZones) {
+        Hitbox_DrawSpawnZones();
     }
 }
 
