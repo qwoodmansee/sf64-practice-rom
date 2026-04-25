@@ -33,11 +33,18 @@ typedef struct PracticeConfig {
     bool showChargeTiming;
     bool showMissedInputs;
     bool showHitTracking;
+    bool showHitboxes;
+    bool showHitboxActors;
+    bool showHitboxScenery;
+    bool showHitboxItems;
+    bool showHitboxPlayer;
+    bool showHitboxFlash;
 } PracticeConfig;
 
 typedef enum PracticeSubMenu {
     PSUBMENU_LOADOUT,
     PSUBMENU_OPTIONS,
+    PSUBMENU_HITBOX,
 } PracticeSubMenu;
 
 typedef enum PracticeAction {
@@ -105,6 +112,9 @@ void Practice_Hud_Draw(void);
 
 /* practice_input_display.c */
 void Practice_InputDisplay_Draw(void);
+
+/* practice_hitbox.c */
+void Practice_Hitbox_Draw(void);
 
 /* practice_save.c */
 void Practice_SaveState(void);
