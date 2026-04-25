@@ -1,4 +1,7 @@
 #include "global.h"
+#ifdef PRACTICE_ROM
+#include "practice.h"
+#endif
 #include "assets/ast_arwing.h"
 #include "assets/ast_allies.h"
 #include "assets/ast_landmaster.h"
@@ -1816,6 +1819,9 @@ void Display_Update(void) {
                        gAmbientB);
     Object_Draw(1);
     TexturedLine_Draw();
+#ifdef PRACTICE_ROM
+    Practice_Hitbox_Draw();
+#endif
     gReflectY = 1;
     PlayerShot_DrawAll();
 
