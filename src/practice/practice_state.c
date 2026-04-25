@@ -24,9 +24,21 @@ typedef enum OptionsOption {
     OOPT_CHARGE_TIMING,
     OOPT_MISSED_INPUTS,
     OOPT_HIT_TRACKING,
+    OOPT_HITBOX_MENU,
     OOPT_BACK,
     OOPT_MAX,
 } OptionsOption;
+
+typedef enum HitboxOption {
+    HOPT_MASTER,
+    HOPT_ACTORS,
+    HOPT_SCENERY,
+    HOPT_ITEMS,
+    HOPT_PLAYER,
+    HOPT_FLASH,
+    HOPT_BACK,
+    HOPT_MAX,
+} HitboxOption;
 
 static s32 sSelectedOption = 0;
 static bool sStateMenuOpen = false;
@@ -50,7 +62,12 @@ void Practice_StateMenu_Close(void) {
 }
 
 static s32 StateMenu_GetOptionCount(void) {
-    return (sActiveSubMenu == PSUBMENU_LOADOUT) ? LOPT_MAX : OOPT_MAX;
+    switch (sActiveSubMenu) {
+        case PSUBMENU_LOADOUT: return LOPT_MAX;
+        case PSUBMENU_OPTIONS: return OOPT_MAX;
+        case PSUBMENU_HITBOX:  return HOPT_MAX;
+        default:               return 0;
+    }
 }
 
 static void StateMenu_UpdateLoadout(u16 buttons) {
@@ -168,11 +185,41 @@ static void StateMenu_UpdateOptions(u16 buttons) {
     }
 }
 
+static void StateMenu_UpdateHitbox(u16 buttons) {
+    if ((buttons & R_JPAD) || (buttons & A_BUTTON) || (buttons & L_JPAD)) {
+        switch (sSelectedOption) {
+            case HOPT_MASTER:
+                gPracticeConfig.showHitboxes ^= true;
+                break;
+            case HOPT_ACTORS:
+                gPracticeConfig.showHitboxActors ^= true;
+                break;
+            case HOPT_SCENERY:
+                gPracticeConfig.showHitboxScenery ^= true;
+                break;
+            case HOPT_ITEMS:
+                gPracticeConfig.showHitboxItems ^= true;
+                break;
+            case HOPT_PLAYER:
+                gPracticeConfig.showHitboxPlayer ^= true;
+                break;
+            case HOPT_FLASH:
+                gPracticeConfig.showHitboxFlash ^= true;
+                break;
+        }
+    }
+}
+
 void Practice_StateMenu_Update(void) {
     OSContPad* press = &gControllerPress[gMainController];
     s32 optCount = StateMenu_GetOptionCount();
 
     if (press->button & B_BUTTON) {
+        if (sActiveSubMenu == PSUBMENU_HITBOX) {
+            sActiveSubMenu = PSUBMENU_OPTIONS;
+            sSelectedOption = OOPT_HITBOX_MENU;
+            return;
+        }
         Practice_StateMenu_Close();
         return;
     }
@@ -191,17 +238,36 @@ void Practice_StateMenu_Update(void) {
     }
 
     if (press->button & A_BUTTON) {
-        s32 backOpt = (sActiveSubMenu == PSUBMENU_LOADOUT) ? LOPT_BACK : OOPT_BACK;
-        if (sSelectedOption == backOpt) {
+        if (sActiveSubMenu == PSUBMENU_LOADOUT && sSelectedOption == LOPT_BACK) {
             Practice_StateMenu_Close();
+            return;
+        }
+        if (sActiveSubMenu == PSUBMENU_OPTIONS && sSelectedOption == OOPT_BACK) {
+            Practice_StateMenu_Close();
+            return;
+        }
+        if (sActiveSubMenu == PSUBMENU_OPTIONS && sSelectedOption == OOPT_HITBOX_MENU) {
+            sActiveSubMenu = PSUBMENU_HITBOX;
+            sSelectedOption = 0;
+            return;
+        }
+        if (sActiveSubMenu == PSUBMENU_HITBOX && sSelectedOption == HOPT_BACK) {
+            sActiveSubMenu = PSUBMENU_OPTIONS;
+            sSelectedOption = OOPT_HITBOX_MENU;
             return;
         }
     }
 
-    if (sActiveSubMenu == PSUBMENU_LOADOUT) {
-        StateMenu_UpdateLoadout(press->button);
-    } else {
-        StateMenu_UpdateOptions(press->button);
+    switch (sActiveSubMenu) {
+        case PSUBMENU_LOADOUT:
+            StateMenu_UpdateLoadout(press->button);
+            break;
+        case PSUBMENU_OPTIONS:
+            StateMenu_UpdateOptions(press->button);
+            break;
+        case PSUBMENU_HITBOX:
+            StateMenu_UpdateHitbox(press->button);
+            break;
     }
 }
 
@@ -311,6 +377,9 @@ static void StateMenu_DrawOptions(void) {
                 Practice_DrawTextColor(120, y, gPracticeConfig.showHitTracking ? "ON" : "OFF",
                     gPracticeConfig.showHitTracking ? 0 : 255, gPracticeConfig.showHitTracking ? 255 : 100, 0);
                 break;
+            case OOPT_HITBOX_MENU:
+                Practice_DrawTextColor(54, y, "HITBOX VIEWER...", 200, 200, 255);
+                break;
             case OOPT_BACK:
                 Practice_DrawTextColor(54, y, "BACK", 150, 150, 150);
                 break;
@@ -318,20 +387,96 @@ static void StateMenu_DrawOptions(void) {
     }
 }
 
+static void StateMenu_DrawHitbox(void) {
+    s32 y;
+    s32 i;
+
+    for (i = 0; i < HOPT_MAX; i++) {
+        y = 60 + (i * 14);
+
+        if (i == sSelectedOption) {
+            Practice_DrawBox(42, y - 1, 230, 12, 255, 255, 255, 60);
+        }
+
+        switch (i) {
+            case HOPT_MASTER:
+                Practice_DrawText(54, y, "HITBOXES:");
+                Practice_DrawTextColor(150, y, gPracticeConfig.showHitboxes ? "ON" : "OFF",
+                    gPracticeConfig.showHitboxes ? 0 : 255, gPracticeConfig.showHitboxes ? 255 : 100, 0);
+                break;
+            case HOPT_ACTORS:
+                Practice_DrawText(54, y, "  ACTORS:");
+                Practice_DrawTextColor(150, y, gPracticeConfig.showHitboxActors ? "ON" : "OFF",
+                    gPracticeConfig.showHitboxActors ? 0 : 255, gPracticeConfig.showHitboxActors ? 255 : 100, 0);
+                break;
+            case HOPT_SCENERY:
+                Practice_DrawText(54, y, "  SCENERY:");
+                Practice_DrawTextColor(150, y, gPracticeConfig.showHitboxScenery ? "ON" : "OFF",
+                    gPracticeConfig.showHitboxScenery ? 0 : 255, gPracticeConfig.showHitboxScenery ? 255 : 100, 0);
+                break;
+            case HOPT_ITEMS:
+                Practice_DrawText(54, y, "  ITEMS:");
+                Practice_DrawTextColor(150, y, gPracticeConfig.showHitboxItems ? "ON" : "OFF",
+                    gPracticeConfig.showHitboxItems ? 0 : 255, gPracticeConfig.showHitboxItems ? 255 : 100, 0);
+                break;
+            case HOPT_PLAYER:
+                Practice_DrawText(54, y, "  PLAYER:");
+                Practice_DrawTextColor(150, y, gPracticeConfig.showHitboxPlayer ? "ON" : "OFF",
+                    gPracticeConfig.showHitboxPlayer ? 0 : 255, gPracticeConfig.showHitboxPlayer ? 255 : 100, 0);
+                break;
+            case HOPT_FLASH:
+                Practice_DrawText(54, y, "  FLASH:");
+                Practice_DrawTextColor(150, y, gPracticeConfig.showHitboxFlash ? "ON" : "OFF",
+                    gPracticeConfig.showHitboxFlash ? 0 : 255, gPracticeConfig.showHitboxFlash ? 255 : 100, 0);
+                break;
+            case HOPT_BACK:
+                Practice_DrawTextColor(54, y, "BACK", 150, 150, 150);
+                break;
+        }
+    }
+}
+
 void Practice_StateMenu_Draw(void) {
-    const char* title = (sActiveSubMenu == PSUBMENU_LOADOUT) ? "LOADOUT" : "OPTIONS";
-    s32 boxHeight = (sActiveSubMenu == PSUBMENU_LOADOUT) ? 115 : 199;
-    s32 helpY = (sActiveSubMenu == PSUBMENU_LOADOUT) ? 148 : 232;
+    const char* title;
+    s32 boxHeight;
+    s32 helpY;
+
+    switch (sActiveSubMenu) {
+        case PSUBMENU_LOADOUT:
+            title = "LOADOUT";
+            boxHeight = 115;
+            helpY = 148;
+            break;
+        case PSUBMENU_OPTIONS:
+            title = "OPTIONS";
+            boxHeight = 213;
+            helpY = 246;
+            break;
+        case PSUBMENU_HITBOX:
+            title = "HITBOX VIEWER";
+            boxHeight = 143;
+            helpY = 176;
+            break;
+        default:
+            return;
+    }
 
     Practice_DrawBox(40, 40, 240, boxHeight, 0, 0, 60, 200);
     Practice_DrawTextColor(50, 44, title, 0, 255, 128);
 
-    if (sActiveSubMenu == PSUBMENU_LOADOUT) {
-        StateMenu_DrawLoadout();
-        Practice_DrawTextColor(50, helpY, "D-PAD:CHANGE  B:BACK", 150, 150, 150);
-    } else {
-        StateMenu_DrawOptions();
-        Practice_DrawTextColor(50, helpY, "A:TOGGLE  B:BACK", 150, 150, 150);
+    switch (sActiveSubMenu) {
+        case PSUBMENU_LOADOUT:
+            StateMenu_DrawLoadout();
+            Practice_DrawTextColor(50, helpY, "D-PAD:CHANGE  B:BACK", 150, 150, 150);
+            break;
+        case PSUBMENU_OPTIONS:
+            StateMenu_DrawOptions();
+            Practice_DrawTextColor(50, helpY, "A:TOGGLE  B:BACK", 150, 150, 150);
+            break;
+        case PSUBMENU_HITBOX:
+            StateMenu_DrawHitbox();
+            Practice_DrawTextColor(50, helpY, "A:TOGGLE  B:BACK", 150, 150, 150);
+            break;
     }
 }
 
