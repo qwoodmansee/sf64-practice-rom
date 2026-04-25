@@ -70,6 +70,33 @@ static s32 StateMenu_GetOptionCount(void) {
     }
 }
 
+static void StateMenu_ApplyLoadoutLive(void) {
+    gLaserStrength[gPlayerNum] = gPracticeConfig.laserStrength;
+    gBombCount[gPlayerNum] = gPracticeConfig.bombCount;
+    gLifeCount[gPlayerNum] = gPracticeConfig.lifeCount;
+
+    if ((gGameState == GSTATE_PLAY) && (gPlayState == PLAY_UPDATE)) {
+        gPlayer[0].arwing.rightWingState = gPracticeConfig.rightWingState;
+        gPlayer[0].arwing.leftWingState = gPracticeConfig.leftWingState;
+    }
+
+    if (!gPracticeConfig.falcoAlive) {
+        gTeamShields[TEAM_ID_FALCO] = 0;
+    } else if (gTeamShields[TEAM_ID_FALCO] == 0) {
+        gTeamShields[TEAM_ID_FALCO] = 255;
+    }
+    if (!gPracticeConfig.slippyAlive) {
+        gTeamShields[TEAM_ID_SLIPPY] = 0;
+    } else if (gTeamShields[TEAM_ID_SLIPPY] == 0) {
+        gTeamShields[TEAM_ID_SLIPPY] = 255;
+    }
+    if (!gPracticeConfig.peppyAlive) {
+        gTeamShields[TEAM_ID_PEPPY] = 0;
+    } else if (gTeamShields[TEAM_ID_PEPPY] == 0) {
+        gTeamShields[TEAM_ID_PEPPY] = 255;
+    }
+}
+
 static void StateMenu_UpdateLoadout(u16 buttons) {
     if ((buttons & R_JPAD) || (buttons & A_BUTTON)) {
         switch (sSelectedOption) {
@@ -161,6 +188,8 @@ static void StateMenu_UpdateLoadout(u16 buttons) {
                 break;
         }
     }
+
+    StateMenu_ApplyLoadoutLive();
 }
 
 static void StateMenu_UpdateDisplay(u16 buttons) {
