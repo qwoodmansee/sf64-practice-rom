@@ -43,5 +43,7 @@ H.assert_eq(H.config_field("showHitboxScenery"), 0, "showHitboxScenery = false")
 H.assert_eq(H.config_field("showHitboxItems"), 0, "showHitboxItems = false")
 H.assert_eq(H.config_field("showHitboxPlayer"), 0, "showHitboxPlayer = false")
 H.assert_eq(H.config_field("showHitboxFlash"), 0, "showHitboxFlash = false")
+H.assert_eq(H.config_field("showSpawnZones"), 0, "showSpawnZones = false")
+H.assert_eq(H.config_field("expertMode"), 0, "expertMode = false")
 
 H.finish()

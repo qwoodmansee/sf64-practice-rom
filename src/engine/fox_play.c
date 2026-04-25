@@ -4549,6 +4549,17 @@ void Player_Setup(Player* playerx) {
     gDisplayedHitCount = gHitCount;
     gShieldGaugeState = SHIELD_GAUGE_NEUTRAL;
     gMissedZoSearchlight = gSavedZoSearchlightStatus;
+#ifdef PRACTICE_ROM
+    if (gLevelMode == LEVELMODE_ON_RAILS && gPracticeCheckpointProgress > 0.0f) {
+        s32 ckIdx = 0;
+        while (gLevelObjects[ckIdx].id > OBJ_INVALID && gLevelObjects[ckIdx].zPos1 <= gPracticeCheckpointProgress) {
+            ckIdx++;
+        }
+        gSavedObjectLoadIndex = ckIdx;
+        gSavedPathProgress = gPracticeCheckpointProgress;
+        gPracticeCheckpointProgress = 0.0f;
+    }
+#endif
     gObjectLoadIndex = gSavedObjectLoadIndex;
     gGroundSurface = gSavedGroundSurface;
     gPathProgress = player->zPath = gSavedPathProgress;

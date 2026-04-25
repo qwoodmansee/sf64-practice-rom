@@ -30,6 +30,8 @@ SYMBOLS = [
     "gChargeTimers",
     "gLevelPhase",
     "gPathProgress",
+    "gSavedPathProgress",
+    "gPracticeCheckpointProgress",
 ]
 
 # PracticeConfig field offsets (bool = int = 4 bytes, s32 = 4, u8 = 1)
@@ -80,6 +82,8 @@ CONFIG_OFFSETS = {
     "showHitboxItems":  0x48,
     "showHitboxPlayer": 0x4C,
     "showHitboxFlash":  0x50,
+    "showSpawnZones":   0x54,
+    "expertMode":       0x58,
 }
 
 # Player struct field offsets (from include/sf64player.h comments)

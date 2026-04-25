@@ -37,3 +37,5 @@ def run(ctx):
     ctx.assert_eq(ctx.config_field("showHitboxItems"), 0, "showHitboxItems = false")
     ctx.assert_eq(ctx.config_field("showHitboxPlayer"), 0, "showHitboxPlayer = false")
     ctx.assert_eq(ctx.config_field("showHitboxFlash"), 0, "showHitboxFlash = false")
+    ctx.assert_eq(ctx.config_field("showSpawnZones"), 0, "showSpawnZones = false")
+    ctx.assert_eq(ctx.config_field("expertMode"), 0, "expertMode = false")

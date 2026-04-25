@@ -126,7 +126,7 @@ void Practice_Menu_Update(void) {
         switch (sHoveredSlice) {
             case RSLICE_RESTART:
                 Practice_Menu_Close();
-                Practice_LaunchLevel(gCurrentLevel, gLevelPhase);
+                Practice_LaunchLevel(gCurrentLevel, gLevelPhase, 0.0f);
                 break;
             case RSLICE_SAVE:
                 Practice_SaveState();

@@ -64,6 +64,7 @@ extern s32 gPracticeDirectHits;
 extern s32 gPracticeIndirectCount;
 extern s32 gPracticeIndirectBonus;
 extern s32 gPracticeDespawns;
+extern f32 gPracticeCheckpointProgress;
 
 /* practice_main.c */
 void Practice_Init(void);
@@ -90,7 +91,7 @@ const char* Practice_GetDPadName(u16 button);
 /* practice_level.c */
 void Practice_LevelSelect_Update(void);
 void Practice_LevelSelect_Draw(void);
-void Practice_LaunchLevel(LevelId levelId, s32 phase);
+void Practice_LaunchLevel(LevelId levelId, s32 phase, f32 checkpointProgress);
 LevelId Practice_GetSelectedLevelId(void);
 s32 Practice_GetSelectedPhase(void);
 

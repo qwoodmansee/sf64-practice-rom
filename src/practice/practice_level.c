@@ -9,6 +9,7 @@
 typedef struct PhaseEntry {
     const char* name;
     s32 phase;
+    f32 checkpointProgress;
 } PhaseEntry;
 
 typedef struct LevelEntry {
@@ -21,36 +22,36 @@ typedef struct LevelEntry {
 } LevelEntry;
 
 static LevelEntry sLevelList[] = {
-    { "CORNERIA", LEVEL_CORNERIA, PLANET_CORNERIA, 1, 1,
-      { { "START", 0 } } },
-    { "METEO",    LEVEL_METEO,    PLANET_METEO,    2, 2,
-      { { "START", 0 }, { "WARP", 1 } } },
-    { "SECTOR Y", LEVEL_SECTOR_Y, PLANET_SECTOR_Y, 2, 1,
-      { { "START", 0 } } },
+    { "CORNERIA", LEVEL_CORNERIA, PLANET_CORNERIA, 1, 2,
+      { { "START", 0 }, { "CHECKPOINT", 0, 93610.3f } } },
+    { "METEO",    LEVEL_METEO,    PLANET_METEO,    2, 3,
+      { { "START", 0 }, { "WARP", 1 }, { "CHECKPOINT", 0, 223651.3f } } },
+    { "SECTOR Y", LEVEL_SECTOR_Y, PLANET_SECTOR_Y, 2, 2,
+      { { "START", 0 }, { "CHECKPOINT", 0, 96148.4f } } },
     { "FORTUNA",  LEVEL_FORTUNA,  PLANET_FORTUNA,  3, 1,
       { { "START", 0 } } },
     { "KATINA",   LEVEL_KATINA,   PLANET_KATINA,   3, 1,
       { { "START", 0 } } },
-    { "AQUAS",    LEVEL_AQUAS,    PLANET_AQUAS,    3, 1,
-      { { "START", 0 } } },
-    { "SECTOR X", LEVEL_SECTOR_X, PLANET_SECTOR_X, 4, 2,
-      { { "START", 0 }, { "WARP", 1 } } },
-    { "SOLAR",    LEVEL_SOLAR,    PLANET_SOLAR,    4, 1,
-      { { "START", 0 } } },
-    { "ZONESS",   LEVEL_ZONESS,   PLANET_ZONESS,   4, 1,
-      { { "START", 0 } } },
-    { "TITANIA",  LEVEL_TITANIA,  PLANET_TITANIA,  5, 1,
-      { { "START", 0 } } },
-    { "MACBETH",  LEVEL_MACBETH,  PLANET_MACBETH,  5, 1,
-      { { "START", 0 } } },
+    { "AQUAS",    LEVEL_AQUAS,    PLANET_AQUAS,    3, 2,
+      { { "START", 0 }, { "CHECKPOINT", 0, 52268.8f } } },
+    { "SECTOR X", LEVEL_SECTOR_X, PLANET_SECTOR_X, 4, 3,
+      { { "START", 0 }, { "WARP", 1 }, { "CHECKPOINT", 0, 85788.5f } } },
+    { "SOLAR",    LEVEL_SOLAR,    PLANET_SOLAR,    4, 2,
+      { { "START", 0 }, { "CHECKPOINT", 0, 81850.0f } } },
+    { "ZONESS",   LEVEL_ZONESS,   PLANET_ZONESS,   4, 2,
+      { { "START", 0 }, { "CHECKPOINT", 0, 140850.0f } } },
+    { "TITANIA",  LEVEL_TITANIA,  PLANET_TITANIA,  5, 2,
+      { { "START", 0 }, { "CHECKPOINT", 0, 48150.0f } } },
+    { "MACBETH",  LEVEL_MACBETH,  PLANET_MACBETH,  5, 2,
+      { { "START", 0 }, { "CHECKPOINT", 0, 69015.0f } } },
     { "SECTOR Z", LEVEL_SECTOR_Z, PLANET_SECTOR_Z, 5, 1,
       { { "START", 0 } } },
     { "BOLSE",    LEVEL_BOLSE,    PLANET_BOLSE,    6, 1,
       { { "START", 0 } } },
-    { "AREA 6",   LEVEL_AREA_6,   PLANET_AREA_6,   6, 1,
-      { { "START", 0 } } },
-    { "VENOM 1",  LEVEL_VENOM_1,  PLANET_VENOM,    7, 1,
-      { { "START", 0 } } },
+    { "AREA 6",   LEVEL_AREA_6,   PLANET_AREA_6,   6, 2,
+      { { "START", 0 }, { "CHECKPOINT", 0, 152984.0f } } },
+    { "VENOM 1",  LEVEL_VENOM_1,  PLANET_VENOM,    7, 2,
+      { { "START", 0 }, { "CHECKPOINT", 0, 150379.9f } } },
     { "VENOM 2",  LEVEL_VENOM_2,  PLANET_VENOM,    7, 2,
       { { "START", 0 }, { "GREAT FOX", 2 } } },
 };
@@ -91,6 +92,8 @@ static s32 sSelectedLevel = 0;
 static s32 sSelectedPhase = 0;
 static s32 sBgmIndex = 0;
 static bool sBgmPlaying = false;
+
+f32 gPracticeCheckpointProgress = 0.0f;
 
 static void Practice_PlayCurrentBgm(void) {
     AUDIO_SET_SPEC(sBgmList[sBgmIndex].sfxLayout, sBgmList[sBgmIndex].audioSpec);
@@ -167,8 +170,8 @@ void Practice_LevelSelect_Update(void) {
     }
 
     if (press->button & A_BUTTON) {
-        s32 gamePhase = sLevelList[sSelectedLevel].phases[sSelectedPhase].phase;
-        Practice_LaunchLevel(sLevelList[sSelectedLevel].levelId, gamePhase);
+        PhaseEntry* phase = &sLevelList[sSelectedLevel].phases[sSelectedPhase];
+        Practice_LaunchLevel(sLevelList[sSelectedLevel].levelId, phase->phase, phase->checkpointProgress);
     }
 }
 
@@ -243,12 +246,13 @@ void Practice_LevelSelect_Draw(void) {
     }
 }
 
-void Practice_LaunchLevel(LevelId levelId, s32 phase) {
+void Practice_LaunchLevel(LevelId levelId, s32 phase, f32 checkpointProgress) {
     sBgmPlaying = false;
 
     gNextLevel = levelId;
     gNextLevelPhase = phase;
     gClearPlayerInfo = true;
+    gPracticeCheckpointProgress = checkpointProgress;
 
     // Map_LevelStart_AudioSpecSetup is in the menu overlay -- only callable from GSTATE_MAP.
     if (gGameState != GSTATE_PLAY) {
