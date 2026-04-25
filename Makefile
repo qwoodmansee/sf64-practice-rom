@@ -25,6 +25,8 @@ CC_CHECK_COMP ?= gcc
 OBJDUMP_BUILD ?= 0
 # Number of threads to compress with
 N_THREADS ?= $(shell nproc)
+# Version string used for generated BPS release artifacts.
+PATCH_VERSION ?= 0.0.0
 # If COMPILER is GCC, compile with GCC instead of IDO.
 COMPILER ?= ido
 # Whether to colorize build messages
@@ -58,6 +60,8 @@ TARGET               := starfox64
 BUILD_DIR := build
 TOOLS	  := tools
 PYTHON	  := python3
+PATCHER_DIR := tools/patcher
+RELEASE_ASSETS_DIR ?= $(PATCHER_DIR)/src/assets
 ROM       := $(BUILD_DIR)/$(TARGET).$(VERSION).$(REV).uncompressed.z64
 ROMC 	  := $(BUILD_DIR)/$(TARGET).$(VERSION).$(REV).z64
 ELF       := $(BUILD_DIR)/$(TARGET).$(VERSION).$(REV).elf
@@ -481,6 +485,15 @@ practice:
 	@$(PYTHON) tools/patch_linker_script.py
 	$(MAKE) PRACTICE_ROM=1
 
+practice-compressed:
+	@$(PYTHON) tools/patch_linker_script.py
+	$(MAKE) PRACTICE_ROM=1 uncompressed
+	$(MAKE) PRACTICE_ROM=1 compress
+	$(MAKE) PRACTICE_ROM=1 COMPARE=0 compressed
+
+practice-patch: practice-compressed
+	npm --prefix tools/patcher run create-release -- --source $(CURDIR)/$(BASEROM) --target $(CURDIR)/$(ROMC) --assets-dir $(CURDIR)/$(RELEASE_ASSETS_DIR) --version $(PATCH_VERSION)
+
 clean:
 	rm -f torch.hash.yml
 	@git clean -fdx asm/$(VERSION)/$(REV)
@@ -570,4 +583,4 @@ build/src/libultra/libc/ll.o: src/libultra/libc/ll.c
 # Print target for debugging
 print-% : ; $(info $* is a $(flavor $*) variable set to [$($*)]) @true
 
-.PHONY: all uncompressed compressed clean init extract expected format checkformat decompress compress assets context disasm toolchain
+.PHONY: all uncompressed compressed clean init extract expected format checkformat decompress compress assets context disasm toolchain practice practice-compressed practice-patch

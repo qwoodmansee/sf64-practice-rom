@@ -14,6 +14,9 @@ PATCH_SCRIPT = "tools/patch_linker_script.py"
 FOX_GAME = "src/engine/fox_game.c"
 FOX_PLAY = "src/engine/fox_play.c"
 FOX_DISPLAY = "src/engine/fox_display.c"
+MAKEFILE = "Makefile"
+PATCHER_PACKAGE = "tools/patcher/package.json"
+PATCHER_CREATE_RELEASE = "tools/patcher/src/create-release.ts"
 
 errors = []
 
@@ -106,12 +109,33 @@ def check_cutscene_skip_hook():
             "Without this, Play_Setup() resets it to true and intro cutscenes play."
         )
 
+def check_release_patch_workflow():
+    """Release patch workflow must build a compressed practice ROM and never ship ROM bytes."""
+    makefile = read(MAKEFILE)
+    if "practice-compressed:" not in makefile:
+        error("Makefile must define practice-compressed target for release builds")
+    if "practice-patch:" not in makefile:
+        error("Makefile must define practice-patch target for BPS release generation")
+    if "npm --prefix tools/patcher run create-release" not in makefile:
+        error("practice-patch target must call tools/patcher create-release script")
+
+    package = read(PATCHER_PACKAGE)
+    if '"sf64-practice-patcher"' not in package or '"bin"' not in package:
+        error("tools/patcher/package.json must expose the sf64-practice-patcher npx binary")
+    if '"*.z64"' in package or '"*.n64"' in package or '"*.v64"' in package:
+        error("tools/patcher/package.json must not include ROM file globs")
+
+    create_release = read(PATCHER_CREATE_RELEASE)
+    if "baserom.us.rev1.z64" not in create_release or "build/starfox64.us.rev1.z64" not in create_release:
+        error("create-release defaults must patch the US rev1 base ROM to the compressed practice ROM")
+
 def main():
     check_config_inits()
     check_function_definitions()
     check_source_in_build()
     check_engine_hooks()
     check_cutscene_skip_hook()
+    check_release_patch_workflow()
 
     if errors:
         print("Practice ROM invariant check FAILED:")
