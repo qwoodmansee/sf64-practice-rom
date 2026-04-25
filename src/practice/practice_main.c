@@ -26,6 +26,12 @@ void Practice_Init(void) {
     gPracticeConfig.showChargeTiming = false;
     gPracticeConfig.showMissedInputs = false;
     gPracticeConfig.showHitTracking = true;
+    gPracticeConfig.showHitboxes = false;
+    gPracticeConfig.showHitboxActors = false;
+    gPracticeConfig.showHitboxScenery = false;
+    gPracticeConfig.showHitboxItems = false;
+    gPracticeConfig.showHitboxPlayer = false;
+    gPracticeConfig.showHitboxFlash = false;
 }
 
 void Practice_Update(void) {
