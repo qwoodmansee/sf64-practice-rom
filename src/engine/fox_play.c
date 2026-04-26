@@ -7075,11 +7075,7 @@ void Play_Main(void) {
                 Versus_Main();
             }
 
-            if ((gControllerPress[gMainController].button & START_BUTTON) && gPauseEnabled
-#ifdef PRACTICE_ROM
-                && (gPracticeMenuState == PMENU_CLOSED)
-#endif
-            ) {
+            if ((gControllerPress[gMainController].button & START_BUTTON) && gPauseEnabled) {
                 Audio_PlayPauseSfx(1);
                 gPlayState = PLAY_PAUSE;
                 D_ctx_80177868 = 4;
@@ -7088,31 +7084,36 @@ void Play_Main(void) {
             break;
 
         case PLAY_PAUSE:
-            if (!gVersusMode) {
-                if ((gControllerPress[gMainController].button & R_TRIG) && (gPlayer[0].form != FORM_BLUE_MARINE) &&
-                    (gPlayer[0].state != PLAYERSTATE_STANDBY)) {
-                    if (gShowReticles[0] = 1 - gShowReticles[0]) {
-                        AUDIO_PLAY_SFX(NA_SE_MAP_WINDOW_OPEN, gDefaultSfxSource, 4);
-                    } else {
-                        AUDIO_PLAY_SFX(NA_SE_MAP_WINDOW_CLOSE, gDefaultSfxSource, 4);
-                    }
-                }
-            } else {
-                for (i = 0; i < 4; i++) {
-                    if ((gControllerPress[i].button & R_TRIG) && (gPlayer[i].form != FORM_ON_FOOT)) {
-                        if (gShowReticles[i] = 1 - gShowReticles[i]) {
-                            Object_PlayerSfx(gPlayer[i].sfxSource, NA_SE_MAP_WINDOW_OPEN, i);
+#ifdef PRACTICE_ROM
+            if (gPracticeMenuState == PMENU_CLOSED)
+#endif
+            {
+                if (!gVersusMode) {
+                    if ((gControllerPress[gMainController].button & R_TRIG) && (gPlayer[0].form != FORM_BLUE_MARINE) &&
+                        (gPlayer[0].state != PLAYERSTATE_STANDBY)) {
+                        if (gShowReticles[0] = 1 - gShowReticles[0]) {
+                            AUDIO_PLAY_SFX(NA_SE_MAP_WINDOW_OPEN, gDefaultSfxSource, 4);
                         } else {
-                            Object_PlayerSfx(gPlayer[i].sfxSource, NA_SE_MAP_WINDOW_CLOSE, i);
+                            AUDIO_PLAY_SFX(NA_SE_MAP_WINDOW_CLOSE, gDefaultSfxSource, 4);
+                        }
+                    }
+                } else {
+                    for (i = 0; i < 4; i++) {
+                        if ((gControllerPress[i].button & R_TRIG) && (gPlayer[i].form != FORM_ON_FOOT)) {
+                            if (gShowReticles[i] = 1 - gShowReticles[i]) {
+                                Object_PlayerSfx(gPlayer[i].sfxSource, NA_SE_MAP_WINDOW_OPEN, i);
+                            } else {
+                                Object_PlayerSfx(gPlayer[i].sfxSource, NA_SE_MAP_WINDOW_CLOSE, i);
+                            }
                         }
                     }
                 }
-            }
 
-            if ((D_ctx_80177868 == 4) && (gControllerPress[gMainController].button & START_BUTTON) && gPauseEnabled) {
-                Audio_PlayPauseSfx(0);
-                gPlayState = PLAY_UPDATE;
-                gDrawMode = DRAW_PLAY;
+                if ((D_ctx_80177868 == 4) && (gControllerPress[gMainController].button & START_BUTTON) && gPauseEnabled) {
+                    Audio_PlayPauseSfx(0);
+                    gPlayState = PLAY_UPDATE;
+                    gDrawMode = DRAW_PLAY;
+                }
             }
             gPauseEnabled = true;
             break;
