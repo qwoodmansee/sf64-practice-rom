@@ -324,6 +324,8 @@ void Practice_LoadState(void) {
 
     gPlayer[0].state = PLAYERSTATE_ACTIVE;
 
+    Practice_Hud_Reset();
+
     Audio_ClearVoice();
     AUDIO_PLAY_BGM(sSnapshot.scalars.bgmSeqId);
 }
