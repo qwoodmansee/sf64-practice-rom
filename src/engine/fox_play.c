@@ -7075,7 +7075,11 @@ void Play_Main(void) {
                 Versus_Main();
             }
 
-            if ((gControllerPress[gMainController].button & START_BUTTON) && gPauseEnabled) {
+            if ((gControllerPress[gMainController].button & START_BUTTON) && gPauseEnabled
+#ifdef PRACTICE_ROM
+                && (gPracticeMenuState == PMENU_CLOSED)
+#endif
+            ) {
                 Audio_PlayPauseSfx(1);
                 gPlayState = PLAY_PAUSE;
                 D_ctx_80177868 = 4;
