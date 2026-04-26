@@ -1,6 +1,9 @@
 #include "sf64math.h"
 #include "fox_hud.h"
 #include "prevent_bss_reordering.h"
+#ifdef PRACTICE_ROM
+#include "practice.h"
+#endif
 
 Vec3f D_801616A0;
 Vec3f D_801616B0;
@@ -1445,24 +1448,29 @@ void HUD_PauseScreen_Update(void) {
                 break;
 
             case 1:
-                ret = HUD_PauseScreenInput();
-                if (ret != 0) {
-                    sPauseScreenTimer[0] = 0;
-                    if (((ret > 0) && (sPauseScreenIwork[1] == 1)) || ((ret < 0) && (sPauseScreenIwork[1] == 0))) {
-                        sPauseScreenIwork[1] ^= 1;
-                        AUDIO_PLAY_SFX(NA_SE_CURSOR, gDefaultSfxSource, 4);
+#ifdef PRACTICE_ROM
+                if (gPracticeMenuState == PMENU_CLOSED)
+#endif
+                {
+                    ret = HUD_PauseScreenInput();
+                    if (ret != 0) {
+                        sPauseScreenTimer[0] = 0;
+                        if (((ret > 0) && (sPauseScreenIwork[1] == 1)) || ((ret < 0) && (sPauseScreenIwork[1] == 0))) {
+                            sPauseScreenIwork[1] ^= 1;
+                            AUDIO_PLAY_SFX(NA_SE_CURSOR, gDefaultSfxSource, 4);
+                        }
                     }
-                }
 
-                if (gInputPress->button & B_BUTTON) {
-                    sPauseScreenIwork[0] = 10;
-                }
-
-                if (gInputPress->button & A_BUTTON) {
-                    if (sPauseScreenIwork[1] == 0) {
+                    if (gInputPress->button & B_BUTTON) {
                         sPauseScreenIwork[0] = 10;
-                    } else {
-                        sPauseScreenIwork[0] = 2;
+                    }
+
+                    if (gInputPress->button & A_BUTTON) {
+                        if (sPauseScreenIwork[1] == 0) {
+                            sPauseScreenIwork[0] = 10;
+                        } else {
+                            sPauseScreenIwork[0] = 2;
+                        }
                     }
                 }
                 break;
