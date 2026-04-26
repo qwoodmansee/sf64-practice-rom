@@ -2,13 +2,13 @@
   "manifestVersion": 1,
   "release": {
     "name": "SF64 Practice ROM",
-    "version": "0.1.0",
-    "outputFileName": "starfox64-practice-v0.1.0.z64"
+    "version": "0.2.0",
+    "outputFileName": "starfox64-practice-v0.2.0.z64"
   },
   "patch": {
-    "fileName": "sf64-practice-v0.1.0.bps",
-    "size": 376852,
-    "sha256": "1198fd0f12503998d0453f3b54f4b84982d84b2991284330a2669d37873ef172"
+    "fileName": "sf64-practice-v0.2.0.bps",
+    "size": 380567,
+    "sha256": "bb1e713dd1d5e695398d1ead190a2c834a83d62e47305be6be41eaddb82c5ec2"
   },
   "source": {
     "description": "Star Fox 64 US Rev 1.1",
@@ -19,8 +19,8 @@
   },
   "target": {
     "byteOrder": "z64",
-    "md5": "579d04260b70bf25f7b635e5d25e2d4b",
-    "sha256": "aad3923c83d19b05dff4a1d3c65b0a228e828d450bdc06faffe60fe5b84e4324",
+    "md5": "900946a7d5c05b1eeb3a343fc4a01614",
+    "sha256": "bc8cf275e59a5c32aac0d68e064e93f72cc918348cc8424adffb8e9930eb700f",
     "size": 12582912
   }
 }
