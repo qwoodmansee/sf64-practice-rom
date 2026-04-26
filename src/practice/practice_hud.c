@@ -20,6 +20,9 @@ static s32 sLastChargeShotGap = 0;
 static s32 sChargeCount = 0;
 static s32 sMissedInputCount = 0;
 static s32 sLastInputPollFrame = -1;
+static s32 sCSImpactFrame = -1;
+static s32 sLastCSTimingOffset = 0;
+static bool sCSTimingValid = false;
 s32 gPracticeDirectHits = 0;
 s32 gPracticeIndirectCount = 0;
 s32 gPracticeIndirectBonus = 0;
@@ -34,6 +37,9 @@ void Practice_Hud_Reset(void) {
     sChargeCount = 0;
     sMissedInputCount = 0;
     sLastInputPollFrame = -1;
+    sCSImpactFrame = -1;
+    sLastCSTimingOffset = 0;
+    sCSTimingValid = false;
     gPracticeDirectHits = 0;
     gPracticeIndirectCount = 0;
     gPracticeIndirectBonus = 0;
@@ -71,10 +77,24 @@ void Practice_Hud_Update(void) {
 
     if (gPracticeConfig.showChargeTiming) {
         s32 chargeTimer = gChargeTimers[0];
+        PlayerShot* csSlot = &gPlayerShots[14];
+
+        if (csSlot->obj.status == SHOT_ACTIVE &&
+            csSlot->obj.id == PLAYERSHOT_LOCK_ON &&
+            csSlot->scale > 1.5f &&
+            sCSImpactFrame < 0) {
+            sCSImpactFrame = gGameFrameCount;
+        }
+
         if ((sLastChargeTimer > 10) && (chargeTimer == 0)) {
             if (sChargeCount > 0 && sChargeStartFrame > 0) {
                 sLastChargeShotGap = gGameFrameCount - sChargeStartFrame;
             }
+            if (sCSImpactFrame >= 0) {
+                sLastCSTimingOffset = gGameFrameCount - sCSImpactFrame - 2;
+                sCSTimingValid = true;
+            }
+            sCSImpactFrame = -1;
             sChargeStartFrame = gGameFrameCount;
             sChargeCount++;
         }
@@ -100,7 +120,7 @@ void Practice_Hud_Draw(void) {
 
     if (gPracticeConfig.showLagFrames) { lineCount++; }
     if (gPracticeConfig.showSpeed) { lineCount++; }
-    if (gPracticeConfig.showChargeTiming) { lineCount += 2; }
+    if (gPracticeConfig.showChargeTiming) { lineCount += 3; }
     if (gPracticeConfig.showMissedInputs) { lineCount++; }
     if (gPracticeConfig.showHitTracking) { lineCount += 4; }
 
@@ -140,6 +160,41 @@ void Practice_Hud_Draw(void) {
 
         Practice_DrawTextColor(labelX, y, "CS CNT:", 180, 180, 180);
         Practice_DrawNumber(valueX, y, sChargeCount);
+        y += HUD_LINE_H;
+
+        Practice_DrawTextColor(labelX, y, "CS TIM:", 180, 180, 180);
+        if (sCSTimingValid) {
+            s32 off = sLastCSTimingOffset;
+            char buf[8];
+            s32 bi = 0;
+            s32 absOff = off < 0 ? -off : off;
+            u8 tr, tg, tb;
+
+            if (off < 0) {
+                buf[bi++] = '-';
+                tr = 255; tg = 80; tb = 80;
+            } else if (off == 0) {
+                tr = 80; tg = 255; tb = 80;
+            } else {
+                tr = 255; tg = 200; tb = 0;
+            }
+
+            if (absOff == 0) {
+                buf[bi++] = '0';
+            } else {
+                char tmp[6];
+                s32 ti = 0;
+                s32 v = absOff;
+                while (v > 0) { tmp[ti++] = '0' + (v % 10); v /= 10; }
+                while (ti > 0) { buf[bi++] = tmp[--ti]; }
+            }
+            buf[bi++] = 'F';
+            buf[bi] = '\0';
+
+            Practice_DrawTextColor(valueX, y, buf, tr, tg, tb);
+        } else {
+            Practice_DrawTextColor(valueX, y, "----", 80, 80, 80);
+        }
         y += HUD_LINE_H;
     }
 
