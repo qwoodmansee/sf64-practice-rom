@@ -870,17 +870,10 @@ local rdram_offset = backend_ptr % 0x20000000
 local backend_id = H.read_u32(rdram_offset)
 H.assert_eq(backend_id, 0, "stub backend's id is IODEV_NONE (0)")
 
--- Print summary
-print(string.format("[%s] passes=%d failures=%d",
-    H.test_name, #H.passes, #H.failures))
-if #H.failures > 0 then
-    for _, msg in ipairs(H.failures) do print("  FAIL: " .. msg) end
-    os.exit(1)
-end
-os.exit(0)
+H.finish()
 ```
 
-(`H.assert_true` and `H.assert_eq` are confirmed real harness functions; see `tests/harness.lua` and `tests/test_config_defaults.lua` for usage examples.)
+(`H.assert_true`, `H.assert_eq`, and `H.finish` are confirmed real harness functions; see `tests/harness.lua` and `tests/test_config_defaults.lua` for the canonical pattern. `H.finish()` handles pass/fail summary and exit code, properly shutting down BizHawk via `client.exitCode()`.)
 
 - [ ] **Step 3: Run the BizHawk test (if BizHawk available)**
 
@@ -1049,6 +1042,6 @@ The Phase 1b plan adds the EverDrive 64 backend. Phase 1b is **time-boxed at 3-5
 - **`make extract` regenerates the linker script.** If you need to re-extract (Task 2 Step 4), confirm with the user first.
 - **The SC64 protocol gotchas in `CLAUDE.md`** (IS-Viewer section, "Hard-won SC64 protocol gotchas") apply to iodev too: every cart-bus write needs a follow-up `IO_READ` to drain the PI bus. The `PI_WRITE_FLUSH` macro in `iodev_sc64.c` enforces this.
 - **DMA buffer alignment**: `iodev_sd_read_sectors` and `iodev_sd_write_sectors` require 8-byte aligned buffers. Document this in the public API and add an assertion in debug builds if useful.
-- **The 64 KB DMA scratch at 0x13FE0000** is below the IS-Viewer's 0x13FF0000. We're using both — confirm no overlap. If they conflict, move the scratch to 0x13F00000.
+- **DMA scratch at 0x10F00000** is in cart-bus SDRAM, well past SF64's ~10 MiB ROM tail and far from the IS-Viewer at 0x13FF0000. No overlap concern.
 - **Save state slot count** is not yet a concern in Phase 1a. Heap audit is Phase 4.
 - **GPL-2 caveat**: gz's iodev backends are at `~/code/gz/src/gz/ed64_*.c`. **Read for understanding; do not copy code.** SC64 backend is original work guided by the SC64 docs at `~/code/SummerCart64/docs/`.
