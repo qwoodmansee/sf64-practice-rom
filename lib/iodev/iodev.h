@@ -1,21 +1,7 @@
 #ifndef LIB_IODEV_H
 #define LIB_IODEV_H
 
-/* The IDO toolchain used for the practice ROM build is invoked with
- * -nostdinc, so <stdint.h> is unavailable. We pull in the project's
- * Ultra64 types and provide minimal C99 fixed-width aliases when not
- * already defined. Hosts that build this header with a real libc
- * (e.g. for unit tests) should not be affected: their <stdint.h> can
- * be included before this header. */
-#include "PR/ultratypes.h"
-
-#ifndef _UINT32_T_DEFINED
-#define _UINT32_T_DEFINED
-typedef u32 uint32_t;
-typedef u8  uint8_t;
-typedef u16 uint16_t;
-typedef u64 uint64_t;
-#endif
+#include "lib_types.h"
 
 /* Identifies which flashcart (if any) was detected at boot. */
 typedef enum {
