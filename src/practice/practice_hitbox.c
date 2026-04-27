@@ -18,18 +18,18 @@ static Vtx sUnitCubeVtx[8] = {
 static void Hitbox_SetupRCP(void) {
     gDPPipeSync(gMasterDisp++);
     gDPSetCycleType(gMasterDisp++, G_CYC_1CYCLE);
-    gDPSetRenderMode(gMasterDisp++, G_RM_AA_ZB_XLU_LINE, G_RM_AA_ZB_XLU_LINE2);
+    gDPSetRenderMode(gMasterDisp++, G_RM_AA_ZB_XLU_SURF, G_RM_AA_ZB_XLU_SURF2);
     gDPSetCombineMode(gMasterDisp++, G_CC_PRIMITIVE, G_CC_PRIMITIVE);
-    gSPSetGeometryMode(gMasterDisp++, G_ZBUFFER);
-    gSPClearGeometryMode(gMasterDisp++, G_LIGHTING | G_CULL_BOTH | G_SHADING_SMOOTH);
+    gSPSetGeometryMode(gMasterDisp++, G_ZBUFFER | G_CULL_BACK);
+    gSPClearGeometryMode(gMasterDisp++, G_LIGHTING | G_CULL_FRONT | G_SHADING_SMOOTH);
 }
 
-static void Hitbox_DrawWireframeBox(f32 posX, f32 posY, f32 posZ,
-                                     f32 rotX, f32 rotY, f32 rotZ,
-                                     f32 hitRotX, f32 hitRotY, f32 hitRotZ,
-                                     bool hasHitRot,
-                                     f32 offZ, f32 sizeZ, f32 offY, f32 sizeY, f32 offX, f32 sizeX,
-                                     u8 r, u8 g, u8 b, u8 a) {
+static void Hitbox_DrawBox(f32 posX, f32 posY, f32 posZ,
+                           f32 rotX, f32 rotY, f32 rotZ,
+                           f32 hitRotX, f32 hitRotY, f32 hitRotZ,
+                           bool hasHitRot,
+                           f32 offZ, f32 sizeZ, f32 offY, f32 sizeY, f32 offX, f32 sizeX,
+                           u8 r, u8 g, u8 b, u8 a) {
     gDPPipeSync(gMasterDisp++);
     gDPSetPrimColor(gMasterDisp++, 0, 0, r, g, b, a);
 
@@ -53,20 +53,13 @@ static void Hitbox_DrawWireframeBox(f32 posX, f32 posY, f32 posZ,
 
     gSPVertex(gMasterDisp++, sUnitCubeVtx, 8, 0);
 
-    gSPLine3D(gMasterDisp++, 0, 1, 0);
-    gSPLine3D(gMasterDisp++, 1, 2, 0);
-    gSPLine3D(gMasterDisp++, 2, 3, 0);
-    gSPLine3D(gMasterDisp++, 3, 0, 0);
-
-    gSPLine3D(gMasterDisp++, 4, 5, 0);
-    gSPLine3D(gMasterDisp++, 5, 6, 0);
-    gSPLine3D(gMasterDisp++, 6, 7, 0);
-    gSPLine3D(gMasterDisp++, 7, 4, 0);
-
-    gSPLine3D(gMasterDisp++, 0, 4, 0);
-    gSPLine3D(gMasterDisp++, 1, 5, 0);
-    gSPLine3D(gMasterDisp++, 2, 6, 0);
-    gSPLine3D(gMasterDisp++, 3, 7, 0);
+    // CCW winding per face so G_CULL_BACK keeps only outward-facing tris
+    gSP2Triangles(gMasterDisp++, 0,2,1,0,  0,3,2,0);  // front  (z=-1)
+    gSP2Triangles(gMasterDisp++, 4,5,6,0,  4,6,7,0);  // back   (z=+1)
+    gSP2Triangles(gMasterDisp++, 0,1,5,0,  0,5,4,0);  // bottom (y=-1)
+    gSP2Triangles(gMasterDisp++, 3,6,2,0,  3,7,6,0);  // top    (y=+1)
+    gSP2Triangles(gMasterDisp++, 0,4,7,0,  0,7,3,0);  // left   (x=-1)
+    gSP2Triangles(gMasterDisp++, 1,2,6,0,  1,6,5,0);  // right  (x=+1)
 
     Matrix_Pop(&gGfxMatrix);
 }
@@ -135,11 +128,11 @@ static void Hitbox_DrawObjectHitboxes(Object* obj, f32* hitboxData, u8 r, u8 g, 
                 drawR = 255;
                 drawG = 255;
                 drawB = 0;
-                drawA = 220;
+                drawA = 200;
             }
         }
 
-        Hitbox_DrawWireframeBox(
+        Hitbox_DrawBox(
             obj->pos.x, obj->pos.y, obj->pos.z,
             obj->rot.x, obj->rot.y, obj->rot.z,
             hitRotX, hitRotY, hitRotZ, hasHitRot,
@@ -172,12 +165,12 @@ static void Hitbox_DrawSpawnZones(void) {
         if (entry->zPos1 < gPathProgress) {
             continue;
         }
-        Hitbox_DrawWireframeBox(
+        Hitbox_DrawBox(
             (f32)entry->xPos, (f32)entry->yPos,
             -entry->zPos1 - 3000.0f + (f32)entry->zPos2,
             0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, false,
             0.0f, 50.0f, 0.0f, 50.0f, 0.0f, 50.0f,
-            255, 200, 0, 200);
+            255, 200, 0, 100);
         count++;
     }
 }
@@ -212,7 +205,7 @@ void Practice_Hitbox_Draw(void) {
                 continue;
             }
             Hitbox_DrawObjectHitboxes(&gActors[i].obj, gActors[i].info.hitbox,
-                                      255, 50, 50, 180);
+                                      255, 50, 50, 80);
         }
 
         for (i = 0; i < 4; i++) {
@@ -220,7 +213,7 @@ void Practice_Hitbox_Draw(void) {
                 continue;
             }
             Hitbox_DrawObjectHitboxes(&gBosses[i].obj, gBosses[i].info.hitbox,
-                                      255, 50, 50, 180);
+                                      255, 50, 50, 80);
         }
     }
 
@@ -237,7 +230,7 @@ void Practice_Hitbox_Draw(void) {
                 continue;
             }
             Hitbox_DrawObjectHitboxes(&gScenery[i].obj, gScenery[i].info.hitbox,
-                                      50, 100, 255, 180);
+                                      50, 100, 255, 80);
         }
     }
 
@@ -254,31 +247,31 @@ void Practice_Hitbox_Draw(void) {
                 continue;
             }
             Hitbox_DrawObjectHitboxes(&gItems[i].obj, gItems[i].info.hitbox,
-                                      50, 255, 50, 180);
+                                      50, 255, 50, 80);
         }
     }
 
     if (gPracticeConfig.showHitboxPlayer) {
-        Hitbox_DrawWireframeBox(
+        Hitbox_DrawBox(
             player->hit1.x, player->hit1.y, player->hit1.z,
             0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, false,
             0.0f, 10.0f, 0.0f, 10.0f, 0.0f, 10.0f,
-            255, 255, 255, 200);
-        Hitbox_DrawWireframeBox(
+            255, 255, 255, 100);
+        Hitbox_DrawBox(
             player->hit2.x, player->hit2.y, player->hit2.z,
             0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, false,
             0.0f, 10.0f, 0.0f, 10.0f, 0.0f, 10.0f,
-            255, 255, 255, 200);
-        Hitbox_DrawWireframeBox(
+            255, 255, 255, 100);
+        Hitbox_DrawBox(
             player->hit3.x, player->hit3.y, player->hit3.z,
             0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, false,
             0.0f, 10.0f, 0.0f, 10.0f, 0.0f, 10.0f,
-            255, 255, 255, 200);
-        Hitbox_DrawWireframeBox(
+            255, 255, 255, 100);
+        Hitbox_DrawBox(
             player->hit4.x, player->hit4.y, player->hit4.z,
             0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, false,
             0.0f, 10.0f, 0.0f, 10.0f, 0.0f, 10.0f,
-            255, 255, 255, 200);
+            255, 255, 255, 100);
     }
     } /* end showHitboxes */
 
