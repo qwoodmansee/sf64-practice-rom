@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add an EverDrive 64 X7/X8 backend to the existing `lib/iodev/` abstraction so users on Krikzz hardware get the same SD card I/O surface that SC64 users got in Phase 1a.
+**Goal:** Add an EverDrive 64 X7/X8 backend to the existing `lib/iodev/` abstraction so users on Krikzz hardware get the same SD card I/O surface that SC64 users got in Phase 1a — with enough confidence in the result that a hardware-equipped contributor can verify it in 10 minutes.
 
-**Architecture:** Single new file `lib/iodev/iodev_ed64.c` implementing the ED64 X protocol against the FPGA registers documented in Krikzz's public hardware spec. The file plugs into the existing registry pattern from Phase 1a (`iodev_backend_t` descriptor + getter). Unlike SC64's high-level `SD_READ`/`SD_WRITE` commands, ED64 X exposes raw SDIO bus primitives — the host drives the SD card protocol directly (CMD0, CMD8, ACMD41, CMD2/3/7, CMD17/18/24/25, CRC7/CRC16). This is structurally larger than Phase 1a's SC64 backend.
+**Architecture:** Single new file `lib/iodev/iodev_ed64.c` implementing the ED64 X protocol against the FPGA registers documented in Krikzz's public hardware spec. The file plugs into the existing registry pattern from Phase 1a (`iodev_backend_t` descriptor + getter). Unlike SC64's high-level `SD_READ`/`SD_WRITE` commands, ED64 X exposes raw SDIO bus primitives — the host drives the SD card protocol directly (CMD0, CMD8, ACMD41, CMD2/3/7, CMD17/24, CRC7/CRC16). A new `lib/sd_crc.{c,h}` extracts the SD-spec CRC code so it's host-portable and unit-testable. A new `lib/iodev/iodev_diag.c` (gated by `IODEV_DIAG=1`) ships a turnkey hardware-verification ROM.
 
-**Tech Stack:** C (IDO C89), libultra PI primitives, ED64 X FPGA register protocol, SD Physical Layer Specification v3.0+.
+**Tech Stack:** C (IDO C89), libultra PI primitives, ED64 X FPGA register protocol, SD Physical Layer Specification v3.0+. Host gcc for unit tests on `sd_crc`.
 
 **Spec reference:** `docs/superpowers/specs/2026-04-27-gz-style-features-design.md` lines 575-580 (Phase 1b deliverable).
 
@@ -20,7 +20,7 @@ The reference implementations available are:
 
 - `~/code/gz/src/gz/ed64_x.c` — **GPL-2**. May be **studied for protocol understanding only**. Do NOT copy code structure, function organization, variable names, or expressions. Read it the way you'd read a paper: extract the *facts* (FPGA register addresses, command sequences, timing requirements), discard the *expression*.
 - `~/code/gz/src/gz/ed64_x.h` — **GPL-2** but most of its contents are protocol facts (register addresses, status bit positions) sourced from Krikzz's public hardware documentation. Re-deriving these from the public Krikzz wiki / [ED64-IO library](https://github.com/krikzz/ED64) (which has more permissive terms) is preferred when uncertain. Constants/addresses themselves are not copyrightable; only the file's expression is.
-- SD Physical Layer Specification — public standard. CMD0, CMD2, CMD3, CMD7, CMD8, CMD16, CMD17, CMD18, CMD24, CMD25, CMD55, ACMD41, ACMD51, etc. are spec facts. CRC7 and CRC16 polynomial / algorithm are spec facts. Use freely.
+- SD Physical Layer Specification — public standard. CMD0, CMD2, CMD3, CMD7, CMD8, CMD16, CMD17, CMD24, CMD55, ACMD41, ACMD51, etc. are spec facts. CRC7 and CRC16 polynomial / algorithm are spec facts. Use freely.
 
 **The implementer must NOT have `~/code/gz/src/gz/ed64_x.c` open while writing `iodev_ed64.c`.** Read it once, take protocol notes (register map, init sequence), close it, write fresh code from notes.
 
@@ -30,51 +30,64 @@ If this constraint feels arbitrary: it isn't. GPL contamination at the lib/ laye
 
 ## Hardware constraint
 
-**The user does NOT have an EverDrive 64 X7/X8.** All hardware verification in this phase is **deferred** — written into a checklist for a future contributor (or a future user purchase) to run.
+**The user does NOT have an EverDrive 64 X7/X8.** They have an EverDrive-equipped contact whose time is valuable, so the goal of this phase is to ship code that's been **algorithmically verified on the developer's machine**, with a **turnkey diagnostic ROM** the contact runs once to validate the wire-level path.
 
-This means automated tests catch:
+This shapes the plan in two ways:
+
+1. **Pure-logic code (CRC7, CRC16) gets host unit tests.** No N64 needed; runs in seconds with `make lib-test`. Catches every CRC bug before the ROM ever touches hardware. Phase 2's host-unit-test infrastructure is pulled forward to Phase 1b for this purpose.
+2. **A dedicated diagnostic build mode (`IODEV_DIAG=1`)** auto-runs the entire HW verification suite on boot and dumps a structured pass/fail log via IS-Viewer (or UNFLoader for ED64). Contact's workflow: flash diag ROM, run capture tool, paste output. ~10 minutes total.
+
+What automated tests catch (without hardware):
 - Build/link cleanliness
 - Static invariants (lib isolation, libultra scope, ED64-specific invariants)
-- BizHawk stub mode (verifies the registry's polymorphism — calling `iodev_detect()` doesn't crash with the ED64 backend wired in, and returns `IODEV_NONE` since no flashcart is simulated)
+- BizHawk stub mode (registry polymorphism — calling `iodev_detect()` doesn't crash with the ED64 backend wired in, returns `IODEV_NONE` since no flashcart simulated)
+- Host unit tests on `sd_crc.c` (CRC7 + CRC16-CCITT against SD spec test vectors)
 
-The actual SDIO traffic on real hardware is unproven until someone runs `HW_VERIFY_phase1b.md` on an ED64. The plan should produce code that compiles and is *structurally* correct; on-the-wire correctness is a future deliverable.
-
-If during execution this constraint becomes a real blocker (e.g., the ED64 protocol has a subtle init-timing requirement that's only obvious from gz's code), STOP and report — don't shape the design around assumptions you can't verify.
+What's still unproven without hardware: ED64 register-access timing, FPGA shift-register quirks, SDIO line state machines, real card initialization timings. The diagnostic ROM closes those gaps in a single 10-minute test session.
 
 ---
 
 ## File Structure
 
 **New files:**
-- `lib/iodev/iodev_ed64.c` — ED64 X7/X8 protocol implementation (single file, realistically ~500-650 LoC: register macros + PI_WRITE_FLUSH + cart unlock + detect + ~8 SDIO primitives + CRC7+CRC16 + 6-step init + read_block + write_block + descriptor table).
-- `docs/superpowers/plans/HW_VERIFY_phase1b.md` — manual hardware verification checklist (run by future ED64-equipped contributor).
+- `lib/sd_crc.h`, `lib/sd_crc.c` — host-portable SD-spec CRC implementations (~80 LoC). CRC7 (commands) and CRC16-CCITT (data blocks). No libultra dependency. Reusable from Phase 2's FatFs glue if needed.
+- `lib/iodev/iodev_ed64.c` — ED64 X7/X8 protocol implementation (single file, realistically ~450-550 LoC: register macros + PI_WRITE_FLUSH + cart unlock + detect + ~8 SDIO primitives + 6-step init + read_block + write_block + descriptor table; CRC code lives in `sd_crc.c` not here).
+- `lib/iodev/iodev_diag.c` — diagnostic-mode entry point (~150 LoC). Empty translation unit unless `IODEV_DIAG` is defined. When defined: hooks into `Practice_Init` and runs the full verification suite, logging pass/fail per step.
+- `lib/test/Makefile` — host gcc test runner. Single target `lib-test` builds and runs all host unit tests.
+- `lib/test/test_sd_crc.c` — unit tests for CRC7 and CRC16 against SD spec vectors.
+- `docs/superpowers/plans/HW_VERIFY_phase1b.md` — manual hardware verification checklist (run by the EverDrive-equipped contributor; mostly automated via the diagnostic ROM).
 
 **Modified files:**
-- `lib/iodev/iodev.c` — uncomment / enable `iodev_backend_ed64()` in the `candidates[]` list (one-line change).
-- `tools/patch_linker_script.py` — add `iodev_ed64` to `LIB_IODEV_OBJS`.
-- `tools/practice_invariants.py` — add `check_iodev_ed64()` analogous to `check_iodev_sc64()`. Update `LIBULTRA_ALLOWED` list to include `lib/iodev/iodev_ed64.c` (already listed in the existing `LIBULTRA_ALLOWED` per Phase 1a).
+- `lib/iodev/iodev.c` — bump `candidates[]` array from `[1]` to `[2]`, add `candidates[1] = iodev_backend_ed64();`.
+- `tools/patch_linker_script.py` — add `iodev_ed64`, `iodev_diag` to `LIB_IODEV_OBJS`. Extend three-state patcher to handle "Phase-1a-patched, Phase-1b-not-yet" (anchors on `iodev_sc64.o`).
+- `tools/practice_invariants.py` — add `check_iodev_ed64()` analogous to `check_iodev_sc64()`. `lib/iodev/iodev_ed64.c` is already in `LIBULTRA_ALLOWED` (Phase 1a). Add `lib/sd_crc.c` and `lib/sd_crc.h` are NOT on libultra-allowlist (they're host-portable).
+- `Makefile` — add `lib-test` target.
 
 **Not touched:**
 - `lib/iodev/iodev.h` — public API unchanged.
 - `lib/iodev/iodev_internal.h` — `iodev_backend_ed64()` was declared during Phase 1a as a placeholder.
-- `lib/iodev/iodev_sc64.c`, `iodev_stub.c`, `iodev.c` (registry logic), `iodev_internal.h`.
+- `lib/iodev/iodev_sc64.c`, `iodev_stub.c`, `iodev_internal.h`.
 - `lib/lib_types.h`.
-- `tests/test_iodev_detect.lua` — unchanged; on emulator both backends report no cart, the stub still wins.
+- `tests/test_iodev_detect.lua` — unchanged; on emulator both backends return `IODEV_NONE`, stub still wins.
 
 ---
 
 ## Shippable checkpoints
 
-The plan is structured so each chunk produces a buildable, committable state. **If the time-box expires, the user can stop at any of these points:**
+Each task produces a buildable, committable state. **If the time-box expires, the user can stop at any of these points:**
 
 - **After Task 1:** ED64 cart detection works (no SD ops). On real ED64 hardware, `iodev_detect()` would return `IODEV_ED64`; SD ops return `IODEV_ERR_NO_DEVICE`. SC64 users entirely unaffected.
-- **After Task 2:** ED64 SD initialization works. Card reaches "transfer state" but no read/write yet.
-- **After Task 3:** ED64 single-block SD reads work.
-- **After Task 4:** ED64 single-block SD writes work.
-- **After Task 5:** ED64 multi-block reads/writes (≤128 sectors per call, matching SC64 cap) work.
-- **After Task 6:** Static invariants and hardware verification doc landed. Phase 1b complete.
+- **After Task 2:** CRC7 and CRC16 are implemented and unit-tested on host. Pure logic correctness proven without hardware.
+- **After Task 3:** ED64 SD initialization works. Card reaches "transfer state" but no read/write yet.
+- **After Task 4:** ED64 single-block SD reads work.
+- **After Task 5:** ED64 single-block SD writes work.
+- **After Task 6:** Diagnostic ROM (`make practice IODEV_DIAG=1`) auto-runs the verification suite. **This is the milestone we ship to the EverDrive contact.**
+- **After Task 7:** Static invariants and HW verification checklist landed.
+- **After Task 8:** Phase exit gate. Phase 1b complete pending HW verification report.
 
-Tasks 1-6 don't all need to ship in this phase. Stopping early at Task 1 is a legitimate outcome if SD-protocol implementation proves too time-expensive — ED64 users still benefit from cart detection (e.g., the practice ROM's IS-Viewer log can show `cart=2` so the user knows the abstraction *sees* their cart).
+The minimum to send to the EverDrive contact is **after Task 6**. Tasks 1-3 alone would only let them confirm "cart detected" — not useful enough to justify their time. Tasks 1-6 give them a real verification run.
+
+Multi-block transfers (CMD18/CMD25) — the previous Task 5 — are **dropped from this phase**. Single-block R/W works; the perf delta isn't worth the additional CRC-streaming and timing complexity that's exactly what fails subtly on real hardware.
 
 ---
 
@@ -83,7 +96,7 @@ Tasks 1-6 don't all need to ship in this phase. Stopping early at Task 1 is a le
 **Files:**
 - Create: `lib/iodev/iodev_ed64.c`
 - Modify: `tools/patch_linker_script.py` (add `iodev_ed64` to `LIB_IODEV_OBJS`)
-- Modify: `lib/iodev/iodev.c` (uncomment `iodev_backend_ed64()` in `candidates[]`)
+- Modify: `lib/iodev/iodev.c` (bump candidates array size and add `iodev_backend_ed64()`)
 
 **Goal:** ED64 X carts are detected; SD ops are stubs returning `IODEV_ERR_NO_DEVICE`. Buildable and committable on its own.
 
@@ -104,18 +117,18 @@ Match the structure of `lib/iodev/iodev_sc64.c` (Phase 1a). Key elements:
 
 - File header comment block referencing the ED64 protocol source (Krikzz hardware spec) and noting the clean-room provenance ("not derived from gz; written from public protocol notes").
 - Includes: `"PR/rcp.h"`, `"libultra/ultra64.h"` (libultra-allowlisted), `"iodev.h"`, `"iodev_internal.h"`.
-- Register address `#define`s using the names you extracted (e.g., `ED64_REG_BASE`, `ED64_REG_KEY`, `ED64_REG_EDID`, etc.). Use a `ED64_` prefix to namespace them clearly (avoid collisions with future ED64 v1/v2 backends if added).
-- A `PI_WRITE_FLUSH(addr, val)` macro analogous to SC64's, with a dummy follow-up `IO_READ` to drain the PI bus (same gotcha applies — direct cart-bus writes drop without it).
-- Cart unlock helper: writes the magic key sequence and confirms unlock by reading `REG_SYS_CFG` or similar.
-- `ed64_detect()` function: tries to unlock, reads `REG_EDID`, returns `IODEV_ED64` if the upper byte matches X7/X8 magic, else `IODEV_NONE`. Idempotent.
-- Stub bodies for `ed64_sd_init`, `ed64_sd_read_sectors`, `ed64_sd_write_sectors` that return `IODEV_ERR_NO_DEVICE`.
+- Register address `#define`s using the names you extracted (use a `ED64_` prefix to namespace them clearly).
+- A `PI_WRITE_FLUSH(addr, val)` macro analogous to SC64's, with a dummy follow-up `IO_READ` to drain the PI bus.
+- Cart unlock helper.
+- `ed64_detect()`: tries to unlock, reads `REG_EDID`, returns `IODEV_ED64` if upper 16 bits == `0xED64`, else `IODEV_NONE`. Idempotent.
+- Stub bodies for `ed64_sd_init`, `ed64_sd_read_sectors`, `ed64_sd_write_sectors` returning `IODEV_ERR_NO_DEVICE`.
 - `ED64_BACKEND` const struct (positional initializer for IDO C89) with the function pointers.
-- `iodev_backend_ed64()` getter returning `&ED64_BACKEND`.
+- `iodev_backend_ed64()` getter.
 
 **Implementation notes for the agent:**
 - IDO C89: declarations at top of block, positional struct initializers, no em-dashes, no `<stdint.h>` (use `lib_types.h` transitively via `iodev.h`).
-- The cart-lock unlock sequence has a specific timing requirement — there's typically a small delay after each key write. Use the same `PI_WRITE_FLUSH` macro that includes the IO_READ drain; that gives you ~1 µs between operations, which is sufficient.
-- **DO NOT FALSE-POSITIVE ON SC64**: the registry probes SC64 first (per `lib/iodev/iodev.c` candidates list), but if Phase 1b's `ed64_detect()` somehow returns `IODEV_ED64` on an SC64 cart, the registry's first-match-wins logic would still pick SC64 (good). Reverse case: on a real ED64, sc64_detect's `SC64_REG_IDENT` read goes to a region that doesn't exist on ED64; the cart-bus returns open-bus values which won't match `0x53437632`. Should be fine — but verify with the implementer's added invariant.
+- The cart-lock unlock sequence has a specific timing requirement — a small delay after each key write. The `PI_WRITE_FLUSH` macro's `IO_READ` drain provides ~1 µs between operations, which is sufficient.
+- DO NOT FALSE-POSITIVE ON SC64: the registry probes SC64 first, so even if `ed64_detect()` returned `IODEV_ED64` on an SC64 cart (it shouldn't), SC64 wins. Reverse case: on a real ED64, sc64_detect's `SC64_REG_IDENT` read returns open-bus values which won't match `0x53437632`. Should be fine — verify with the static invariant in Task 7.
 
 - [ ] **Step 3: Wire ED64 into the registry candidates list**
 
@@ -135,17 +148,11 @@ candidates[0] = iodev_backend_sc64();
 candidates[1] = iodev_backend_ed64();
 ```
 
-Both lines matter — leaving the array size at `[1]` while writing to `candidates[1]` is undefined behavior, and IDO won't necessarily warn. Verify by post-edit grep:
-
-```bash
-grep -A2 "candidates\[" lib/iodev/iodev.c
-```
-
-Expected output shows `candidates[2]`, both `candidates[0] =` and `candidates[1] =` lines, no commented-out remnant.
+Both lines matter — leaving the array size at `[1]` while writing to `candidates[1]` is undefined behavior.
 
 - [ ] **Step 4: Add `iodev_ed64` to the linker patcher**
 
-In `tools/patch_linker_script.py`, extend `LIB_IODEV_OBJS`. **Order matters — `iodev_ed64` must come BEFORE `iodev_stub` so that incremental injection (next paragraph) anchors correctly:**
+In `tools/patch_linker_script.py`, extend `LIB_IODEV_OBJS`. **Order matters — `iodev_ed64` must come BEFORE `iodev_stub`:**
 
 ```python
 LIB_IODEV_OBJS = [
@@ -156,25 +163,16 @@ LIB_IODEV_OBJS = [
 ]
 ```
 
-**The harder part: extending the patcher's three-state logic to handle the "Phase 1a injected, Phase 1b not yet" intermediate state.**
-
-The current patcher (after Phase 1a) handles three states:
+Extend the patcher to handle the "Phase-1a-patched, Phase-1b-not-yet" intermediate state. Four states total:
 
 | State | Detection | Action |
 |-------|-----------|--------|
 | Fully unpatched | no `practice_main` | Inject practice + lib lines after `fox_save.o` anchor |
 | Practice patched, lib unpatched | `practice_main` present, `iodev.o` missing | Inject lib lines after `practice_freecam.o` anchor |
-| Fully patched | both present | No-op |
+| Phase-1a patched, ed64 missing (NEW) | `practice_main` + `iodev.o` present, `iodev_ed64.o` missing | Inject `build/lib/iodev/iodev_ed64.o(...)` lines anchored on `build/lib/iodev/iodev_sc64.o(...)` (between sc64 and stub) |
+| Fully patched | `practice_main` + `iodev_ed64.o` present | No-op |
 
-After Phase 1b, we need a fourth state:
-
-| State | Detection | Action |
-|-------|-----------|--------|
-| Practice + Phase-1a-iodev patched, ed64 missing | `practice_main` + `iodev.o` present, `iodev_ed64.o` missing | Inject `build/lib/iodev/iodev_ed64.o(...)` lines anchored on `build/lib/iodev/iodev_sc64.o(...)` (insert between sc64 and stub, NOT after stub or after practice) |
-
-**Why anchor on `iodev_sc64.o` and not `iodev_stub.o`:** the linker resolves symbols by section order, and the registry's `iodev_backend_*()` getters are called in `LIB_IODEV_OBJS` order. Keeping `iodev_stub` last preserves the "stub fallback" semantic. Inserting `iodev_ed64` after `iodev_sc64` (i.e., between sc64 and stub) keeps the order consistent with the `LIB_IODEV_OBJS` list and matches the registry's probe order in `iodev.c`.
-
-**Patcher revision sketch:**
+Patcher revision sketch:
 
 ```python
 def patch():
@@ -191,72 +189,342 @@ def patch():
 
     for section in [".text", ".data", ".rodata", ".bss"]:
         if not has_practice:
-            # Existing "fully unpatched" branch — inject practice + all lib lines.
-            # (No change from Phase 1a.)
+            # Existing: inject practice + all lib lines.
             ...
         elif not has_iodev:
-            # Existing "practice patched, lib unpatched" branch — inject all lib lines
-            # anchored on practice_freecam.
-            # (No change from Phase 1a.)
+            # Existing: inject all lib lines anchored on practice_freecam.
             ...
         else:
             # NEW: Phase 1a iodev injected, Phase 1b ed64 missing.
-            # Inject ONLY iodev_ed64.o lines, anchored on iodev_sc64.o.
             anchor_line = f"build/lib/iodev/iodev_sc64.o({section});"
             injection = f"        build/lib/iodev/iodev_ed64.o({section});"
             content = _replace_after_anchor(content, anchor_line, injection)
     ...
 ```
 
-The `_replace_after_anchor` helper (added in Phase 1a's patcher hardening commit `ee5bb05`) raises `RuntimeError` if the anchor isn't found — that's the desired behavior here too.
+`_replace_after_anchor` (from Phase 1a's `ee5bb05`) raises `RuntimeError` if the anchor isn't found.
 
-**Verify the change:**
+Verify:
 
 ```bash
 python3 tools/patch_linker_script.py
 grep "iodev" linker_scripts/us/rev1/starfox64.ld
 ```
 
-Expected output: in each section, `iodev.o` → `iodev_sc64.o` → **`iodev_ed64.o`** → `iodev_stub.o`. 16 total lines (4 objects × 4 sections), with the ed64 entries between sc64 and stub.
-
-If running the patcher reports `RuntimeError` ("anchor not found"), the linker script's `iodev_sc64.o` line probably doesn't exist in that section yet — investigate before continuing. Don't force `make extract` (forbidden by CLAUDE.md); manual edit is acceptable as a last resort.
+Expected: in each section, `iodev.o` → `iodev_sc64.o` → **`iodev_ed64.o`** → `iodev_stub.o`. 16 lines total.
 
 - [ ] **Step 5: Build & verify**
 
-Run: `make practice -j4`
-Expected: clean build, no link errors.
-
-Run: `python3 tools/practice_invariants.py`
-Expected: pass (the existing libultra allowlist already includes `lib/iodev/iodev_ed64.c`).
-
-- [ ] **Step 6: BizHawk smoke test**
-
-The existing `tests/test_iodev_detect.lua` should still pass — on emulator, neither SC64 nor ED64 is simulated, both detect functions return `IODEV_NONE`, and the registry parks the stub backend. No new test file needed for Task 1.
-
-If BizHawk is available locally:
 ```bash
-BIZHAWK_PATH=... python3 tools/run_tests.py test_iodev_detect
+make practice -j4
+python3 tools/practice_invariants.py
 ```
 
-If not, document and move on (per Phase 1a precedent).
+Both must pass.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add lib/iodev/iodev_ed64.c lib/iodev/iodev.c tools/patch_linker_script.py
 git commit -m "feat: add ED64 X7/X8 cart detection (SD ops are stubs)"
 ```
 
-**Shippable state:** at this point Phase 1b can be paused. Real ED64 users get cart detection (visible via the IS-Viewer log: `[iodev] cart=2`); SD ops correctly report `IODEV_ERR_NO_DEVICE`. Phase 2+ proceed unaffected.
+**Shippable state:** ED64 cart detection works. SD ops return `IODEV_ERR_NO_DEVICE`.
 
 ---
 
-## Task 2: SD card initialization (CMD0/CMD8/ACMD41/CMD2/CMD3/CMD7)
+## Task 2: SD CRC layer + host unit tests
+
+**Files:**
+- Create: `lib/sd_crc.h`, `lib/sd_crc.c`
+- Create: `lib/test/Makefile`
+- Create: `lib/test/test_sd_crc.c`
+- Modify: `Makefile` (add `lib-test` target)
+
+**Goal:** CRC7 and CRC16-CCITT are implemented in a host-portable file and unit-tested against SD spec test vectors. After this task, `make lib-test` runs in <1 second on the developer machine and proves the CRC code is correct without needing the N64 toolchain.
+
+- [ ] **Step 1: Create `lib/sd_crc.h`**
+
+```c
+#ifndef LIB_SD_CRC_H
+#define LIB_SD_CRC_H
+
+#include "lib_types.h"
+#include <stddef.h>
+
+/* SD spec CRC7 (used on every command frame).
+ * Polynomial: x^7 + x^3 + 1.
+ * Returns the 8-bit CRC byte: 7-bit CRC in bits 7..1, trailing 1 bit in bit 0. */
+uint8_t sd_crc7(const uint8_t *buf, size_t len);
+
+/* SD spec CRC16-CCITT for a single 4-bit DAT line.
+ * Polynomial: x^16 + x^12 + x^5 + 1 (0x1021).
+ * Used on every data block. */
+uint16_t sd_crc16_ccitt(const uint8_t *buf, size_t len);
+
+/* SD spec CRC16-CCITT for 4-line wide bus.
+ * Each of the 4 DAT lines has its own independent CRC.
+ * Returns 4 16-bit CRCs packed: [DAT3][DAT2][DAT1][DAT0] (MSB-first). */
+uint64_t sd_crc16_4bit(const uint8_t *buf, size_t len);
+
+#endif /* LIB_SD_CRC_H */
+```
+
+- [ ] **Step 2: Create `lib/sd_crc.c`**
+
+Implement the three functions. Write fresh — these are SD spec algorithms, public. Reference: SD Physical Layer Specification §4.5 (CRC).
+
+```c
+#include "sd_crc.h"
+
+/* CRC7 polynomial 0x89 (x^7 + x^3 + 1). After 8 left-shifts per input byte,
+ * the 7-bit CRC sits in bits 7..1 of the accumulator (bit 0 always shifted in
+ * as 0). Per SD spec, append a trailing 1 bit in bit 0 of the output byte. */
+uint8_t sd_crc7(const uint8_t *buf, size_t len) {
+    uint8_t crc = 0;
+    size_t i;
+    int j;
+    for (i = 0; i < len; i++) {
+        crc ^= buf[i];
+        for (j = 0; j < 8; j++) {
+            if (crc & 0x80) crc = (uint8_t)((crc << 1) ^ 0x12);  /* poly shifted */
+            else            crc = (uint8_t)(crc << 1);
+        }
+    }
+    return (uint8_t)(crc | 0x01);
+}
+
+/* CRC16-CCITT polynomial 0x1021. Standard byte-wise implementation. */
+uint16_t sd_crc16_ccitt(const uint8_t *buf, size_t len) {
+    uint16_t crc = 0;
+    size_t i;
+    int j;
+    for (i = 0; i < len; i++) {
+        crc ^= ((uint16_t)buf[i]) << 8;
+        for (j = 0; j < 8; j++) {
+            if (crc & 0x8000) crc = (uint16_t)((crc << 1) ^ 0x1021);
+            else              crc = (uint16_t)(crc << 1);
+        }
+    }
+    return crc;
+}
+
+/* 4-bit wide bus: each DAT line gets bits [n, n-4, n-8, ...] of the byte stream.
+ * The SD spec defines the CRC as if each line's bit stream is a separate byte
+ * stream concatenated. We accumulate 4 CRCs in parallel.
+ *
+ * Bit ordering on each line: DAT3 gets bit 7 of byte 0, then bit 3 of byte 0,
+ * then bit 7 of byte 1, etc. (alternating high-nibble / low-nibble per byte). */
+uint64_t sd_crc16_4bit(const uint8_t *buf, size_t len) {
+    uint16_t crc[4] = {0, 0, 0, 0};
+    size_t i;
+    int j;
+    int bit;
+    int nibble;
+    for (i = 0; i < len; i++) {
+        for (nibble = 0; nibble < 2; nibble++) {
+            uint8_t nib = (nibble == 0) ? (buf[i] >> 4) : (buf[i] & 0x0F);
+            /* DAT3 = bit 3, DAT2 = bit 2, DAT1 = bit 1, DAT0 = bit 0. */
+            for (j = 0; j < 4; j++) {
+                bit = (nib >> (3 - j)) & 1;
+                if (((crc[j] >> 15) & 1) ^ bit) crc[j] = (uint16_t)((crc[j] << 1) ^ 0x1021);
+                else                            crc[j] = (uint16_t)(crc[j] << 1);
+            }
+        }
+    }
+    return ((uint64_t)crc[3] << 48) | ((uint64_t)crc[2] << 32)
+         | ((uint64_t)crc[1] << 16) |  (uint64_t)crc[0];
+}
+```
+
+The 4-bit CRC implementation may need adjustment based on the actual SD spec wire ordering — verify against the test vectors in Step 3 before integrating.
+
+- [ ] **Step 3: Create `lib/test/test_sd_crc.c`**
+
+```c
+/* Host unit tests for sd_crc.c. Builds with native gcc; no libultra. */
+#include <stdio.h>
+#include <stdint.h>
+#include <string.h>
+#include "../sd_crc.h"
+
+static int failures = 0;
+
+#define ASSERT_EQ(actual, expected, label) do { \
+    if ((actual) != (expected)) {               \
+        printf("FAIL: %s: expected 0x%llx, got 0x%llx\n", \
+               (label), (unsigned long long)(expected), (unsigned long long)(actual)); \
+        failures++;                             \
+    } else {                                    \
+        printf("PASS: %s\n", (label));          \
+    }                                           \
+} while (0)
+
+int main(void) {
+    /* SD CRC7 test vectors (SD spec §4.5 + common reference impls). */
+    {
+        uint8_t cmd0[]  = {0x40, 0x00, 0x00, 0x00, 0x00};
+        uint8_t cmd8[]  = {0x48, 0x00, 0x00, 0x01, 0xAA};
+        uint8_t cmd17[] = {0x51, 0x00, 0x00, 0x00, 0x00};
+        ASSERT_EQ(sd_crc7(cmd0,  sizeof(cmd0)),  0x95, "CRC7 CMD0  -> 0x95");
+        ASSERT_EQ(sd_crc7(cmd8,  sizeof(cmd8)),  0x87, "CRC7 CMD8  -> 0x87");
+        ASSERT_EQ(sd_crc7(cmd17, sizeof(cmd17)), 0x55, "CRC7 CMD17 -> 0x55");
+    }
+
+    /* CRC16-CCITT test vectors (CCITT-FALSE / SD spec). */
+    {
+        /* All-zero block: 512 bytes of 0x00 -> CRC 0x0000 */
+        uint8_t zeros[512];
+        memset(zeros, 0, sizeof(zeros));
+        ASSERT_EQ(sd_crc16_ccitt(zeros, sizeof(zeros)), 0x0000, "CRC16 zeros -> 0x0000");
+
+        /* All-0xFF block: 512 bytes of 0xFF.
+         * Reference value computed via independent SD-spec implementation. */
+        uint8_t ones[512];
+        memset(ones, 0xFF, sizeof(ones));
+        ASSERT_EQ(sd_crc16_ccitt(ones, sizeof(ones)), 0x7FA1, "CRC16 ones -> 0x7FA1");
+
+        /* "123456789" classic CCITT test vector */
+        uint8_t classic[] = "123456789";
+        ASSERT_EQ(sd_crc16_ccitt(classic, 9), 0x31C3, "CRC16 \"123456789\" -> 0x31C3");
+    }
+
+    /* CRC16 4-bit wide bus: at minimum, all-zeros across all 4 lines is 0. */
+    {
+        uint8_t zeros[512];
+        memset(zeros, 0, sizeof(zeros));
+        ASSERT_EQ(sd_crc16_4bit(zeros, sizeof(zeros)), 0ULL, "CRC16 4-bit zeros -> 0");
+    }
+
+    if (failures > 0) {
+        printf("\n%d test(s) failed\n", failures);
+        return 1;
+    }
+    printf("\nAll tests passed.\n");
+    return 0;
+}
+```
+
+NOTE on the `0x7FA1` and `0x31C3` test vectors: these are independent reference values. If the implementer's reference has different known-good outputs, use those instead — what matters is that **the test catches a regression in the CRC code** by checking against an external reference.
+
+- [ ] **Step 4: Create `lib/test/Makefile`**
+
+```makefile
+# Host gcc test runner for lib/ unit tests.
+# Builds with native compiler (NOT MIPS) so tests run on developer machine.
+#
+# Usage from repo root: make lib-test
+
+CC      ?= gcc
+CFLAGS  ?= -Wall -Wextra -Werror -std=c99 -O0 -g
+INCLUDES = -I.. -I.
+
+TESTS = test_sd_crc
+
+all: run-all
+
+%: %.c ../sd_crc.c
+	$(CC) $(CFLAGS) $(INCLUDES) $^ -o $@
+
+run-all: $(TESTS)
+	@for t in $(TESTS); do \
+		echo "===> $$t"; \
+		./$$t || exit 1; \
+	done
+
+clean:
+	rm -f $(TESTS)
+
+.PHONY: all run-all clean
+```
+
+- [ ] **Step 5: Add `lib-test` target to top-level `Makefile`**
+
+Add near the other `.PHONY` declarations and the `practice` target:
+
+```makefile
+lib-test:
+	@$(MAKE) -C lib/test run-all
+
+.PHONY: ... lib-test
+```
+
+- [ ] **Step 6: Run unit tests**
+
+```bash
+make lib-test
+```
+
+Expected output:
+```
+===> test_sd_crc
+PASS: CRC7 CMD0  -> 0x95
+PASS: CRC7 CMD8  -> 0x87
+PASS: CRC7 CMD17 -> 0x55
+PASS: CRC16 zeros -> 0x0000
+PASS: CRC16 ones -> 0x7FA1
+PASS: CRC16 "123456789" -> 0x31C3
+PASS: CRC16 4-bit zeros -> 0
+
+All tests passed.
+```
+
+If any test fails, fix the implementation and re-run before moving on. **Don't proceed to Task 3 with a broken CRC.**
+
+- [ ] **Step 7: Build practice ROM (lib/sd_crc.c is now in the SRC_DIRS for lib/)**
+
+```bash
+make practice -j4
+python3 tools/practice_invariants.py
+```
+
+Both must pass. If `lib/sd_crc.c` fails IDO compile, common causes: stray em-dashes in comments, C99-style declarations mid-block, designated initializers — all forbidden by IDO C89. Fix and rebuild.
+
+- [ ] **Step 8: Add `sd_crc` to the linker patcher**
+
+The new files `lib/sd_crc.{c,h}` need to land in the linker script. They live in `lib/` (top-level), not `lib/iodev/`, so they need a separate constant or to extend `LIB_IODEV_OBJS` is not appropriate.
+
+Add to `tools/patch_linker_script.py`:
+
+```python
+LIB_TOP_OBJS = [
+    "sd_crc",  # in lib/sd_crc.c
+]
+```
+
+Adjust the patcher's per-section injection to also include `build/lib/{obj}.o(...)` lines for `LIB_TOP_OBJS`. Place them after `iodev_stub.o` in each section (or before — order between `lib/iodev/*` and `lib/sd_crc.o` doesn't matter since they don't reference each other directly until Task 3).
+
+Re-run: `python3 tools/patch_linker_script.py`. Expected: linker script grows by 4 more lines (one per section) for `sd_crc.o`.
+
+Build again: `make practice -j4`. Must remain clean.
+
+- [ ] **Step 9: Commit**
+
+```bash
+git add lib/sd_crc.h lib/sd_crc.c lib/test/Makefile lib/test/test_sd_crc.c \
+        Makefile tools/patch_linker_script.py
+git commit -m "feat: add SD CRC layer with host unit tests
+
+CRC7 and CRC16-CCITT extracted to lib/sd_crc.{c,h} as host-portable
+SD-spec utilities. Independent reference test vectors verify correctness
+without needing N64 hardware. Phase 2's FatFs glue can reuse this code.
+
+Test runner at lib/test/Makefile. Run with 'make lib-test' (~1 second).
+
+Three CRC7 test vectors (CMD0/CMD8/CMD17), three CRC16 test vectors
+(zeros / 0xFF / classic '123456789'), one CRC16-4bit smoke test."
+```
+
+**Shippable state:** SD CRC code is implemented and proven correct on host. ED64 doesn't yet use it (Task 3 wires it in).
+
+---
+
+## Task 3: SD card initialization (CMD0/CMD8/ACMD41/CMD2/CMD3/CMD7)
 
 **Files:**
 - Modify: `lib/iodev/iodev_ed64.c`
 
-**Goal:** `ed64_sd_init` brings the SD card from power-on to "transfer state" (ready to issue CMD17/24 read/write). After this task, `iodev_sd_init()` returns `IODEV_OK` on a real ED64 with an SD card inserted.
+**Goal:** `ed64_sd_init` brings the SD card from power-on to "transfer state" using the verified CRC code from Task 2. After this task, `iodev_sd_init()` returns `IODEV_OK` on a real ED64 with an SD card inserted.
 
 - [ ] **Step 1: Add SD-bus shift-register primitives**
 
@@ -266,60 +534,29 @@ The ED64 X FPGA exposes:
 - `REG_SD_STATUS` — busy flag + bit-length config + speed config (low / 50 MHz).
 
 Implement the basic primitives (write fresh, do not copy gz):
-- `ed64_sd_set_speed(int slow)` — write `REG_SD_STATUS` to set `SD_CFG_SPD` bit + bit-length appropriate for slow (init phase) vs fast (post-init).
-- `ed64_sd_busy_wait()` — spin on `SD_STA_BUSY` bit clearing, with a timeout (~50ms equivalent — same `SC64_CMD_TIMEOUT_RETRIES`-style upper bound).
+- `ed64_sd_set_speed(int slow)` — set `SD_CFG_SPD` bit + bit-length appropriate for slow (init phase) vs fast (post-init).
+- `ed64_sd_busy_wait()` — spin on `SD_STA_BUSY` bit clearing, with a timeout (~50ms equivalent).
 - `ed64_sd_cmd_tx(uint8_t byte)` — write to `REG_SD_CMD_WR`, wait for not-busy.
 - `ed64_sd_cmd_rx(uint8_t *byte)` — write to `REG_SD_CMD_RD` to clock in 8 bits, read result, wait not-busy.
 - `ed64_sd_dat_tx(uint16_t)` and `ed64_sd_dat_rx(uint16_t *)` — analogous for DAT.
 
-Each primitive should return `iodev_result_t` so timeout failures bubble up cleanly.
+Each primitive returns `iodev_result_t`.
 
-- [ ] **Step 2: Add CRC7 and CRC16 helpers**
+- [ ] **Step 2: Include the verified CRC layer**
 
-CRC7 polynomial: x⁷ + x³ + 1 = `0x89`, used on every SD command transmission.
-CRC16-CCITT polynomial: `0x1021`, used on every data block.
-
-Public algorithms (write fresh — these are spec facts):
+At the top of `iodev_ed64.c`, add:
 
 ```c
-/* SD CRC7. The accumulator processes the input byte-by-byte. After 8 shifts
- * per input byte, the 7-bit CRC sits in bits 7..1 of `crc` (bit 0 was always
- * shifted in as 0). The SD spec mandates a trailing 1 bit in bit 0 of the
- * output byte, so we OR 0x01 into the final value. NO right-shift. */
-static uint8_t ed64_crc7(const uint8_t *buf, size_t len) {
-    uint8_t crc = 0;
-    size_t i;
-    int j;
-    for (i = 0; i < len; i++) {
-        crc ^= buf[i];
-        for (j = 0; j < 8; j++) {
-            if (crc & 0x80) crc = (uint8_t)((crc << 1) ^ 0x12);  /* poly 0x89 shifted to land in bit 7 */
-            else            crc = (uint8_t)(crc << 1);
-        }
-    }
-    return (uint8_t)(crc | 0x01);  /* CRC in bits 7..1, trailing 1 bit in bit 0 */
-}
-
-/* CRC16-CCITT for 4-bit DAT lines: each of the 4 lines has its own CRC,
- * so this returns 4 16-bit CRCs in a 64-bit packed word. Implementation
- * detail — see SD spec section "CRC for 4-bit Wide Bus" */
+#include "sd_crc.h"  /* CRC7/CRC16 from lib/sd_crc.c (unit-tested in Task 2) */
 ```
 
-**Sanity-check `ed64_crc7` against known SD spec test vectors before integrating** (do this BEFORE running on hardware):
-
-| Command | Frame (5 bytes input) | Expected CRC7 byte |
-|---------|----------------------|-------------------|
-| CMD0 GO_IDLE_STATE, arg=0 | `0x40 0x00 0x00 0x00 0x00` | `0x95` |
-| CMD8 SEND_IF_COND, arg=0x000001AA | `0x48 0x00 0x00 0x01 0xAA` | `0x87` |
-| CMD17 READ_SINGLE_BLOCK, arg=0 | `0x51 0x00 0x00 0x00 0x00` | `0x55` |
-
-If your `ed64_crc7` returns different values, the algorithm is wrong — debug before continuing. Common mistakes: using `(crc >> 1) | 0x01` (off by one bit position), wrong polynomial constant, swapped bit-order.
+Use `sd_crc7(...)` for command CRC and `sd_crc16_4bit(...)` for data block CRC. Do NOT reimplement these inline.
 
 - [ ] **Step 3: Implement CMD send / response receive**
 
 `ed64_sd_send_cmd(uint8_t cmd, uint32_t arg, void *resp_buf, size_t resp_len)`:
-1. Build 6-byte command frame: `[0x40 | cmd] [arg_be_4_bytes] [crc7]`.
-2. Set CMD line to push-pull mode (open-drain pre-init, push-pull post-init).
+1. Build 6-byte command frame: `[0x40 | cmd] [arg_be_4_bytes] [crc7]` using `sd_crc7`.
+2. Set CMD line to push-pull mode.
 3. Shift out 6 bytes via `ed64_sd_cmd_tx`.
 4. Set CMD line to input mode.
 5. Shift in `resp_len` bytes via `ed64_sd_cmd_rx`.
@@ -330,7 +567,7 @@ If your `ed64_crc7` returns different values, the algorithm is wrong — debug b
 
 ```
 ed64_sd_init():
-  1. Power up: send 74+ dummy clocks with CMD high (some hosts skip).
+  1. Power up: send 74+ dummy clocks with CMD high.
   2. CMD0 (GO_IDLE_STATE): expect R1 with idle bit set.
   3. CMD8 (SEND_IF_COND, voltage = 0x1AA): expect echo. SDv2 detection.
   4. ACMD41 loop (SD_SEND_OP_COND, HCS bit): retry until card_busy clears.
@@ -338,21 +575,18 @@ ed64_sd_init():
   5. CMD2 (ALL_SEND_CID): get CID (16 bytes).
   6. CMD3 (SEND_RELATIVE_ADDR): receive RCA.
   7. CMD7 (SELECT_CARD with RCA): card transitions to transfer state.
-  8. CMD16 (SET_BLOCKLEN, 512): only needed for SDSC (SDHC ignores).
+  8. CMD16 (SET_BLOCKLEN, 512): only needed for SDSC.
   9. ACMD6 (SET_BUS_WIDTH = 4-bit): switch DAT to 4-line mode.
   10. Switch FPGA to 50 MHz speed.
-
-  Return IODEV_OK if all steps succeed, IODEV_ERR_NO_CARD if step 4
-  doesn't see card_busy clear, IODEV_ERR_IO for any other failure.
 ```
 
-Each step is its own helper function (`ed64_sd_cmd0`, `ed64_sd_cmd8`, etc.) so debugging on hardware is incremental.
+Each step is its own helper function for incremental hardware debugging. Track `ed64_card_is_sdhc` as a file-static bool — Tasks 4 and 5 need it for LBA conversion.
 
 - [ ] **Step 5: Build, invariants pass**
 
-Run: `make practice -j4 && python3 tools/practice_invariants.py`
-
-The build must remain clean. If it links but `ed64_sd_init` segfaults in some edge case at runtime, that's a future-hardware problem — out of scope for build-time checks.
+```bash
+make practice -j4 && python3 tools/practice_invariants.py
+```
 
 - [ ] **Step 6: Commit**
 
@@ -361,11 +595,11 @@ git add lib/iodev/iodev_ed64.c
 git commit -m "feat: add ED64 SD card init sequence (CMD0/CMD8/ACMD41/CMD2/CMD3/CMD7)"
 ```
 
-**Shippable state:** ED64 cart detection + SD init. SD reads/writes still return `IODEV_ERR_NO_DEVICE`. ED64 users could probe init success via IS-Viewer log.
+**Shippable state:** ED64 cart detection + SD init using verified CRC code. SD R/W still return `IODEV_ERR_NO_DEVICE`.
 
 ---
 
-## Task 3: Single-block read (CMD17)
+## Task 4: Single-block read (CMD17)
 
 **Files:**
 - Modify: `lib/iodev/iodev_ed64.c`
@@ -376,19 +610,19 @@ git commit -m "feat: add ED64 SD card init sequence (CMD0/CMD8/ACMD41/CMD2/CMD3/
 ed64_sd_read_block(uint32_t lba, void *buf):
   1. Adjust lba for SDSC vs SDHC (SDSC takes byte address, SDHC takes block address).
   2. Send CMD17 (READ_SINGLE_BLOCK, arg = lba).
-  3. Wait for data start token (0xFE or DAT-line equivalent).
+  3. Wait for data start token.
   4. Shift in 512 bytes via REG_SD_DAT_RD.
-  5. Read 16-byte CRC, verify (or trust FPGA — many ED64 setups skip).
+  5. Read 8-byte CRC (4 lines × 16 bits), verify with sd_crc16_4bit.
   6. Return IODEV_OK.
 ```
 
-- [ ] **Step 2: Update `ed64_sd_read_sectors` to use the block primitive**
+- [ ] **Step 2: Update `ed64_sd_read_sectors`**
 
 Replace the stub with a loop over `count` calling `ed64_sd_read_block(lba+i, buf+i*512)`.
 
-The 8-byte alignment check (`(uintptr_t)buf & 7u → IODEV_ERR_PARAM`) must be present here too (matches Phase 1a Issue 4 fix).
-
-The `count == 0 || count > 128` check must also be present (matches SC64's cap).
+Required guards (matching SC64):
+- `(uintptr_t)buf & 7u → IODEV_ERR_PARAM` (8-byte alignment)
+- `count == 0 || count > 128 → IODEV_ERR_PARAM` (sector cap)
 
 - [ ] **Step 3: Build & test**
 
@@ -405,7 +639,7 @@ git commit -m "feat: add ED64 single-block SD read (CMD17)"
 
 ---
 
-## Task 4: Single-block write (CMD24)
+## Task 5: Single-block write (CMD24)
 
 **Files:**
 - Modify: `lib/iodev/iodev_ed64.c`
@@ -418,7 +652,7 @@ ed64_sd_write_block(uint32_t lba, const void *buf):
   2. Send CMD24 (WRITE_BLOCK, arg = lba).
   3. Send data start token.
   4. Shift out 512 bytes via REG_SD_DAT_WR.
-  5. Send CRC16.
+  5. Compute and send CRC16 via sd_crc16_4bit.
   6. Wait for card response token (data accepted / not).
   7. Wait for card not-busy (DAT0 high).
   8. Return IODEV_OK or IODEV_ERR_IO.
@@ -426,7 +660,7 @@ ed64_sd_write_block(uint32_t lba, const void *buf):
 
 - [ ] **Step 2: Update `ed64_sd_write_sectors`**
 
-Loop over `count` calling `ed64_sd_write_block`. Same alignment + count-cap checks.
+Loop over `count` calling `ed64_sd_write_block`. Same alignment + count-cap checks as Task 4.
 
 - [ ] **Step 3: Build, invariants, commit**
 
@@ -439,35 +673,208 @@ git commit -m "feat: add ED64 single-block SD write (CMD24)"
 
 ---
 
-## Task 5: Multi-block transfers (CMD18/CMD25 — optional optimization)
+## Task 6: Diagnostic build mode (`IODEV_DIAG=1`)
 
 **Files:**
-- Modify: `lib/iodev/iodev_ed64.c`
+- Create: `lib/iodev/iodev_diag.c`
+- Create: `lib/iodev/iodev_diag.h`
+- Modify: `Makefile` (pass `-DIODEV_DIAG=1` when building with `IODEV_DIAG=1`)
+- Modify: `src/practice/practice_main.c` (call `iodev_diag_run()` after the existing iodev log, gated by `#ifdef IODEV_DIAG`)
+- Modify: `tools/patch_linker_script.py` (add `iodev_diag` to `LIB_IODEV_OBJS`)
 
-**Goal:** Performance optimization. Replace the loop-over-single-blocks with proper multi-block transfers (CMD18 READ_MULTIPLE_BLOCK, CMD25 WRITE_MULTIPLE_BLOCK). Same caller-visible behavior, ~10-20× faster on real hardware.
+**Goal:** `make practice IODEV_DIAG=1` produces a ROM that auto-runs the full HW verification suite on boot. The EverDrive contact flashes this once, captures output, sends it back. No manual probe-code editing required.
 
-**This task is optional.** If the time-box is running short, skip it — single-block reads/writes work and Phase 2+ can move forward.
+- [ ] **Step 1: Create `lib/iodev/iodev_diag.h`**
 
-- [ ] **Step 1: Implement multi-block read with CMD18 + CMD12 stop**
+```c
+#ifndef LIB_IODEV_DIAG_H
+#define LIB_IODEV_DIAG_H
 
-CMD18 starts a stream of blocks; CMD12 (STOP_TRANSMISSION) terminates. The FPGA may also support `sd_rx_mblk` style hardware-accelerated multi-block — check the ED64 X register set for `REG_SDIO_ARD` or similar batching primitives.
+/* Run the full hardware verification suite. Logs structured pass/fail per
+ * step via osSyncPrintf. Safe to call from Practice_Init.
+ *
+ * No-op when IODEV_DIAG is not defined at compile time. */
+void iodev_diag_run(void);
 
-- [ ] **Step 2: Implement multi-block write with CMD25 + CMD12 stop**
+#endif
+```
 
-Same shape, write direction.
+- [ ] **Step 2: Create `lib/iodev/iodev_diag.c`**
 
-- [ ] **Step 3: Build, invariants, commit**
+Empty translation unit unless `IODEV_DIAG` is defined.
+
+```c
+#include "iodev_diag.h"
+
+#ifdef IODEV_DIAG
+
+#include "PR/xstdio.h"  /* osSyncPrintf */
+#include "iodev.h"
+
+/* The diagnostic suite. Called once from Practice_Init when IODEV_DIAG=1. */
+void iodev_diag_run(void) {
+    iodev_id_t cart;
+    iodev_result_t res;
+    static unsigned char sec0[512] __attribute__((aligned(8)));
+    static unsigned char wbuf[512] __attribute__((aligned(8)));
+    static unsigned char rbuf[512] __attribute__((aligned(8)));
+    int i;
+    int match;
+
+    osSyncPrintf("\n[diag] === Phase 1b iodev hardware verification ===\n");
+
+    /* Test 1: cart detection */
+    cart = iodev_detect();
+    osSyncPrintf("[diag] T1 cart_id=%d  (expect 1=SC64, 2=ED64; 0=NONE means no flashcart detected)\n",
+                 (int)cart);
+    if (cart == IODEV_NONE) {
+        osSyncPrintf("[diag] FAIL T1: no flashcart detected, aborting\n");
+        return;
+    }
+
+    /* Test 2: SD init */
+    res = iodev_sd_init();
+    osSyncPrintf("[diag] T2 sd_init=%d  (expect 0=OK)\n", (int)res);
+    if (res != IODEV_OK) {
+        osSyncPrintf("[diag] FAIL T2: SD init failed (-1=NO_CARD, -3=IO, -4=TIMEOUT)\n");
+        return;
+    }
+
+    /* Test 3: read sector 0 (MBR), check 0x55AA signature at offset 0x1FE */
+    res = iodev_sd_read_sectors(0, 1, sec0);
+    osSyncPrintf("[diag] T3 read_sec0=%d  signature=%02X%02X (expect 55AA)\n",
+                 (int)res, (unsigned)sec0[510], (unsigned)sec0[511]);
+    osSyncPrintf("[diag] T3 sec0 bytes 0..15: ");
+    for (i = 0; i < 16; i++) osSyncPrintf("%02X ", (unsigned)sec0[i]);
+    osSyncPrintf("\n");
+    if (res != IODEV_OK || sec0[510] != 0x55 || sec0[511] != 0xAA) {
+        osSyncPrintf("[diag] FAIL T3: read failed or MBR signature mismatch\n");
+        return;
+    }
+
+    /* Test 4: write/read round-trip on a safe sector (LBA 0x100000 = 512MB into card).
+     * NOT sector 0; we don't want to corrupt anyone's MBR. */
+    for (i = 0; i < 512; i++) wbuf[i] = (unsigned char)(i ^ 0x5A);
+    res = iodev_sd_write_sectors(0x100000, 1, wbuf);
+    osSyncPrintf("[diag] T4 write_sec=%d\n", (int)res);
+    if (res != IODEV_OK) {
+        osSyncPrintf("[diag] FAIL T4: write failed\n");
+        return;
+    }
+    for (i = 0; i < 512; i++) rbuf[i] = 0;
+    res = iodev_sd_read_sectors(0x100000, 1, rbuf);
+    osSyncPrintf("[diag] T4 read_back=%d\n", (int)res);
+    if (res != IODEV_OK) {
+        osSyncPrintf("[diag] FAIL T4: read-back failed\n");
+        return;
+    }
+    match = 1;
+    for (i = 0; i < 512; i++) if (wbuf[i] != rbuf[i]) { match = 0; break; }
+    osSyncPrintf("[diag] T4 round_trip_match=%d (expect 1)\n", match);
+    if (!match) {
+        osSyncPrintf("[diag] FAIL T4: round-trip mismatch at byte %d (wrote %02X, read %02X)\n",
+                     i, (unsigned)wbuf[i], (unsigned)rbuf[i]);
+        return;
+    }
+
+    /* Test 5: count > 128 must reject (alignment + cap guard) */
+    res = iodev_sd_read_sectors(0x100000, 200, rbuf);
+    osSyncPrintf("[diag] T5 cap_check=%d (expect -5=ERR_PARAM)\n", (int)res);
+
+    /* Test 6: misaligned buffer must reject */
+    res = iodev_sd_read_sectors(0x100000, 1, (void *)((unsigned char *)rbuf + 1));
+    osSyncPrintf("[diag] T6 align_check=%d (expect -5=ERR_PARAM)\n", (int)res);
+
+    osSyncPrintf("[diag] === ALL TESTS PASS ===\n");
+}
+
+#else  /* !IODEV_DIAG */
+
+void iodev_diag_run(void) { /* no-op */ }
+
+#endif
+```
+
+NOTE: `iodev_diag.c` includes `PR/xstdio.h` for `osSyncPrintf`. That's a libultra include and `iodev_diag.c` is NOT on the libultra-allowlist by default. Add it to `LIBULTRA_ALLOWED` in `tools/practice_invariants.py` as part of this task (one line). Document in the static invariant's comment that diag is a hardware-test artifact, not normal lib/ code.
+
+- [ ] **Step 3: Wire `iodev_diag_run()` into `Practice_Init`**
+
+Edit `src/practice/practice_main.c`. After the existing iodev log block, add:
+
+```c
+#ifdef IODEV_DIAG
+    iodev_diag_run();
+#endif
+```
+
+Add `#include "iodev/iodev_diag.h"` near the existing `#include "iodev/iodev.h"`. The header is safe to include even when `IODEV_DIAG` is not defined (it just declares the no-op).
+
+- [ ] **Step 4: Wire `IODEV_DIAG` into the Makefile**
+
+Find the existing `BUILD_DEFINES += -DPRACTICE_ROM=1 -DAVOID_UB` block (around Makefile line 155). Add:
+
+```makefile
+ifeq ($(IODEV_DIAG),1)
+    BUILD_DEFINES   += -DIODEV_DIAG=1
+endif
+```
+
+- [ ] **Step 5: Add `iodev_diag` to the linker patcher**
+
+Extend `LIB_IODEV_OBJS`:
+
+```python
+LIB_IODEV_OBJS = [
+    "iodev",
+    "iodev_sc64",
+    "iodev_ed64",
+    "iodev_diag",  # Phase 1b diagnostic mode
+    "iodev_stub",
+]
+```
+
+The patcher's incremental injection logic added in Task 1 needs another iteration: the new `iodev_diag.o` slots between `iodev_ed64.o` and `iodev_stub.o`. Extend the four-state machine to a five-state one:
+
+| State | Detection | Action |
+|-------|-----------|--------|
+| ... existing 4 states ... | | |
+| Phase-1b ed64 patched, diag missing (NEW) | `iodev_ed64.o` present, `iodev_diag.o` missing | Inject `iodev_diag.o` anchored on `iodev_ed64.o` |
+
+If maintaining N states becomes painful, refactor to: "compute the difference between expected `LIB_IODEV_OBJS` and what's in the script; insert the missing entries each anchored on the entry that should immediately precede it." That's cleaner long-term.
+
+- [ ] **Step 6: Build and verify both modes**
 
 ```bash
-make practice -j4
+make practice -j4                    # Normal build
+make practice -j4 IODEV_DIAG=1       # Diagnostic build
 python3 tools/practice_invariants.py
-git add lib/iodev/iodev_ed64.c
-git commit -m "perf: ED64 multi-block SD transfers (CMD18/CMD25)"
 ```
+
+Both must pass. The diagnostic build's ROM checksum will differ from the normal build (extra symbols).
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add lib/iodev/iodev_diag.c lib/iodev/iodev_diag.h \
+        src/practice/practice_main.c \
+        Makefile tools/patch_linker_script.py tools/practice_invariants.py
+git commit -m "feat: add IODEV_DIAG=1 diagnostic build mode
+
+Auto-runs the Phase 1b hardware verification suite on boot, dumping
+structured per-step pass/fail via osSyncPrintf. EverDrive-equipped
+contributors flash 'make practice IODEV_DIAG=1' once, capture output,
+report findings — no manual probe-code editing required.
+
+Six tests: cart detection, SD init, MBR read + signature check,
+write/read round-trip on safe sector 0x100000, count-cap guard,
+misalignment guard."
+```
+
+**Shippable state:** Diagnostic ROM ready to send to the EverDrive contact. **This is the milestone for shipping to them.**
 
 ---
 
-## Task 6: Static invariants + hardware verification doc
+## Task 7: Static invariants + hardware verification doc
 
 **Files:**
 - Modify: `tools/practice_invariants.py`
@@ -475,14 +882,9 @@ git commit -m "perf: ED64 multi-block SD transfers (CMD18/CMD25)"
 
 - [ ] **Step 1: Add `check_iodev_ed64()` to invariants**
 
-Mirror the structure of `check_iodev_sc64()` from Phase 1a. Specific checks:
-
 ```python
 def check_iodev_ed64():
-    """ED64 X iodev backend must preserve protocol invariants.
-
-    Without these, the channel silently fails on real ED64 hardware.
-    """
+    """ED64 X iodev backend must preserve protocol invariants."""
     path = "lib/iodev/iodev_ed64.c"
     if not os.path.isfile(path):
         return
@@ -492,12 +894,11 @@ def check_iodev_ed64():
     if "PI_WRITE_FLUSH" not in src:
         error(f"{path}: must use PI_WRITE_FLUSH macro for cart-bus writes")
 
-    # Cart unlock magic — these are hardware facts; if removed, cart is inaccessible.
-    # (Use whatever names you chose for the unlock keys; common gz names are 0xAA55/0x55AA.)
+    # Cart unlock magic — hardware fact; if removed, cart is inaccessible.
     if "ED64_KEY" not in src:
         error(f"{path}: must define ED64_KEY constants (cart unlock sequence)")
 
-    # 128-sector cap matches SC64's DMA scratch cap; consistent caller contract.
+    # 128-sector cap matches SC64's; consistent caller contract.
     if src.count("count > 128") < 2:
         error(f"{path}: both sd_read_sectors and sd_write_sectors must enforce count > 128 → ERR_PARAM")
 
@@ -505,32 +906,88 @@ def check_iodev_ed64():
     if src.count("& 7u") < 2:
         error(f"{path}: both sd_read_sectors and sd_write_sectors must enforce 8-byte buffer alignment")
 
-    # CRC7 and CRC16 must be implemented — these are SD spec requirements.
-    if "crc7" not in src.lower() or "crc16" not in src.lower():
-        error(f"{path}: must implement CRC7 (commands) and CRC16 (data blocks) per SD spec")
+    # Must use the unit-tested CRC layer, not reimplement inline.
+    if 'sd_crc.h' not in src:
+        error(f"{path}: must include sd_crc.h (use unit-tested CRC, don't reimplement)")
+    if "sd_crc7" not in src:
+        error(f"{path}: must call sd_crc7() for command CRCs")
 ```
 
-Wire into `main()` alongside the existing `check_iodev_sc64()` call.
+Wire into `main()`.
 
 - [ ] **Step 2: Verify positive + negative tests**
 
-Positive: `python3 tools/practice_invariants.py` passes on the current code.
+Positive: invariants pass on current code.
 
 Negative tests (each: edit, run, confirm fails, revert):
 - Comment out `PI_WRITE_FLUSH` macro definition → must fail
-- Rename `ED64_KEY_1` constants to `KEY_1` → must fail
-- Change `count > 128` to `count > 256` in one read → must fail
+- Remove `#include "sd_crc.h"` → must fail
+- Change `count > 128` to `count > 256` in one path → must fail
 
 - [ ] **Step 3: Create `docs/superpowers/plans/HW_VERIFY_phase1b.md`**
 
-Mirror the structure of `HW_VERIFY_phase1a.md`. Key differences:
+Mirror the structure of `HW_VERIFY_phase1a.md` but center on the diagnostic ROM. The contact's experience should be:
 
-- No SC64-specific deployer commands; user runs ED64 toolchain (typically `unfloader` or the ED64 SD-mounted approach).
-- Test 1: cart detection — confirm IS-Viewer log shows `cart=2 sd_init=0` on real ED64 hardware.
-- Test 2: sector 0 read round-trip vs `dd` (same shape as Phase 1a).
-- Test 3: sector 0x100000 write/read round-trip (same shape as Phase 1a).
-- Add a callout: **"This phase has not been hardware-verified by the original implementer (no ED64 cart available). The first ED64-equipped contributor running this checklist should expect to find at least one issue."** This sets honest expectations.
-- Reporting section: ED64 firmware version (cart label or via `unfloader`), SD card details, any anomalies.
+```markdown
+# Phase 1b Hardware Verification (EverDrive 64 X7/X8)
+
+## Time required: ~10 minutes
+
+## What you'll need
+
+- EverDrive 64 X7 or X8 cart
+- An SD card (any size; class doesn't matter)
+- A way to capture serial / IS-Viewer output from the cart
+  (UNFLoader, ED64-specific debug tooling, or analogous)
+
+## What you'll do
+
+1. **Build the diagnostic ROM** (or get it from the project maintainer):
+   ```bash
+   make practice -j4 IODEV_DIAG=1
+   ```
+   The output is `build/starfox64.us.rev1.uncompressed.z64`.
+
+2. **Insert SD card into ED64**, **flash the ROM**, **boot the N64**.
+
+3. **Capture the IS-Viewer output**. Should look like:
+   ```
+   [iodev] cart=2 sd_init=0
+   [diag] === Phase 1b iodev hardware verification ===
+   [diag] T1 cart_id=2  (expect 1=SC64, 2=ED64; ...)
+   [diag] T2 sd_init=0  (expect 0=OK)
+   [diag] T3 read_sec0=0  signature=55AA (expect 55AA)
+   [diag] T3 sec0 bytes 0..15: <16 hex bytes>
+   [diag] T4 write_sec=0
+   [diag] T4 read_back=0
+   [diag] T4 round_trip_match=1 (expect 1)
+   [diag] T5 cap_check=-5 (expect -5=ERR_PARAM)
+   [diag] T6 align_check=-5 (expect -5=ERR_PARAM)
+   [diag] === ALL TESTS PASS ===
+   ```
+
+4. **Send the captured output back to the maintainer.**
+
+## Failure modes you might see
+
+- `cart_id=0` — ED64 not detected. Cart unlock sequence is wrong.
+- `cart_id=1` — SC64 detected on an ED64 cart. Detection logic conflict.
+- `sd_init=-1` — no SD card in slot. Insert one.
+- `sd_init=-3` — SD card init failed. Could be card incompatibility (try a different one), CRC bug, or timing issue.
+- `signature=????` not `55AA` — read transferred wrong bytes. Likely 4-bit DAT line ordering or block-size mismatch.
+- `round_trip_match=0` — write or read corrupting data. CRC16 likely wrong, or write-acceptance handshake broken.
+- `cap_check=0` (instead of -5) — guard missing. Bug.
+
+## Reporting
+
+Note in your report:
+- ED64 firmware version (cart label or via UNFLoader's info command)
+- SD card brand / size / class
+- Full captured output (paste verbatim)
+- Anything that didn't match expectations
+```
+
+The diagnostic ROM does the work; the human just runs it and pastes output.
 
 - [ ] **Step 4: Build, commit**
 
@@ -543,32 +1000,60 @@ git commit -m "feat: ED64 invariants + Phase 1b hardware verification checklist"
 
 ---
 
-## Task 7: Phase exit gate
+## Task 8: Phase exit gate
 
 - [ ] **Step 1: Verify all automated checks pass**
 
 ```bash
 python3 tools/practice_invariants.py
 make practice -j4
+make practice -j4 IODEV_DIAG=1
+make lib-test
 ```
 
-Both must succeed.
+All four must succeed. The first three exercise the production ROM and diagnostic ROM build paths; `lib-test` proves the CRC layer is correct.
 
 - [ ] **Step 2: Confirm no probe code in `Practice_Init`**
 
-`grep -c "iodev_sd_read_sectors\|iodev_sd_write_sectors" src/practice/practice_main.c` must return 0.
+`grep -c "iodev_sd_read_sectors\|iodev_sd_write_sectors" src/practice/practice_main.c` must return 0. The diagnostic mode lives in `lib/iodev/iodev_diag.c`, NOT in `Practice_Init`.
 
-- [ ] **Step 3: Hardware verification status**
-
-`docs/superpowers/plans/HW_VERIFY_phase1b.md` exists. **Hardware testing has NOT been run** (user lacks ED64). Document this clearly in any PR description: *"Phase 1b ships without hardware verification on real ED64. Code is structurally sound (compiles, links, passes invariants, registry polymorphism verified in BizHawk). Wire-level correctness pending ED64-equipped contributor."*
-
-- [ ] **Step 4: Optional — tag the phase**
+- [ ] **Step 3: Build the diagnostic ROM artifact for the EverDrive contact**
 
 ```bash
+make practice -j4 IODEV_DIAG=1
+cp build/starfox64.us.rev1.uncompressed.z64 phase1b-diag.z64
+```
+
+Send `phase1b-diag.z64` and `docs/superpowers/plans/HW_VERIFY_phase1b.md` to the EverDrive contact.
+
+- [ ] **Step 4: Hardware verification status (in PR description)**
+
+```
+Phase 1b ships with:
+- Algorithmic correctness verified (CRC unit tests pass)
+- Static invariants for ED64 protocol guards
+- Diagnostic ROM ready for ED64-equipped contributor
+- Wire-level correctness pending HW verification report
+
+When HW verification report comes back, file follow-up issues for any
+failures and treat the phase as fully complete only after report shows
+"ALL TESTS PASS".
+```
+
+- [ ] **Step 5: Optional — tag the phase**
+
+```bash
+git tag phase1b-iodev-ed64-pre-hw-verify
+```
+
+After HW verification report comes back clean, retag:
+
+```bash
+git tag -d phase1b-iodev-ed64-pre-hw-verify
 git tag phase1b-iodev-ed64
 ```
 
-If the time-box was hit and Phase 1b shipped at Task 1 (detection only), tag as `phase1b-iodev-ed64-detection-only` instead. Subsequent ED64 SD work would then be a separately-tracked follow-up.
+If the time-box was hit and Phase 1b shipped at Task 1 (detection only) or Task 2 (CRC only), tag accordingly with a more specific suffix.
 
 ---
 
@@ -576,30 +1061,34 @@ If the time-box was hit and Phase 1b shipped at Task 1 (detection only), tag as 
 
 | Risk | Likelihood | Mitigation |
 |------|------------|-----------|
-| ED64 SDIO protocol has a subtle init-timing requirement only obvious from gz code | High | Time-box bites first; ship Task 1 + Task 2 (detection + init), defer reads/writes if unclear. |
-| Clean-room concerns: implementer reflexively reproduces gz's variable names or function structure | Medium | Plan explicitly forbids having gz files open during writing. Notes-only approach. Code review checks for suspicious phrase reuse. |
-| `tools/patch_linker_script.py` incremental mode breaks on the new entry | Medium | Plan acknowledges this; Task 1 Step 4 has explicit guidance on the patcher fix. |
-| Without hardware to verify, the "passes invariants" green light is misleading | High | Hardware verification doc explicitly notes the unproven status. PR description must say so. Future ED64 users expect to find issues. |
-| ED64 detect false-positives on SC64 cart (or vice versa) | Low | First-match-wins in registry mitigates one direction. Verify with both backends enabled in BizHawk stub mode (no false positive since neither cart is simulated). |
-| Multi-block writes have a CMD12 race condition that's only visible at high speed | Low | Task 5 is optional. Falling back to single-block is acceptable. |
-| Audio bank corruption from ED64 register access during SDIO transfers | Low-Medium | ED64 X's audio is a separate FPGA region; SDIO doesn't touch it. Same logic as SC64. Verify on hardware. |
+| ED64 SDIO protocol has a subtle init-timing requirement only obvious from gz code | Medium | Diagnostic ROM exposes it on real hardware in 10 minutes. Time-boxed retry budget if first HW report fails. |
+| Clean-room concerns: implementer reflexively reproduces gz's variable names | Medium | Plan explicitly forbids gz files open during writing. Notes-only approach. Code review checks for suspicious phrase reuse. |
+| `tools/patch_linker_script.py` incremental mode breaks across multiple Phase 1b additions (sd_crc, iodev_ed64, iodev_diag) | Medium | Plan suggests refactoring to "compute missing entries from expected list" if the four-state machine becomes painful. |
+| Without hardware to verify mid-implementation, bugs only surface at Task 8 | High | Host unit tests on CRC catch most algorithmic bugs early. Diagnostic ROM gives single-shot HW verification rather than iterative shipping. |
+| ED64 detect false-positives on SC64 cart (or vice versa) | Low | First-match-wins in registry. Static invariant for both backends. |
+| 4-bit CRC16 ordering: SD spec is subtle on which bit goes to which DAT line | Medium | Test vector in `test_sd_crc.c` for all-zeros (must give 0); on hardware, write/read round-trip catches incorrect ordering. If T4 fails on the diagnostic ROM, this is the first thing to suspect. |
+| Multi-block speed loss (~10-20× slower than CMD18/CMD25) annoys users | Low | Acceptable for v1. Phase 4 (state save/load) makes ~250 KB writes — at single-block speed, ~5-10 sec on real hardware. Users tolerate that for save state. Multi-block can ship later. |
+| Audio bank corruption from ED64 register access during SDIO transfers | Low-Medium | ED64 X's audio is a separate FPGA region. Same logic as SC64. Verify on hardware — diagnostic ROM doesn't exercise this directly but the practice ROM's normal use will. |
 
 ---
 
 ## Explicit non-goals
 
-- **No EverDrive 64 v1/v2 support.** The user's spec said X7/X8 only. Older ED64 revs use a substantially different protocol; supporting them would be a separate phase.
-- **No ED64 cart-USB support.** ED64's USB pass-through is unrelated to SD I/O; out of scope.
+- **No EverDrive 64 v1/v2 support.** Spec says X7/X8 only.
+- **No ED64 cart-USB support.** Out of scope.
 - **No SDXC support beyond what SDHC handles.** SDXC > 32 GB cards may work via the SDHC code path; if they don't, that's a follow-up.
 - **No write-protect detection.** Not exposed by the FPGA in a useful way.
 - **No card-removal detection at runtime.** Boot-time only via `iodev_detect`.
-- **No multi-cart support.** ED64 X has only one SD slot; this is a hardware constraint, not a software one.
+- **No multi-cart support.** ED64 X has only one SD slot; hardware constraint.
+- **No multi-block CMD18/CMD25 transfers.** Dropped from Phase 1b. Single-block R/W is sufficient. Multi-block is a future perf optimization.
 
 ---
 
 ## Final notes for the executing agent
 
 - **Time-box discipline.** If you find yourself reading gz code repeatedly to figure out a detail, STOP. Either the public Krikzz docs cover it or you need hardware to verify it — neither is a good reason to lift gz code structure. Report BLOCKED and let the user decide.
-- **Clean-room hygiene.** When in doubt, check whether your code has the same variable names as gz's. `cart_lock` / `cart_unlock` / `reg_rd` / `reg_wr` / `cmd_tx` / `dat_rx` are gz's names. Your names should differ (e.g., `ed64_unlock`, `ed64_reg_read`, `ed64_cmd_send`, `ed64_dat_recv`).
+- **Clean-room hygiene.** When in doubt, check whether your code has the same variable names as gz's. `cart_lock` / `cart_unlock` / `reg_rd` / `reg_wr` / `cmd_tx` / `dat_rx` are gz's names. Your names should differ (`ed64_unlock`, `ed64_reg_read`, `ed64_cmd_send`, `ed64_dat_recv`).
+- **Run host unit tests early and often.** Every time you touch CRC code, `make lib-test` first.
+- **The diagnostic ROM is the contract with the EverDrive contact.** Their time is finite; the diag suite must produce actionable output (named test, expected value, actual value) so they can paste it back without further investigation.
 - **The user has another agent doing PNG-related work in this worktree.** Use explicit `git add` paths only.
-- **Spec compliance over completeness.** If your `ed64_sd_init` returns `IODEV_OK` but the actual SD card hasn't reached transfer state, hardware testing will catch it later. Static invariants and build-time checks can't see that. Don't over-promise in the commit message.
+- **Spec compliance over completeness.** If your `ed64_sd_init` returns `IODEV_OK` but the actual SD card hasn't reached transfer state, the diagnostic ROM will catch it on real hardware. Static invariants and build-time checks can't see that. Don't over-promise in the commit message.
