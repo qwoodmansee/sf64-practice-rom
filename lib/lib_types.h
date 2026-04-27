@@ -25,6 +25,10 @@
   typedef s16 int16_t;
   typedef s32 int32_t;
   typedef s64 int64_t;
+  /* N64 is 32-bit; matches include/libc/stdint.h:7. Used for pointer
+   * arithmetic / alignment checks (e.g. iodev SC64 buf alignment). */
+  typedef u32 uintptr_t;
+  typedef s32 intptr_t;
 #endif
 
 #endif /* LIB_LIB_TYPES_H */

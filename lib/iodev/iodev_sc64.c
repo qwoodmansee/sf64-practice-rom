@@ -68,6 +68,11 @@
  * space, which caps a single SD R/W call at 128 sectors. */
 #define SC64_SD_DMA_SCRATCH   0x10F00000u
 
+/* SC64 command-completion timeout. PI-bus IO_READ is roughly 1 us at
+ * worst-case wait states; this gives a multi-second wall-clock upper
+ * bound, well past CMD_INIT's ~50ms worst case. */
+#define SC64_CMD_TIMEOUT_RETRIES  6000000
+
 /* Execute one command. Args go in arg[0..1], response (if any) lands in rsp[0..1].
  * Returns IODEV_OK on success, IODEV_ERR_IO on CMD_ERROR, IODEV_ERR_TIMEOUT if
  * CPU_BUSY never clears.
@@ -84,9 +89,8 @@ static iodev_result_t sc64_execute_cmd(uint8_t cmd_id,
     PI_WRITE_FLUSH(SC64_REG_DATA1, arg1);
     PI_WRITE_FLUSH(SC64_REG_SCR, (uint32_t)cmd_id);
 
-    /* Spin until CPU_BUSY clears. ~100ms timeout at 60 MHz CPU is generous
-     * (SD ops are typically <10ms but CMD_INIT can take longer). */
-    retries = 6000000;
+    /* Spin until CPU_BUSY clears. */
+    retries = SC64_CMD_TIMEOUT_RETRIES;
     do {
         sr = IO_READ(SC64_REG_SCR);
         if (--retries <= 0) {
@@ -144,10 +148,14 @@ static void sc64_dma_setup(void) {
 
 static iodev_result_t sc64_sd_read_sectors(uint32_t lba, uint32_t count, void *buf) {
     iodev_result_t res;
-    OSIoMesg mb;
+    OSIoMesg mb;  /* Stack-local OK: __osDevMgrMain finishes touching mb
+                   * before osRecvMesg unblocks. */
 
     if (count == 0 || count > 128) {
         return IODEV_ERR_PARAM;  /* > 128 exceeds our 64 KiB DMA scratch */
+    }
+    if (((uintptr_t)buf) & 7u) {
+        return IODEV_ERR_PARAM;  /* PI DMA needs 8-byte alignment (iodev.h) */
     }
 
     sc64_dma_setup();
@@ -174,10 +182,14 @@ static iodev_result_t sc64_sd_read_sectors(uint32_t lba, uint32_t count, void *b
 
 static iodev_result_t sc64_sd_write_sectors(uint32_t lba, uint32_t count, const void *buf) {
     iodev_result_t res;
-    OSIoMesg mb;
+    OSIoMesg mb;  /* Stack-local OK: __osDevMgrMain finishes touching mb
+                   * before osRecvMesg unblocks. */
 
     if (count == 0 || count > 128) {
         return IODEV_ERR_PARAM;
+    }
+    if (((uintptr_t)buf) & 7u) {
+        return IODEV_ERR_PARAM;  /* PI DMA needs 8-byte alignment (iodev.h) */
     }
 
     sc64_dma_setup();

@@ -150,6 +150,34 @@ def check_isviewer_sc64():
     if "PI_WRITE" not in isv:
         error("isviewer.c must use a PI_WRITE macro that flushes via IO_READ; back-to-back writes to SC64 cart space get dropped")
 
+def check_iodev_sc64():
+    """SC64 iodev backend must preserve hard-won SC64 protocol invariants.
+
+    These are exactly the gotchas documented in CLAUDE.md's
+    'Hard-won SC64 protocol gotchas' section, applied to iodev rather
+    than IS-Viewer. Without these, the channel silently fails on hardware.
+    """
+    path = "lib/iodev/iodev_sc64.c"
+    if not os.path.isfile(path):
+        return
+    src = read(path)
+
+    # Every cart-bus write needs a follow-up IO_READ to drain the PI bus.
+    # Match the macro *definition* (and require it pair IO_WRITE with IO_READ),
+    # not just any reference - bare callers would also satisfy a substring check.
+    if not re.search(r"#define\s+PI_WRITE_FLUSH\b[^\n]*\\\s*\n[^\n]*IO_WRITE[^\n]*\\\s*\n[^\n]*IO_READ", src):
+        error(f"{path}: PI_WRITE_FLUSH macro must be defined and pair IO_WRITE with a draining IO_READ (see CLAUDE.md SC64 gotchas)")
+
+    # The four SD command bytes must remain literal - they're the SC64 wire protocol.
+    for cmd_byte, name in [("'i'", "SD_CARD_OP"), ("'I'", "SD_SECTOR_SET"), ("'s'", "SD_READ"), ("'S'", "SD_WRITE")]:
+        if cmd_byte not in src:
+            error(f"{path}: SC64 command byte {cmd_byte} ({name}) missing - wire protocol broken")
+
+    # The 128-sector cap must remain in both read and write - it's the 64 KiB DMA scratch limit.
+    # A future "simplify" that drops it would silently corrupt memory past the scratch buffer.
+    if src.count("count > 128") < 2:
+        error(f"{path}: both sd_read_sectors and sd_write_sectors must enforce count > 128 -> ERR_PARAM (DMA scratch is 64 KiB / 128 sectors)")
+
 def check_spawn_zone_typing():
     """Spawn zone draw loop must classify entries by type and respect per-type toggles."""
     hitbox = read("src/practice/practice_hitbox.c")
@@ -232,6 +260,7 @@ def main():
     check_engine_hooks()
     check_cutscene_skip_hook()
     check_isviewer_sc64()
+    check_iodev_sc64()
     check_spawn_zone_typing()
     check_release_patch_workflow()
     check_lib_isolation()
