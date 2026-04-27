@@ -10,12 +10,15 @@
  * Critical PI gotcha (same as isviewer.c): direct CPU writes to cart space
  * drop after the first few. A dummy IO_READ between writes drains the PI bus.
  *
- * NOTE: this file currently implements detection only. Task 6 of the Phase 1a
- * plan replaces the sd_init / sd_read_sectors / sd_write_sectors stubs below
- * with real implementations using the SC64 SD command protocol.
+ * SD I/O works via a cart-bus scratch buffer (SC64_SD_DMA_SCRATCH): for reads,
+ * the SC64 firmware fetches sectors from the SD card into the scratch buffer,
+ * and the N64 then DMAs them into RDRAM. Writes go the other way.
  */
 
 #include "PR/rcp.h"
+#include "libultra/ultra64.h"  /* OSIoMesg, OSMesgQueue, osPiStartDma, osCreateMesgQueue,
+                                * osRecvMesg, osInvalDCache, osWritebackDCache.
+                                * Path matches the project convention (see src/sys/sys.h). */
 #include "iodev.h"
 #include "iodev_internal.h"
 
@@ -40,6 +43,69 @@
     (void) IO_READ(SC64_REG_IDENT);               \
 } while (0)
 
+/* SC64 command IDs (from ~/code/SummerCart64/docs/02_n64_commands.md). */
+#define SC64_CMD_SD_CARD_OP     'i'
+#define SC64_CMD_SD_SECTOR_SET  'I'
+#define SC64_CMD_SD_READ        's'
+#define SC64_CMD_SD_WRITE       'S'
+
+/* SD_CARD_OP sub-operations. */
+#define SD_OP_DEINIT          0
+#define SD_OP_INIT            1
+#define SD_OP_GET_STATUS      2
+#define SD_OP_GET_INFO        3
+
+/* PI cart-space target for SD DMA buffers.
+ *
+ * Must point at SC64 SDRAM (the cart-bus ROM region 0x10000000..0x13FE0000),
+ * NOT at the SC64 flash-shadow region (0x13FE0000..0x13FFFFFF, where the
+ * IS-Viewer at 0x13FF0000 also lives -- overlapping that region is a hardware
+ * conflict that would either silently fail or corrupt IS-Viewer logging).
+ *
+ * SF64's ROM is approximately 10 MiB. We reserve 64 KiB at offset 15 MiB
+ * (0x10F00000..0x10F0FFFF), well past the ROM's tail and well below the
+ * flash-shadow boundary. Gives us 128 sectors (64 KiB / 512) of buffer
+ * space, which caps a single SD R/W call at 128 sectors. */
+#define SC64_SD_DMA_SCRATCH   0x10F00000u
+
+/* Execute one command. Args go in arg[0..1], response (if any) lands in rsp[0..1].
+ * Returns IODEV_OK on success, IODEV_ERR_IO on CMD_ERROR, IODEV_ERR_TIMEOUT if
+ * CPU_BUSY never clears.
+ *
+ * NOTE: this uses the polling path (no IRQ), matching the bootloader's
+ * non-IRQ branch in sc64.c:108-113. */
+static iodev_result_t sc64_execute_cmd(uint8_t cmd_id,
+                                       uint32_t arg0, uint32_t arg1,
+                                       uint32_t *rsp0_out, uint32_t *rsp1_out) {
+    int retries;
+    uint32_t sr;
+
+    PI_WRITE_FLUSH(SC64_REG_DATA0, arg0);
+    PI_WRITE_FLUSH(SC64_REG_DATA1, arg1);
+    PI_WRITE_FLUSH(SC64_REG_SCR, (uint32_t)cmd_id);
+
+    /* Spin until CPU_BUSY clears. ~100ms timeout at 60 MHz CPU is generous
+     * (SD ops are typically <10ms but CMD_INIT can take longer). */
+    retries = 6000000;
+    do {
+        sr = IO_READ(SC64_REG_SCR);
+        if (--retries <= 0) {
+            return IODEV_ERR_TIMEOUT;
+        }
+    } while (sr & SC64_SCR_CPU_BUSY);
+
+    if (sr & SC64_SCR_CMD_ERROR) {
+        /* The error code is in DATA0; we don't translate it for now --
+         * caller just gets IODEV_ERR_IO. Per-error logging via osSyncPrintf
+         * can be added later if needed. */
+        return IODEV_ERR_IO;
+    }
+
+    if (rsp0_out) *rsp0_out = IO_READ(SC64_REG_DATA0);
+    if (rsp1_out) *rsp1_out = IO_READ(SC64_REG_DATA1);
+    return IODEV_OK;
+}
+
 static iodev_id_t sc64_detect(void) {
     /* The SC64 unlocks register access after a magic key sequence. We probe
      * by reading IDENT -- even before unlock, IDENT is readable. */
@@ -54,21 +120,83 @@ static iodev_id_t sc64_detect(void) {
     return IODEV_NONE;
 }
 
-/* SD operations are stubs in this commit. Task 6 of the Phase 1a plan
- * implements them using the SC64 SD command protocol (CMD_SD_CARD_OP,
- * CMD_SD_SECTOR_SET, CMD_SD_READ, CMD_SD_WRITE). For now they return
- * IODEV_ERR_NO_DEVICE so the build links cleanly and the behavior is
- * predictable: detection works, SD operations report unavailable. */
 static iodev_result_t sc64_sd_init(void) {
-    return IODEV_ERR_NO_DEVICE;
+    return sc64_execute_cmd(SC64_CMD_SD_CARD_OP,
+                            0,         /* arg0: pi_address (unused for INIT) */
+                            SD_OP_INIT,
+                            0, 0);
 }
+
+/* SD DMA bookkeeping. File-static because the queue must persist across
+ * calls; first call lazily creates it. NOT thread-safe -- callers must
+ * not invoke iodev_sd_*_sectors concurrently. (The practice ROM is
+ * single-threaded for these calls; revisit if that ever changes.) */
+static OSMesgQueue sSc64DmaMq;
+static OSMesg      sSc64DmaMsgBuf[1];
+static int         sSc64DmaMqInited = 0;
+
+static void sc64_dma_setup(void) {
+    if (!sSc64DmaMqInited) {
+        osCreateMesgQueue(&sSc64DmaMq, sSc64DmaMsgBuf, 1);
+        sSc64DmaMqInited = 1;
+    }
+}
+
 static iodev_result_t sc64_sd_read_sectors(uint32_t lba, uint32_t count, void *buf) {
-    (void)lba; (void)count; (void)buf;
-    return IODEV_ERR_NO_DEVICE;
+    iodev_result_t res;
+    OSIoMesg mb;
+
+    if (count == 0 || count > 128) {
+        return IODEV_ERR_PARAM;  /* > 128 exceeds our 64 KiB DMA scratch */
+    }
+
+    sc64_dma_setup();
+
+    /* Tell SC64 firmware: read `count` sectors starting at `lba` into our
+     * cart-bus scratch buffer. */
+    res = sc64_execute_cmd(SC64_CMD_SD_SECTOR_SET, lba, 0, 0, 0);
+    if (res != IODEV_OK) return res;
+    res = sc64_execute_cmd(SC64_CMD_SD_READ, SC64_SD_DMA_SCRATCH, count, 0, 0);
+    if (res != IODEV_OK) return res;
+
+    /* Now DMA cart-bus scratch -> caller's RDRAM buffer.
+     * Pattern follows src/sys/sys_lib.c:104-118 (Lib_DmaRead). */
+    osInvalDCache(buf, (s32)(count * 512));
+    if (osPiStartDma(&mb, 0, OS_READ,
+                     SC64_SD_DMA_SCRATCH, buf, count * 512,
+                     &sSc64DmaMq) != 0) {
+        return IODEV_ERR_IO;
+    }
+    osRecvMesg(&sSc64DmaMq, NULL, OS_MESG_BLOCK);
+
+    return IODEV_OK;
 }
+
 static iodev_result_t sc64_sd_write_sectors(uint32_t lba, uint32_t count, const void *buf) {
-    (void)lba; (void)count; (void)buf;
-    return IODEV_ERR_NO_DEVICE;
+    iodev_result_t res;
+    OSIoMesg mb;
+
+    if (count == 0 || count > 128) {
+        return IODEV_ERR_PARAM;
+    }
+
+    sc64_dma_setup();
+
+    /* DMA caller's RDRAM buffer into cart-bus scratch.
+     * Pattern: writeback dcache, then osPiStartDma with OS_WRITE direction. */
+    osWritebackDCache((void *)buf, (s32)(count * 512));
+    if (osPiStartDma(&mb, 0, OS_WRITE,
+                     SC64_SD_DMA_SCRATCH, (void *)buf, count * 512,
+                     &sSc64DmaMq) != 0) {
+        return IODEV_ERR_IO;
+    }
+    osRecvMesg(&sSc64DmaMq, NULL, OS_MESG_BLOCK);
+
+    /* Tell SC64 firmware to flush scratch -> SD card at `lba`. */
+    res = sc64_execute_cmd(SC64_CMD_SD_SECTOR_SET, lba, 0, 0, 0);
+    if (res != IODEV_OK) return res;
+    res = sc64_execute_cmd(SC64_CMD_SD_WRITE, SC64_SD_DMA_SCRATCH, count, 0, 0);
+    return res;
 }
 
 /* IDO does not support C99 designated initializers; the order below must
