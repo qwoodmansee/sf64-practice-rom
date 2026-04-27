@@ -40,6 +40,9 @@ typedef struct PracticeConfig {
     bool showHitboxPlayer;
     bool showHitboxFlash;
     bool showSpawnZones;
+    bool showSpawnActors;
+    bool showSpawnItems;
+    bool showSpawnScenery;
     bool expertMode;
 } PracticeConfig;
 

@@ -132,12 +132,24 @@ def check_release_patch_workflow():
     if "baserom.us.rev1.z64" not in create_release or "build/starfox64.us.rev1.z64" not in create_release:
         error("create-release defaults must patch the US rev1 base ROM to the compressed practice ROM")
 
+def check_spawn_zone_typing():
+    """Spawn zone draw loop must classify entries by type and respect per-type toggles."""
+    hitbox = read("src/practice/practice_hitbox.c")
+    for sym in ("OBJ_ACTOR_START", "OBJ_ACTOR_MAX", "OBJ_BOSS_START", "OBJ_BOSS_MAX",
+                "OBJ_ITEM_START", "OBJ_ITEM_MAX", "OBJ_SCENERY_START", "OBJ_SCENERY_MAX"):
+        if sym not in hitbox:
+            error(f"Hitbox_DrawSpawnZones must use {sym} for type classification")
+    for field in ("showSpawnActors", "showSpawnItems", "showSpawnScenery"):
+        if field not in hitbox:
+            error(f"Hitbox_DrawSpawnZones must respect gPracticeConfig.{field}")
+
 def main():
     check_config_inits()
     check_function_definitions()
     check_source_in_build()
     check_engine_hooks()
     check_cutscene_skip_hook()
+    check_spawn_zone_typing()
     check_release_patch_workflow()
 
     if errors:

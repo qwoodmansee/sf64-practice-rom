@@ -44,6 +44,9 @@ typedef enum VisualizerOption {
     VOPT_PLAYER,
     VOPT_FLASH,
     VOPT_SPAWN_ZONES,
+    VOPT_SPAWN_ACTORS,
+    VOPT_SPAWN_ITEMS,
+    VOPT_SPAWN_SCENERY,
     VOPT_BACK,
     VOPT_MAX,
 } VisualizerOption;
@@ -268,6 +271,15 @@ static void StateMenu_UpdateVisualizers(u16 buttons) {
                 break;
             case VOPT_SPAWN_ZONES:
                 gPracticeConfig.showSpawnZones ^= true;
+                break;
+            case VOPT_SPAWN_ACTORS:
+                gPracticeConfig.showSpawnActors ^= true;
+                break;
+            case VOPT_SPAWN_ITEMS:
+                gPracticeConfig.showSpawnItems ^= true;
+                break;
+            case VOPT_SPAWN_SCENERY:
+                gPracticeConfig.showSpawnScenery ^= true;
                 break;
         }
     }
@@ -542,6 +554,21 @@ static void StateMenu_DrawVisualizers(void) {
                 Practice_DrawTextColor(150, y, gPracticeConfig.showSpawnZones ? "ON" : "OFF",
                     gPracticeConfig.showSpawnZones ? 0 : 255, gPracticeConfig.showSpawnZones ? 255 : 100, 0);
                 break;
+            case VOPT_SPAWN_ACTORS:
+                Practice_DrawTextColor(54, y, "  ENEMIES:", 255, 80, 80);
+                Practice_DrawTextColor(150, y, gPracticeConfig.showSpawnActors ? "ON" : "OFF",
+                    gPracticeConfig.showSpawnActors ? 0 : 255, gPracticeConfig.showSpawnActors ? 255 : 100, 0);
+                break;
+            case VOPT_SPAWN_ITEMS:
+                Practice_DrawTextColor(54, y, "  ITEMS:", 80, 255, 80);
+                Practice_DrawTextColor(150, y, gPracticeConfig.showSpawnItems ? "ON" : "OFF",
+                    gPracticeConfig.showSpawnItems ? 0 : 255, gPracticeConfig.showSpawnItems ? 255 : 100, 0);
+                break;
+            case VOPT_SPAWN_SCENERY:
+                Practice_DrawTextColor(54, y, "  SCENERY:", 80, 130, 255);
+                Practice_DrawTextColor(150, y, gPracticeConfig.showSpawnScenery ? "ON" : "OFF",
+                    gPracticeConfig.showSpawnScenery ? 0 : 255, gPracticeConfig.showSpawnScenery ? 255 : 100, 0);
+                break;
             case VOPT_BACK:
                 Practice_DrawTextColor(54, y, "BACK", 150, 150, 150);
                 break;
@@ -572,8 +599,8 @@ void Practice_StateMenu_Draw(void) {
             break;
         case PSUBMENU_VISUALIZERS:
             title = "VISUALIZERS";
-            boxHeight = 138;
-            helpY = 170;
+            boxHeight = 180;
+            helpY = 212;
             break;
         default:
             return;

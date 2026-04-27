@@ -148,6 +148,8 @@ static void Hitbox_DrawSpawnZones(void) {
     ObjectInit* entry;
     s32 i;
     s32 count;
+    u8 r, g, b;
+    bool isActor, isItem, isScenery;
 
     if (gLevelMode != LEVELMODE_ON_RAILS) {
         return;
@@ -165,12 +167,31 @@ static void Hitbox_DrawSpawnZones(void) {
         if (entry->zPos1 < gPathProgress) {
             continue;
         }
+
+        isActor = (entry->id >= OBJ_ACTOR_START && entry->id < OBJ_ACTOR_MAX) ||
+                  (entry->id >= OBJ_BOSS_START  && entry->id < OBJ_BOSS_MAX);
+        isItem    = (entry->id >= OBJ_ITEM_START    && entry->id < OBJ_ITEM_MAX);
+        isScenery = (entry->id >= OBJ_SCENERY_START && entry->id < OBJ_SCENERY_MAX);
+
+        if (isActor) {
+            if (!gPracticeConfig.showSpawnActors) { count++; continue; }
+            r = 255; g = 50;  b = 50;
+        } else if (isItem) {
+            if (!gPracticeConfig.showSpawnItems)  { count++; continue; }
+            r = 50;  g = 255; b = 50;
+        } else if (isScenery) {
+            if (!gPracticeConfig.showSpawnScenery) { count++; continue; }
+            r = 50;  g = 130; b = 255;
+        } else {
+            r = 255; g = 200; b = 0;
+        }
+
         Hitbox_DrawBox(
             (f32)entry->xPos, (f32)entry->yPos,
             -entry->zPos1 - 3000.0f + (f32)entry->zPos2,
             0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, false,
             0.0f, 50.0f, 0.0f, 50.0f, 0.0f, 50.0f,
-            255, 200, 0, 100);
+            r, g, b, 100);
         count++;
     }
 }

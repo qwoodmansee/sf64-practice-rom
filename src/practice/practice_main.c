@@ -33,6 +33,9 @@ void Practice_Init(void) {
     gPracticeConfig.showHitboxPlayer = false;
     gPracticeConfig.showHitboxFlash = false;
     gPracticeConfig.showSpawnZones = false;
+    gPracticeConfig.showSpawnActors = true;
+    gPracticeConfig.showSpawnItems = true;
+    gPracticeConfig.showSpawnScenery = false;
     gPracticeConfig.expertMode = false;
 }
 
