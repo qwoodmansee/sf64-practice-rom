@@ -137,6 +137,54 @@ Add `#ifdef PRACTICE_ROM` / `#include "practice.h"` blocks in engine files
 and `fox_beam.c`. Prefer incrementing extern globals from engine hooks rather
 than calling practice functions — simpler and avoids stack/calling-convention issues.
 
+## Debug printf over SC64 IS-Viewer 64
+
+`osSyncPrintf(fmt, ...)` from anywhere in the practice ROM streams text over
+USB to the host running `sc64deployer debug --isv 0x03FF0000`. Implementation
+is in `src/mods/isviewer.c`, gated by `MODS_ISVIEWER` in `include/mods.h`.
+
+Workflow:
+1. Terminal A: `sc64deployer debug --isv 0x03FF0000` (wait for "Listening on...")
+2. Terminal B: `sc64dev` → `b` (build + upload)
+3. Press the **physical N64 reset button** (--reboot from upload doesn't always trigger it)
+4. Terminal A streams prints live
+
+Diagnosing without breaking the live session: `sc64deployer dump <fpga_offset> <len> <file>`
+reads cart memory from the host, but the **address space is FPGA-internal**
+(`0x03FF0000`), NOT cart-bus (`0x13FF0000`). `dump` rejects values above ~80MB.
+Requires releasing the debug session first; they can't share the serial port
+unless you go through `sc64deployer server`.
+
+### Hard-won SC64 protocol gotchas (do NOT regress)
+
+If you ever rewrite or "simplify" `isviewer.c`, every one of these will silently
+break the channel — the ROM keeps booting, the deployer terminal just stays empty.
+
+- **Token must be `0x49533634` ("IS64")** at `base+0`. Libdragon-style probes
+  with `0x12345678` pass the FPGA read-back self-test but fail the SC64
+  firmware's per-buffer token check, and no flush ever happens.
+- **Every cart-bus write needs a follow-up `IO_READ`** to drain the SC64's
+  write FIFO. Without it, only the first ~4 back-to-back writes land; the
+  rest are silently dropped. The `PI_WRITE` macro in `isviewer.c` enforces
+  this; never bypass it for cart-bus writes.
+- **`rp`/`wp` updates must be atomic from the firmware's POV.** SC64 reads
+  the pair every poll; if it ever sees `wp < rp` it interprets a wrap and
+  reads `BUFFER_SIZE - rp` bytes (~64KB of garbage) to USB. The protocol:
+  drain wait until `rp == wp`, park `rp = 0xFFFFFFFF` (firmware bails on
+  invalid `rp`), set `wp = 0`, write data at offset 0, restore `rp = 0`,
+  then set `wp = len` to trigger a single clean flush.
+- **Buffer the whole formatted string per `osSyncPrintf`, flush once.** Do
+  not let `_Printf`'s prout callback fire `ISViewer_Write` per chunk — each
+  chunk would race the SC64 and trigger wrap-around storms.
+- **The deployer needs explicit `stdout().flush()`** after each
+  `print_text`. Without it, short non-newline-terminated chunks sit in
+  Rust's stdout buffer until Ctrl+C. Patched in `qw-local` branch of the
+  user's SummerCart64 fork; rebuild with `cargo build --release` to refresh
+  `~/code/SummerCart64/sw/deployer/target/release/sc64deployer`.
+
+The static invariant `check_isviewer_sc64()` in `tools/practice_invariants.py`
+guards `MODS_ISVIEWER == 1`, the `IS64` token, and the `PI_WRITE` macro.
+
 ## Enemy scoring system
 
 | Path | What it does |
