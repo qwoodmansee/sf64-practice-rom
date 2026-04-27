@@ -173,7 +173,7 @@ FORBIDDEN_LIB_INCLUDES = [
 FORBIDDEN_LIB_INCLUDE_PATTERNS = [
     r"sf64\w*\.h",   # sf64audio.h, sf64level.h, sf64thread.h, etc.
     r"fox_\w*\.h",   # fox_game.h, fox_play.h, etc.
-    r"include/",     # any path-based include into project headers
+    r"include/[\w./_-]+",  # any include with explicit include/ path prefix
 ]
 
 def check_lib_isolation():
