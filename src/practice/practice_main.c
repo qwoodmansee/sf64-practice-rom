@@ -37,6 +37,8 @@ void Practice_Init(void) {
     gPracticeConfig.showSpawnItems = true;
     gPracticeConfig.showSpawnScenery = false;
     gPracticeConfig.expertMode = false;
+
+    osSyncPrintf("=== PRACTICE ROM boot @ %s %s ===\n", __DATE__, __TIME__);
 }
 
 void Practice_Update(void) {

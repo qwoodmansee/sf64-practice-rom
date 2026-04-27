@@ -132,6 +132,24 @@ def check_release_patch_workflow():
     if "baserom.us.rev1.z64" not in create_release or "build/starfox64.us.rev1.z64" not in create_release:
         error("create-release defaults must patch the US rev1 base ROM to the compressed practice ROM")
 
+def check_isviewer_sc64():
+    """IS-Viewer 64 must be enabled and use the SC64 protocol, not libdragon's emulator protocol.
+
+    SC64 firmware ignores buffers without the magic token 0x49533634 ("IS64") at offset 0,
+    so libdragon's 0x12345678 magic-check silently no-ops on real hardware. Each cart-bus
+    write must be followed by a dummy IO_READ to drain the SC64 write FIFO; without it
+    back-to-back writes get dropped after the first few.
+    """
+    mods = read("include/mods.h")
+    if not re.search(r"#define\s+MODS_ISVIEWER\s+1\b", mods):
+        error("MODS_ISVIEWER must be 1 to enable osSyncPrintf over IS-Viewer 64")
+
+    isv = read("src/mods/isviewer.c")
+    if "0x49533634" not in isv:
+        error("isviewer.c must use SC64 token 0x49533634 ('IS64') at base+0; libdragon's 0x12345678 is silently dropped on hardware")
+    if "PI_WRITE" not in isv:
+        error("isviewer.c must use a PI_WRITE macro that flushes via IO_READ; back-to-back writes to SC64 cart space get dropped")
+
 def check_spawn_zone_typing():
     """Spawn zone draw loop must classify entries by type and respect per-type toggles."""
     hitbox = read("src/practice/practice_hitbox.c")
@@ -149,6 +167,7 @@ def main():
     check_source_in_build()
     check_engine_hooks()
     check_cutscene_skip_hook()
+    check_isviewer_sc64()
     check_spawn_zone_typing()
     check_release_patch_workflow()
 

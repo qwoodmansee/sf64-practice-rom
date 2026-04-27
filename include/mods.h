@@ -74,8 +74,9 @@
 /**
  * IS Viewer:
  * Allows to use osSyncPrintf to print debug messages to the console on emulators that support it.
+ * SC64 hardware: run `sc64deployer debug --isv 0x03FF0000` to capture output.
  */
-#define MODS_ISVIEWER 0
+#define MODS_ISVIEWER 1
 
 /* ************************* */
 
