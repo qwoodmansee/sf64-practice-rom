@@ -161,6 +161,70 @@ def check_spawn_zone_typing():
         if field not in hitbox:
             error(f"Hitbox_DrawSpawnZones must respect gPracticeConfig.{field}")
 
+LIB_DIR = "lib"
+
+# Headers/paths that lib/ code must NOT include (it must stay portable).
+FORBIDDEN_LIB_INCLUDES = [
+    "global.h",
+    "practice.h",
+    "variables.h",
+    # Family patterns checked separately below.
+]
+FORBIDDEN_LIB_INCLUDE_PATTERNS = [
+    r"sf64\w*\.h",   # sf64audio.h, sf64level.h, sf64thread.h, etc.
+    r"fox_\w*\.h",   # fox_game.h, fox_play.h, etc.
+    r"include/",     # any path-based include into project headers
+]
+
+def check_lib_isolation():
+    """lib/ code must not include game/decomp headers."""
+    if not os.path.isdir(LIB_DIR):
+        return  # lib/ doesn't exist yet — nothing to check
+    for root, _dirs, files in os.walk(LIB_DIR):
+        for fname in files:
+            if not fname.endswith((".c", ".h")):
+                continue
+            path = os.path.join(root, fname)
+            src = read(path)
+            for inc in FORBIDDEN_LIB_INCLUDES:
+                if re.search(rf'#include\s*[<"]{re.escape(inc)}[>"]', src):
+                    error(f"{path}: lib/ may not include game header '{inc}'")
+            for pat in FORBIDDEN_LIB_INCLUDE_PATTERNS:
+                if re.search(rf'#include\s*[<"]{pat}[>"]', src):
+                    error(f"{path}: lib/ may not include game header matching /{pat}/")
+
+# Files allowed to include libultra headers (PI/cart-bus access).
+LIBULTRA_ALLOWED = [
+    "lib/iodev/iodev_sc64.c",
+    "lib/iodev/iodev_ed64.c",  # Phase 1b
+    "lib/lib_types.h",         # toolchain shim — bridges <stdint.h> ↔ PR/ultratypes.h
+]
+LIBULTRA_INCLUDE_PATTERNS = [
+    r"PR/[\w/]+\.h",
+    r"ultra64\.h",
+    r"libultra/[\w/]+\.h",
+]
+
+def check_lib_libultra_scope():
+    """lib/ files outside the iodev backends must build host-portable.
+
+    Forbid libultra includes everywhere except the explicit allowlist,
+    so unit tests can build with native gcc.
+    """
+    if not os.path.isdir(LIB_DIR):
+        return
+    for root, _dirs, files in os.walk(LIB_DIR):
+        for fname in files:
+            if not fname.endswith((".c", ".h")):
+                continue
+            path = os.path.join(root, fname)
+            if path in LIBULTRA_ALLOWED:
+                continue
+            src = read(path)
+            for pat in LIBULTRA_INCLUDE_PATTERNS:
+                if re.search(rf'#include\s*[<"]{pat}[>"]', src):
+                    error(f"{path}: only iodev backends and lib_types.h may include libultra (matched /{pat}/)")
+
 def main():
     check_config_inits()
     check_function_definitions()
@@ -170,6 +234,8 @@ def main():
     check_isviewer_sc64()
     check_spawn_zone_typing()
     check_release_patch_workflow()
+    check_lib_isolation()
+    check_lib_libultra_scope()
 
     if errors:
         print("Practice ROM invariant check FAILED:")
