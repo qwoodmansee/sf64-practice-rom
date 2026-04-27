@@ -33,7 +33,7 @@ Non-gameplay states are **explicitly excluded** from save state targets; the men
 - `LEVEL_VERSUS`, `LEVEL_TRAINING`, and `LEVEL_WARP_ZONE` are gameplay-adjacent but excluded as save targets (out of scope).
 - `LEVEL_UNK_4` (`include/sf64level.h:90`) and `LEVEL_UNK_15` (line 101) are decomp placeholders for unused content; **excluded** until/unless they're given a real meaning.
 
-The full saveable LevelId set is the 18 enum values that appear as save targets in `practice_level.c`'s level list (CORNERIA, METEO, SECTOR_X, AREA_6, SECTOR_Y, VENOM_1, SOLAR, ZONESS, VENOM_ANDROSS, MACBETH, TITANIA, AQUAS, FORTUNA, KATINA, BOLSE, SECTOR_Z, VENOM_2). The exclusion list is everything else in the `LevelId` enum.
+The full saveable LevelId set is the 17 enum values that appear as save targets in `practice_level.c`'s level list (CORNERIA, METEO, SECTOR_X, AREA_6, SECTOR_Y, VENOM_1, SOLAR, ZONESS, VENOM_ANDROSS, MACBETH, TITANIA, AQUAS, FORTUNA, KATINA, BOLSE, SECTOR_Z, VENOM_2). The exclusion list is everything else in the `LevelId` enum.
 
 ## Architecture
 
