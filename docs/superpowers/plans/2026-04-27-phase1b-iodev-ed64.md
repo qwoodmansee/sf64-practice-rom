@@ -59,9 +59,9 @@ What's still unproven without hardware: ED64 register-access timing, FPGA shift-
 
 **Modified files:**
 - `lib/iodev/iodev.c` — bump `candidates[]` array from `[1]` to `[2]`, add `candidates[1] = iodev_backend_ed64();`.
-- `tools/patch_linker_script.py` — add `iodev_ed64`, `iodev_diag` to `LIB_IODEV_OBJS`. Extend three-state patcher to handle "Phase-1a-patched, Phase-1b-not-yet" (anchors on `iodev_sc64.o`).
-- `tools/practice_invariants.py` — add `check_iodev_ed64()` analogous to `check_iodev_sc64()`. `lib/iodev/iodev_ed64.c` is already in `LIBULTRA_ALLOWED` (Phase 1a). Add `lib/sd_crc.c` and `lib/sd_crc.h` are NOT on libultra-allowlist (they're host-portable).
-- `Makefile` — add `lib-test` target.
+- `tools/patch_linker_script.py` — replace the per-state `if/elif` ladder with a single "compute missing entries from the expected `LIB_IODEV_OBJS` list, inject each anchored on its predecessor" pass. Adds `iodev_ed64` and `iodev_diag` to the list. See Task 1 Step 4 for the refactor.
+- `tools/practice_invariants.py` — add `check_iodev_ed64()` analogous to `check_iodev_sc64()`. `lib/iodev/iodev_ed64.c` is already in `LIBULTRA_ALLOWED` (Phase 1a). `lib/iodev/iodev_diag.c` joins the allowlist (it's the first lib/ file to log via `osSyncPrintf`). `lib/sd_crc.{c,h}` stay off the libultra allowlist (they're host-portable).
+- `Makefile` — add `lib-test` target. **Crucial:** also exclude `lib/test/` from the practice ROM's `SRC_DIRS` so host-only test files don't get compiled with IDO. See Task 2 Step 4.
 
 **Not touched:**
 - `lib/iodev/iodev.h` — public API unchanged.
@@ -150,9 +150,11 @@ candidates[1] = iodev_backend_ed64();
 
 Both lines matter — leaving the array size at `[1]` while writing to `candidates[1]` is undefined behavior.
 
-- [ ] **Step 4: Add `iodev_ed64` to the linker patcher**
+- [ ] **Step 4: Refactor the linker patcher to compute missing entries dynamically**
 
-In `tools/patch_linker_script.py`, extend `LIB_IODEV_OBJS`. **Order matters — `iodev_ed64` must come BEFORE `iodev_stub`:**
+The current patcher has a hand-rolled per-state if/elif ladder. Adding `iodev_ed64` (this task) and `iodev_diag` (Task 6) on top of that ladder would push it to 5 states — and Phase 2+ will keep adding more lib files. Refactor now to a single algorithm: walk through the expected `LIB_IODEV_OBJS` in order; for each entry, if its `.o` line is missing from a section, inject it after whatever predecessor entry IS present in that section.
+
+Update `LIB_IODEV_OBJS` (order matters — predecessor entries must precede in the list):
 
 ```python
 LIB_IODEV_OBJS = [
@@ -163,16 +165,7 @@ LIB_IODEV_OBJS = [
 ]
 ```
 
-Extend the patcher to handle the "Phase-1a-patched, Phase-1b-not-yet" intermediate state. Four states total:
-
-| State | Detection | Action |
-|-------|-----------|--------|
-| Fully unpatched | no `practice_main` | Inject practice + lib lines after `fox_save.o` anchor |
-| Practice patched, lib unpatched | `practice_main` present, `iodev.o` missing | Inject lib lines after `practice_freecam.o` anchor |
-| Phase-1a patched, ed64 missing (NEW) | `practice_main` + `iodev.o` present, `iodev_ed64.o` missing | Inject `build/lib/iodev/iodev_ed64.o(...)` lines anchored on `build/lib/iodev/iodev_sc64.o(...)` (between sc64 and stub) |
-| Fully patched | `practice_main` + `iodev_ed64.o` present | No-op |
-
-Patcher revision sketch:
+Replace the `patch()` function body with a single dynamic algorithm. Sketch:
 
 ```python
 def patch():
@@ -180,29 +173,53 @@ def patch():
         content = f.read()
 
     has_practice = "practice_main" in content
-    has_iodev = "iodev.o" in content
-    has_ed64 = "iodev_ed64.o" in content
 
-    if has_practice and has_iodev and has_ed64:
-        print("Linker script already patched (practice + full lib/iodev), skipping.")
+    if not has_practice:
+        # Fully unpatched: inject the full practice block + lib block after fox_save.o.
+        # (Existing logic; preserve.)
+        for section in [".text", ".data", ".rodata", ".bss"]:
+            anchor_line = f"{ANCHOR}({section});"
+            practice_block = "\n".join(
+                f"        build/src/practice/{obj}.o({section});" for obj in PRACTICE_OBJS)
+            lib_block = "\n".join(
+                f"        build/lib/iodev/{obj}.o({section});" for obj in LIB_IODEV_OBJS)
+            injection = practice_block + "\n" + lib_block
+            content = _replace_after_anchor(content, anchor_line, injection)
+        with open(LINKER_SCRIPT, "w") as f:
+            f.write(content)
+        print(f"Patched {LINKER_SCRIPT}: practice + lib/iodev (full).")
         return
 
-    for section in [".text", ".data", ".rodata", ".bss"]:
-        if not has_practice:
-            # Existing: inject practice + all lib lines.
-            ...
-        elif not has_iodev:
-            # Existing: inject all lib lines anchored on practice_freecam.
-            ...
+    # Practice already patched. Walk LIB_IODEV_OBJS and inject any missing entries.
+    # First entry's predecessor is the last practice obj; subsequent entries anchor
+    # on the previous entry in LIB_IODEV_OBJS.
+    last_practice_obj = PRACTICE_OBJS[-1]
+    inject_count = 0
+    for i, obj in enumerate(LIB_IODEV_OBJS):
+        if f"build/lib/iodev/{obj}.o" in content:
+            continue  # Already present
+        if i == 0:
+            predecessor = f"build/src/practice/{last_practice_obj}"
         else:
-            # NEW: Phase 1a iodev injected, Phase 1b ed64 missing.
-            anchor_line = f"build/lib/iodev/iodev_sc64.o({section});"
-            injection = f"        build/lib/iodev/iodev_ed64.o({section});"
+            predecessor = f"build/lib/iodev/{LIB_IODEV_OBJS[i-1]}"
+        for section in [".text", ".data", ".rodata", ".bss"]:
+            anchor_line = f"{predecessor}.o({section});"
+            injection = f"        build/lib/iodev/{obj}.o({section});"
             content = _replace_after_anchor(content, anchor_line, injection)
-    ...
+        inject_count += 1
+
+    if inject_count == 0:
+        print("Linker script already fully patched, skipping.")
+        return
+
+    with open(LINKER_SCRIPT, "w") as f:
+        f.write(content)
+    print(f"Patched {LINKER_SCRIPT}: injected {inject_count} lib/iodev entries.")
 ```
 
-`_replace_after_anchor` (from Phase 1a's `ee5bb05`) raises `RuntimeError` if the anchor isn't found.
+This algorithm is N-state agnostic — adding more entries to `LIB_IODEV_OBJS` (Phase 1b's `iodev_diag`, Phase 2's FatFs files, etc.) requires zero patcher changes. Just append to the list.
+
+`_replace_after_anchor` (from Phase 1a's `ee5bb05`) raises `RuntimeError` if the anchor isn't found, which becomes the early-warning when an entry's predecessor doesn't yet exist in the script (e.g., someone bypassed the patcher).
 
 Verify:
 
@@ -211,7 +228,7 @@ python3 tools/patch_linker_script.py
 grep "iodev" linker_scripts/us/rev1/starfox64.ld
 ```
 
-Expected: in each section, `iodev.o` → `iodev_sc64.o` → **`iodev_ed64.o`** → `iodev_stub.o`. 16 lines total.
+Expected: in each section, `iodev.o` → `iodev_sc64.o` → **`iodev_ed64.o`** → `iodev_stub.o`. 16 lines total. Running the patcher again is a no-op ("already fully patched").
 
 - [ ] **Step 5: Build & verify**
 
@@ -389,11 +406,53 @@ int main(void) {
         ASSERT_EQ(sd_crc16_ccitt(classic, 9), 0x31C3, "CRC16 \"123456789\" -> 0x31C3");
     }
 
-    /* CRC16 4-bit wide bus: at minimum, all-zeros across all 4 lines is 0. */
+    /* CRC16 4-bit wide bus: zeros is trivially 0 for any bit ordering, so
+     * exercise an asymmetric pattern too — it's the only way to actually
+     * catch a wrong bit-distribution to DAT lines. */
     {
         uint8_t zeros[512];
         memset(zeros, 0, sizeof(zeros));
         ASSERT_EQ(sd_crc16_4bit(zeros, sizeof(zeros)), 0ULL, "CRC16 4-bit zeros -> 0");
+
+        /* Asymmetric pattern: every byte is 0xF0 (high nibble all-1, low all-0).
+         * After SD's wide-bus serialization (high nibble first; bit n -> DAT n):
+         *   - DAT3 line sees: "1010101..." (alternating from high nibble bit 3 = 1, low = 0)
+         *   - DAT2 line: "1010..."
+         *   - DAT1 line: "1010..."
+         *   - DAT0 line: "1010..."
+         * All four lines see the same bit stream, so all four CRCs equal.
+         * Any misordering of high/low nibble or DAT-line indexing breaks this
+         * symmetry and produces a different packed result.
+         *
+         * Compute the expected value with an external reference (Python's
+         * crcmod, Linux kernel lib/crc-ccitt.c, online calculator) and place
+         * it here. If you don't have one handy at implementation time:
+         *   - Run the implementation, capture the output as the "actual" value.
+         *   - Independently compute via Python:
+         *       import crcmod
+         *       fn = crcmod.predefined.mkCrcFun('xmodem')   # CRC16-CCITT init=0
+         *       bits = '10' * (256*4)  # 256 bytes * 4 nibbles/byte * 2 bits/line per nibble pair... wait, derive carefully
+         *   - If the values don't match, the implementation has a bit-order bug.
+         *
+         * For now, the test asserts that the four lines are equal (a weaker
+         * but useful property). Replace this with a known-good vector before
+         * shipping the diagnostic ROM. */
+        uint8_t pat[512];
+        for (size_t i = 0; i < 512; i++) pat[i] = 0xF0;
+        uint64_t crc = sd_crc16_4bit(pat, sizeof(pat));
+        uint16_t l0 = (uint16_t)(crc >>  0);
+        uint16_t l1 = (uint16_t)(crc >> 16);
+        uint16_t l2 = (uint16_t)(crc >> 32);
+        uint16_t l3 = (uint16_t)(crc >> 48);
+        if (!(l0 == l1 && l1 == l2 && l2 == l3)) {
+            printf("FAIL: CRC16 4-bit pattern 0xF0: lines not equal "
+                   "(l0=%04X l1=%04X l2=%04X l3=%04X) — bit-order bug\n",
+                   l0, l1, l2, l3);
+            failures++;
+        } else {
+            printf("PASS: CRC16 4-bit pattern 0xF0: all 4 lines equal (=%04X)\n", l0);
+        }
+        /* TODO: replace the above with a known-good external-reference value. */
     }
 
     if (failures > 0) {
@@ -407,7 +466,23 @@ int main(void) {
 
 NOTE on the `0x7FA1` and `0x31C3` test vectors: these are independent reference values. If the implementer's reference has different known-good outputs, use those instead — what matters is that **the test catches a regression in the CRC code** by checking against an external reference.
 
-- [ ] **Step 4: Create `lib/test/Makefile`**
+- [ ] **Step 4: Create `lib/test/Makefile` AND exclude `lib/test/` from the practice ROM build**
+
+**Critical setup issue:** the top-level Makefile at line 306 currently does:
+
+```makefile
+SRC_DIRS := $(shell find src -type d) $(shell find lib -type d 2>/dev/null)
+```
+
+This means `lib/test/` (created by this task) gets picked up as a SRC_DIR for the practice ROM build, and `lib/test/test_sd_crc.c` gets compiled with IDO into a MIPS object — which fails because the test file uses `<stdio.h>` and `printf` (host C library, not available under `-nostdinc`). **This breaks `make practice` the moment Task 2 lands.**
+
+Fix: change line 306 of the top-level Makefile to exclude the test directory:
+
+```makefile
+SRC_DIRS := $(shell find src -type d) $(shell find lib -type d -not -path 'lib/test*' 2>/dev/null)
+```
+
+Then create `lib/test/Makefile`:
 
 ```makefile
 # Host gcc test runner for lib/ unit tests.
@@ -440,14 +515,22 @@ clean:
 
 - [ ] **Step 5: Add `lib-test` target to top-level `Makefile`**
 
-Add near the other `.PHONY` declarations and the `practice` target:
+Add near the existing `practice` target:
 
 ```makefile
 lib-test:
 	@$(MAKE) -C lib/test run-all
-
-.PHONY: ... lib-test
 ```
+
+And add `lib-test` to the `.PHONY` line (around Makefile line 586) alongside the existing phony targets.
+
+Verify the SRC_DIRS exclusion works:
+
+```bash
+make practice -j4    # Must build clean — lib/test/test_sd_crc.c must NOT be compiled
+```
+
+If you see compile errors mentioning `lib/test/test_sd_crc.c` in the practice build, the SRC_DIRS exclusion didn't take effect. The `-not -path 'lib/test*'` predicate must be in the right place inside the `find` invocation.
 
 - [ ] **Step 6: Run unit tests**
 
@@ -703,13 +786,38 @@ void iodev_diag_run(void);
 
 Empty translation unit unless `IODEV_DIAG` is defined.
 
+**Critical safety note:** the diagnostic ROM writes to the SD card. Sector 0 (MBR) is read-only in the diag suite, but the round-trip test (T4) writes a test sector. The plan's previous draft used LBA `0x100000` (~512 MB into the card) and called it "well past any filesystem use" — that claim is **wrong**. On any non-empty FAT-formatted card, sector 0x100000 is in the data region and likely allocated to a real user file. The diagnostic ROM must NOT write there silently.
+
+The mitigation is two-layered:
+
+1. **Use the SD card's last sector as the write target.** Last sector is rarely allocated in normal use (FAT32's data region typically ends well before the physical end of the card). The diag code queries the card's capacity via CMD9 (`SEND_CSD`) at init time and computes `last_lba = capacity_blocks - 1`.
+2. **Document scratch-card requirement loudly in `HW_VERIFY_phase1b.md`.** The contact uses a freshly-formatted blank card for testing.
+
+Both. Belt and suspenders.
+
+The diag source includes the right libultra header (`PR/os_libc.h`, NOT `PR/xstdio.h` — `osSyncPrintf` is declared in `os_libc.h:91`).
+
 ```c
 #include "iodev_diag.h"
 
 #ifdef IODEV_DIAG
 
-#include "PR/xstdio.h"  /* osSyncPrintf */
+#include "PR/os_libc.h"  /* osSyncPrintf */
 #include "iodev.h"
+
+/* Card capacity in 512-byte blocks. Computed in iodev_diag_run after sd_init.
+ * Set to 0 if CMD9 / capacity probe fails — diag aborts in that case. */
+static uint32_t sDiagCapacityBlocks = 0;
+
+/* TODO during Task 6 implementation: implement diag_query_capacity() that
+ * issues CMD9 (SEND_CSD), parses the CSD response (v1 or v2), and returns
+ * total block count. The CSD parse is non-trivial but well-documented in
+ * the SD spec §5.3. Sets sDiagCapacityBlocks on success, 0 on failure.
+ *
+ * If implementing capacity probe is too time-expensive, fall back to a
+ * hardcoded "test_lba" defined at compile time, with a HUGE warning in
+ * HW_VERIFY_phase1b.md that the user MUST use a scratch card. */
+static iodev_result_t diag_query_capacity(void);
 
 /* The diagnostic suite. Called once from Practice_Init when IODEV_DIAG=1. */
 void iodev_diag_run(void) {
@@ -718,10 +826,12 @@ void iodev_diag_run(void) {
     static unsigned char sec0[512] __attribute__((aligned(8)));
     static unsigned char wbuf[512] __attribute__((aligned(8)));
     static unsigned char rbuf[512] __attribute__((aligned(8)));
+    uint32_t test_lba;
     int i;
     int match;
 
     osSyncPrintf("\n[diag] === Phase 1b iodev hardware verification ===\n");
+    osSyncPrintf("[diag] WARNING: this ROM writes to the SD card. Use a SCRATCH CARD.\n");
 
     /* Test 1: cart detection */
     cart = iodev_detect();
@@ -740,6 +850,20 @@ void iodev_diag_run(void) {
         return;
     }
 
+    /* Capacity probe — required to compute a safe write target. */
+    res = diag_query_capacity();
+    osSyncPrintf("[diag] capacity_probe=%d capacity_blocks=%u\n",
+                 (int)res, (unsigned)sDiagCapacityBlocks);
+    if (res != IODEV_OK || sDiagCapacityBlocks < 2) {
+        osSyncPrintf("[diag] FAIL: cannot determine card capacity, refusing to write\n");
+        osSyncPrintf("[diag] (T3 read tests will run; T4-T6 write tests skipped)\n");
+        test_lba = 0;
+    } else {
+        /* Use the very last sector. Almost never allocated in FAT32. */
+        test_lba = sDiagCapacityBlocks - 1;
+    }
+    osSyncPrintf("[diag] write_test_lba=0x%X\n", (unsigned)test_lba);
+
     /* Test 3: read sector 0 (MBR), check 0x55AA signature at offset 0x1FE */
     res = iodev_sd_read_sectors(0, 1, sec0);
     osSyncPrintf("[diag] T3 read_sec0=%d  signature=%02X%02X (expect 55AA)\n",
@@ -747,22 +871,30 @@ void iodev_diag_run(void) {
     osSyncPrintf("[diag] T3 sec0 bytes 0..15: ");
     for (i = 0; i < 16; i++) osSyncPrintf("%02X ", (unsigned)sec0[i]);
     osSyncPrintf("\n");
-    if (res != IODEV_OK || sec0[510] != 0x55 || sec0[511] != 0xAA) {
-        osSyncPrintf("[diag] FAIL T3: read failed or MBR signature mismatch\n");
+    if (res != IODEV_OK) {
+        osSyncPrintf("[diag] FAIL T3: read failed\n");
+        return;
+    }
+    /* MBR signature check is a soft fail — some cards aren't FAT-formatted. */
+    if (sec0[510] != 0x55 || sec0[511] != 0xAA) {
+        osSyncPrintf("[diag] WARN T3: MBR signature missing (card may not be FAT-formatted)\n");
+    }
+
+    if (test_lba == 0) {
+        osSyncPrintf("[diag] === SKIPPED T4-T6 (no capacity) ===\n");
         return;
     }
 
-    /* Test 4: write/read round-trip on a safe sector (LBA 0x100000 = 512MB into card).
-     * NOT sector 0; we don't want to corrupt anyone's MBR. */
+    /* Test 4: write/read round-trip on the LAST sector of the card. */
     for (i = 0; i < 512; i++) wbuf[i] = (unsigned char)(i ^ 0x5A);
-    res = iodev_sd_write_sectors(0x100000, 1, wbuf);
+    res = iodev_sd_write_sectors(test_lba, 1, wbuf);
     osSyncPrintf("[diag] T4 write_sec=%d\n", (int)res);
     if (res != IODEV_OK) {
         osSyncPrintf("[diag] FAIL T4: write failed\n");
         return;
     }
     for (i = 0; i < 512; i++) rbuf[i] = 0;
-    res = iodev_sd_read_sectors(0x100000, 1, rbuf);
+    res = iodev_sd_read_sectors(test_lba, 1, rbuf);
     osSyncPrintf("[diag] T4 read_back=%d\n", (int)res);
     if (res != IODEV_OK) {
         osSyncPrintf("[diag] FAIL T4: read-back failed\n");
@@ -777,12 +909,12 @@ void iodev_diag_run(void) {
         return;
     }
 
-    /* Test 5: count > 128 must reject (alignment + cap guard) */
-    res = iodev_sd_read_sectors(0x100000, 200, rbuf);
+    /* Test 5: count > 128 must reject (cap guard) */
+    res = iodev_sd_read_sectors(test_lba, 200, rbuf);
     osSyncPrintf("[diag] T5 cap_check=%d (expect -5=ERR_PARAM)\n", (int)res);
 
-    /* Test 6: misaligned buffer must reject */
-    res = iodev_sd_read_sectors(0x100000, 1, (void *)((unsigned char *)rbuf + 1));
+    /* Test 6: misaligned buffer must reject (alignment guard) */
+    res = iodev_sd_read_sectors(test_lba, 1, (void *)((unsigned char *)rbuf + 1));
     osSyncPrintf("[diag] T6 align_check=%d (expect -5=ERR_PARAM)\n", (int)res);
 
     osSyncPrintf("[diag] === ALL TESTS PASS ===\n");
@@ -795,7 +927,9 @@ void iodev_diag_run(void) { /* no-op */ }
 #endif
 ```
 
-NOTE: `iodev_diag.c` includes `PR/xstdio.h` for `osSyncPrintf`. That's a libultra include and `iodev_diag.c` is NOT on the libultra-allowlist by default. Add it to `LIBULTRA_ALLOWED` in `tools/practice_invariants.py` as part of this task (one line). Document in the static invariant's comment that diag is a hardware-test artifact, not normal lib/ code.
+The `diag_query_capacity()` helper is a real implementation task. CMD9 (`SEND_CSD`) returns the Card-Specific Data structure; SD spec §5.3 describes the fields. CSD v1 (legacy SDSC) and v2 (SDHC) have different layouts — both encode capacity as `(C_SIZE + 1) * 2^C_SIZE_MULT * 2^READ_BL_LEN` bytes (v1) or `(C_SIZE + 1) * 512 KB` (v2). Implementer should add the helper alongside `ed64_sd_init` in `iodev_ed64.c` (since CMD9 is an ED64-specific operation) and expose it via a small accessor `iodev_get_capacity_blocks(uint32_t *out)` that the diag code calls. Or (simpler): just add CMD9 + capacity computation as a private helper in `iodev_diag.c` that issues raw SD commands via the iodev backend's primitives. Whichever is cleaner.
+
+NOTE: `iodev_diag.c` includes `PR/os_libc.h` (where `osSyncPrintf` is declared per `include/PR/os_libc.h:91`). It's a libultra include and `iodev_diag.c` is NOT on the libultra-allowlist by default. Add it to `LIBULTRA_ALLOWED` in `tools/practice_invariants.py` as part of this task. Document in a comment that diag is a hardware-test artifact, not normal lib/ code.
 
 - [ ] **Step 3: Wire `iodev_diag_run()` into `Practice_Init`**
 
@@ -894,9 +1028,11 @@ def check_iodev_ed64():
     if "PI_WRITE_FLUSH" not in src:
         error(f"{path}: must use PI_WRITE_FLUSH macro for cart-bus writes")
 
-    # Cart unlock magic — hardware fact; if removed, cart is inaccessible.
-    if "ED64_KEY" not in src:
-        error(f"{path}: must define ED64_KEY constants (cart unlock sequence)")
+    # Cart unlock sequence — hardware fact; if removed, cart is inaccessible.
+    # Match the literal magic values rather than any specific constant name,
+    # so the implementer is free to name them ED64_UNLOCK_KEY_1 / KEY_A / etc.
+    if "0xAA55" not in src or "0x55AA" not in src:
+        error(f"{path}: must use the cart-unlock magic sequence (0xAA55 + 0x55AA)")
 
     # 128-sector cap matches SC64's; consistent caller contract.
     if src.count("count > 128") < 2:
@@ -923,6 +1059,7 @@ Negative tests (each: edit, run, confirm fails, revert):
 - Comment out `PI_WRITE_FLUSH` macro definition → must fail
 - Remove `#include "sd_crc.h"` → must fail
 - Change `count > 128` to `count > 256` in one path → must fail
+- Change one `0xAA55` literal to `0xBA55` → must fail (cart-unlock magic check)
 
 - [ ] **Step 3: Create `docs/superpowers/plans/HW_VERIFY_phase1b.md`**
 
@@ -933,10 +1070,18 @@ Mirror the structure of `HW_VERIFY_phase1a.md` but center on the diagnostic ROM.
 
 ## Time required: ~10 minutes
 
+## ⚠ READ FIRST: SD card requirement
+
+**This ROM writes to the SD card. Use a SCRATCH CARD that you don't care about.**
+
+The diagnostic ROM writes one sector to the card during the round-trip test (T4). It targets the LAST sector of the card (computed from CMD9/CSD), which is rarely allocated in normal use, AND it logs the target LBA before writing — so if anything looks wrong, you can power off before the write happens. But it's still a real write to a real SD card. **Use a card with no important data.** A spare freshly-formatted FAT32 card is ideal.
+
+If you only have your normal card, **stop here** and respond that you need a scratch card. Don't run the ROM.
+
 ## What you'll need
 
 - EverDrive 64 X7 or X8 cart
-- An SD card (any size; class doesn't matter)
+- A SCRATCH SD card (see warning above — any size, class doesn't matter, but the data on it will be destroyed in one sector)
 - A way to capture serial / IS-Viewer output from the cart
   (UNFLoader, ED64-specific debug tooling, or analogous)
 
