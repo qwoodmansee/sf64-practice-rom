@@ -240,7 +240,7 @@ COMPTOOL_DIR	:= baserom
 MIO0			:= $(TOOLS)/mio0
 
 
-IINC := -Iinclude -Ibin/$(VERSION).$(REV) -I.
+IINC := -Iinclude -Ilib -Ibin/$(VERSION).$(REV) -I.
 IINC += -Ilib/ultralib/include -Ilib/ultralib/include/PR -Ilib/ultralib/include/ido
 
 ifeq ($(KEEP_MDEBUG),0)
@@ -303,7 +303,7 @@ endif
 
 $(shell mkdir -p asm bin linker_scripts/$(VERSION)/$(REV)/auto)
 
-SRC_DIRS      := $(shell find src -type d)
+SRC_DIRS      := $(shell find src -type d) $(shell find lib -type d 2>/dev/null)
 # Temporary, until we decide how we're gonna handle other versions
 ifeq ($(VERSION), jp)
 SRC_DIRS      := $(shell find srcjp -type d)
