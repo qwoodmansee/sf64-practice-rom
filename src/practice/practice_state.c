@@ -290,16 +290,6 @@ void Practice_StateMenu_Update(void) {
     s32 optCount = StateMenu_GetOptionCount();
 
     if (press->button & B_BUTTON) {
-        if (sActiveSubMenu == PSUBMENU_STATS) {
-            sActiveSubMenu = PSUBMENU_DISPLAY;
-            sSelectedOption = DOPT_STATS_MENU;
-            return;
-        }
-        if (sActiveSubMenu == PSUBMENU_VISUALIZERS) {
-            sActiveSubMenu = PSUBMENU_DISPLAY;
-            sSelectedOption = DOPT_VIS_MENU;
-            return;
-        }
         Practice_StateMenu_Close();
         return;
     }
@@ -337,13 +327,11 @@ void Practice_StateMenu_Update(void) {
             return;
         }
         if (sActiveSubMenu == PSUBMENU_STATS && sSelectedOption == SOPT_BACK) {
-            sActiveSubMenu = PSUBMENU_DISPLAY;
-            sSelectedOption = DOPT_STATS_MENU;
+            Practice_StateMenu_Close();
             return;
         }
         if (sActiveSubMenu == PSUBMENU_VISUALIZERS && sSelectedOption == VOPT_BACK) {
-            sActiveSubMenu = PSUBMENU_DISPLAY;
-            sSelectedOption = DOPT_VIS_MENU;
+            Practice_StateMenu_Close();
             return;
         }
     }

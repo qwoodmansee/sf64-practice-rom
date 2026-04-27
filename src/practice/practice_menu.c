@@ -2,21 +2,12 @@
 
 #ifdef PRACTICE_ROM
 
-#define RADIAL_DEAD_ZONE 20
-#define RADIAL_CENTER_X 160
-#define RADIAL_CENTER_Y 115
-
-typedef enum RadialSlice {
-    RSLICE_NONE = -1,
-    RSLICE_RESTART,
-    RSLICE_SAVE,
-    RSLICE_LOAD,
-    RSLICE_LEVELS,
-    RSLICE_LOADOUT,
-    RSLICE_DISPLAY,
-    RSLICE_CAMERA,
-    RSLICE_MAX,
-} RadialSlice;
+#define RADIAL_DEAD_ZONE  20
+#define RADIAL_CENTER_X  160
+#define RADIAL_CENTER_Y  115
+#define RADIAL_STACK_MAX   4
+#define START_HOLD_FRAMES 45
+#define SLICE_NONE        (-1)
 
 typedef struct RadialEntry {
     const char* label;
@@ -29,29 +20,116 @@ typedef struct RadialEntry {
     u8 panelB;
 } RadialEntry;
 
-static RadialEntry sRadialEntries[RSLICE_MAX] = {
-    { "RESTART",  "RESTART LEVEL",     132, 52,  7,  180, 60,  60  },
-    { "SAVE",     "SAVE POSITION",     214, 74,  4,  60,  140, 180 },
-    { "LOAD",     "LOAD POSITION",     214, 152, 4,  60,  180, 100 },
-    { "LEVELS",   "LEVEL SELECT",      136, 178, 6,  180, 140, 60  },
-    { "LOADOUT",  "LOADOUT...",         68, 148, 10, 140, 60,  180 },
-    { "DISPLAY",  "DISPLAY...",         68, 82,  10, 60,  160, 160 },
-    { "CAMERA",   "FREE CAMERA",       222, 108, 6,  60,  200, 200 },
+typedef struct RadialMenuDef {
+    const RadialEntry* entries;
+    s32 count;
+    s32 (*getSlice)(s8 sx, s8 sy);
+} RadialMenuDef;
+
+// ── Root radial ───────────────────────────────────────────────────────────────
+
+typedef enum RootSlice {
+    RSLICE_RESTART,
+    RSLICE_SAVE,
+    RSLICE_LOAD,
+    RSLICE_LEVELS,
+    RSLICE_LOADOUT,
+    RSLICE_DISPLAY,
+    RSLICE_CAMERA,
+    RSLICE_MAX,
+} RootSlice;
+
+static const RadialEntry sRootEntries[RSLICE_MAX] = {
+    { "RESTART", "RESTART LEVEL",  132, 52,  7,  180, 60,  60  },
+    { "SAVE",    "SAVE POSITION",  214, 74,  4,  60,  140, 180 },
+    { "LOAD",    "LOAD POSITION",  214, 152, 4,  60,  180, 100 },
+    { "LEVELS",  "LEVEL SELECT",   136, 178, 6,  180, 140, 60  },
+    { "LOADOUT", "LOADOUT...",      68, 148, 10, 140, 60,  180 },
+    { "DISPLAY", "DISPLAY...",      68, 82,  10, 60,  160, 160 },
+    { "CAMERA",  "FREE CAMERA",    222, 108, 6,  60,  200, 200 },
 };
 
-static RadialSlice sHoveredSlice = RSLICE_NONE;
+static s32 Root_GetSlice(s8 stickX, s8 stickY) {
+    s32 x = stickX;
+    s32 y = stickY;
+    s32 ax = (x < 0) ? -x : x;
+    s32 ay = (y < 0) ? -y : y;
+
+    if ((ax < RADIAL_DEAD_ZONE) && (ay < RADIAL_DEAD_ZONE)) {
+        return SLICE_NONE;
+    }
+    if ((ay * 100) > (ax * 173)) {
+        return y > 0 ? RSLICE_RESTART : RSLICE_LEVELS;
+    }
+    if (x > 0) {
+        if ((ay * 100) < (ax * 58)) {
+            return RSLICE_CAMERA;
+        }
+        return y > 0 ? RSLICE_SAVE : RSLICE_LOAD;
+    }
+    return y > 0 ? RSLICE_DISPLAY : RSLICE_LOADOUT;
+}
+
+// ── Display sub-radial ────────────────────────────────────────────────────────
+
+typedef enum DisplaySlice {
+    DSLICE_SKIP_CUTS,   // left
+    DSLICE_INPUTS,      // down
+    DSLICE_STATS,       // up
+    DSLICE_VISUALS,     // right
+    DSLICE_MAX,
+} DisplaySlice;
+
+static const RadialEntry sDisplayEntries[DSLICE_MAX] = {
+    { "SKIP CUTS", "SKIP CUTSCENES",   50, 108, 9, 60, 160, 160 },
+    { "INPUTS",    "INPUT DISPLAY",   136, 175, 6, 60, 160, 160 },
+    { "STATS",     "STATS OVERLAY...", 140, 55, 5, 60, 160, 160 },
+    { "VISUALS",   "VISUALIZERS...",   212, 108, 7, 60, 160, 160 },
+};
+
+static s32 Display_GetSlice(s8 stickX, s8 stickY) {
+    s32 x = stickX;
+    s32 y = stickY;
+    s32 ax = (x < 0) ? -x : x;
+    s32 ay = (y < 0) ? -y : y;
+
+    if ((ax < RADIAL_DEAD_ZONE) && (ay < RADIAL_DEAD_ZONE)) {
+        return SLICE_NONE;
+    }
+    if (ax > ay) {
+        return x > 0 ? DSLICE_VISUALS : DSLICE_SKIP_CUTS;
+    }
+    return y > 0 ? DSLICE_STATS : DSLICE_INPUTS;
+}
+
+// ── Menu stack ────────────────────────────────────────────────────────────────
+
+static const RadialMenuDef sMenuDefs[] = {
+    { sRootEntries,    RSLICE_MAX, Root_GetSlice    },
+    { sDisplayEntries, DSLICE_MAX, Display_GetSlice },
+};
+
+static s32 sMenuDepth = 0;
+static s32 sHovered[RADIAL_STACK_MAX];
 static s32 sStartHoldTimer = 0;
-#define START_HOLD_FRAMES 45
 
 void Practice_Menu_Open(void) {
+    s32 i;
     gPracticeMenuState = PMENU_OPEN;
-    sHoveredSlice = RSLICE_NONE;
+    sMenuDepth = 0;
+    for (i = 0; i < RADIAL_STACK_MAX; i++) {
+        sHovered[i] = SLICE_NONE;
+    }
     sStartHoldTimer = 0;
 }
 
 void Practice_Menu_OpenFrozen(void) {
+    s32 i;
     gPracticeMenuState = PMENU_OPEN_FROZEN;
-    sHoveredSlice = RSLICE_NONE;
+    sMenuDepth = 0;
+    for (i = 0; i < RADIAL_STACK_MAX; i++) {
+        sHovered[i] = SLICE_NONE;
+    }
     sStartHoldTimer = 0;
 }
 
@@ -59,42 +137,10 @@ void Practice_Menu_Close(void) {
     gPracticeMenuState = PMENU_CLOSED;
 }
 
-static RadialSlice RadialMenu_GetSlice(s8 stickX, s8 stickY) {
-    s32 x = stickX;
-    s32 y = stickY;
-    s32 ax = (x < 0) ? -x : x;
-    s32 ay = (y < 0) ? -y : y;
-
-    if ((ax < RADIAL_DEAD_ZONE) && (ay < RADIAL_DEAD_ZONE)) {
-        return RSLICE_NONE;
-    }
-
-    if ((ay * 100) > (ax * 173)) {
-        if (y > 0) {
-            return RSLICE_RESTART;
-        }
-        return RSLICE_LEVELS;
-    }
-
-    if (x > 0) {
-        if ((ay * 100) < (ax * 58)) {
-            return RSLICE_CAMERA;
-        }
-        if (y > 0) {
-            return RSLICE_SAVE;
-        }
-        return RSLICE_LOAD;
-    }
-
-    if (y > 0) {
-        return RSLICE_DISPLAY;
-    }
-    return RSLICE_LOADOUT;
-}
-
 void Practice_Menu_Update(void) {
     OSContPad* press = &gControllerPress[gMainController];
     OSContPad* hold = &gControllerHold[gMainController];
+    const RadialMenuDef* def;
 
     if (Practice_StateMenuIsOpen()) {
         Practice_StateMenu_Update();
@@ -116,62 +162,102 @@ void Practice_Menu_Update(void) {
     }
 
     if (press->button & B_BUTTON) {
-        Practice_Menu_Close();
+        if (sMenuDepth > 0) {
+            sMenuDepth--;
+            sHovered[sMenuDepth] = SLICE_NONE;
+        } else {
+            Practice_Menu_Close();
+        }
         return;
     }
 
-    sHoveredSlice = RadialMenu_GetSlice(hold->stick_x, hold->stick_y);
+    def = &sMenuDefs[sMenuDepth];
+    sHovered[sMenuDepth] = def->getSlice(hold->stick_x, hold->stick_y);
 
-    if ((press->button & A_BUTTON) && (sHoveredSlice != RSLICE_NONE)) {
-        switch (sHoveredSlice) {
-            case RSLICE_RESTART:
-                Practice_Menu_Close();
-                Practice_LaunchLevel(gCurrentLevel, gLevelPhase, 0.0f);
-                break;
-            case RSLICE_SAVE:
-                Practice_SaveState();
-                break;
-            case RSLICE_LOAD:
-                Practice_Menu_Close();
-                Practice_LoadState();
-                break;
-            case RSLICE_LEVELS:
-                Practice_Menu_Close();
-                gPracticeScreen = PSCREEN_LEVEL_SELECT;
-                gGameState = GSTATE_MAP;
-                gDrawMode = DRAW_NONE;
-                Audio_FadeOutAll(1);
-                Audio_ClearVoice();
-                break;
-            case RSLICE_LOADOUT:
-                Practice_StateMenu_Open(PSUBMENU_LOADOUT);
-                break;
-            case RSLICE_DISPLAY:
-                Practice_StateMenu_Open(PSUBMENU_DISPLAY);
-                break;
-            case RSLICE_CAMERA:
-                if (gPracticeMenuState == PMENU_OPEN_FROZEN) {
-                    Practice_FreeCam_Enter();
-                }
-                break;
-            default:
-                break;
+    if ((press->button & A_BUTTON) && (sHovered[sMenuDepth] != SLICE_NONE)) {
+        if (sMenuDepth == 0) {
+            switch (sHovered[0]) {
+                case RSLICE_RESTART:
+                    Practice_Menu_Close();
+                    Practice_LaunchLevel(gCurrentLevel, gLevelPhase, 0.0f);
+                    break;
+                case RSLICE_SAVE:
+                    Practice_SaveState();
+                    break;
+                case RSLICE_LOAD:
+                    Practice_Menu_Close();
+                    Practice_LoadState();
+                    break;
+                case RSLICE_LEVELS:
+                    Practice_Menu_Close();
+                    gPracticeScreen = PSCREEN_LEVEL_SELECT;
+                    gGameState = GSTATE_MAP;
+                    gDrawMode = DRAW_NONE;
+                    Audio_FadeOutAll(1);
+                    Audio_ClearVoice();
+                    break;
+                case RSLICE_LOADOUT:
+                    Practice_StateMenu_Open(PSUBMENU_LOADOUT);
+                    break;
+                case RSLICE_DISPLAY:
+                    sMenuDepth = 1;
+                    sHovered[1] = SLICE_NONE;
+                    break;
+                case RSLICE_CAMERA:
+                    if (gPracticeMenuState == PMENU_OPEN_FROZEN) {
+                        Practice_FreeCam_Enter();
+                    }
+                    break;
+                default:
+                    break;
+            }
+        } else if (sMenuDepth == 1) {
+            switch (sHovered[1]) {
+                case DSLICE_SKIP_CUTS:
+                    gPracticeConfig.skipCutscenes ^= true;
+                    break;
+                case DSLICE_INPUTS:
+                    gPracticeConfig.showInputDisplay ^= true;
+                    break;
+                case DSLICE_STATS:
+                    Practice_StateMenu_Open(PSUBMENU_STATS);
+                    break;
+                case DSLICE_VISUALS:
+                    Practice_StateMenu_Open(PSUBMENU_VISUALIZERS);
+                    break;
+                default:
+                    break;
+            }
         }
     }
 }
 
-void Practice_Menu_Draw(void) {
+static void RadialMenu_DrawLayer(const RadialMenuDef* def, s32 hoveredSlice, bool dimmed) {
     s32 i;
     s32 panelW;
     s32 panelAlpha;
-    bool hasSelection = (sHoveredSlice != RSLICE_NONE);
+    bool hasSelection = (hoveredSlice != SLICE_NONE);
+    u8 pr, pg, pb;
 
-    Practice_DrawBox(40, 35, 240, 175, 0, 0, 0, 210);
+    for (i = 0; i < def->count; i++) {
+        const RadialEntry* e = &def->entries[i];
+        panelW = e->labelLen * 8 + 6;
 
-    for (i = 0; i < RSLICE_MAX; i++) {
-        panelW = sRadialEntries[i].labelLen * 8 + 6;
+        pr = e->panelR;
+        pg = e->panelG;
+        pb = e->panelB;
 
-        if (i == sHoveredSlice) {
+        if (!dimmed && def == &sMenuDefs[1]) {
+            if (i == DSLICE_SKIP_CUTS && gPracticeConfig.skipCutscenes) {
+                pr = 0; pg = 180; pb = 80;
+            } else if (i == DSLICE_INPUTS && gPracticeConfig.showInputDisplay) {
+                pr = 0; pg = 180; pb = 80;
+            }
+        }
+
+        if (dimmed) {
+            panelAlpha = 20;
+        } else if (i == hoveredSlice) {
             panelAlpha = 160;
         } else if (hasSelection) {
             panelAlpha = 40;
@@ -179,33 +265,53 @@ void Practice_Menu_Draw(void) {
             panelAlpha = 80;
         }
 
-        Practice_DrawBox(
-            sRadialEntries[i].x - 3, sRadialEntries[i].y - 3,
-            panelW, 16,
-            sRadialEntries[i].panelR, sRadialEntries[i].panelG, sRadialEntries[i].panelB,
-            panelAlpha);
+        Practice_DrawBox(e->x - 3, e->y - 3, panelW, 16, pr, pg, pb, panelAlpha);
     }
 
-    for (i = 0; i < RSLICE_MAX; i++) {
-        if (i == sHoveredSlice) {
-            Practice_DrawTextOutline(
-                sRadialEntries[i].x, sRadialEntries[i].y,
-                sRadialEntries[i].label, 255, 255, 0);
+    for (i = 0; i < def->count; i++) {
+        const RadialEntry* e = &def->entries[i];
+        if (dimmed) {
+            Practice_DrawTextColor(e->x, e->y, e->label, 55, 55, 55);
+        } else if (i == hoveredSlice) {
+            Practice_DrawTextOutline(e->x, e->y, e->label, 255, 255, 0);
         } else if (hasSelection) {
-            Practice_DrawTextColor(
-                sRadialEntries[i].x, sRadialEntries[i].y,
-                sRadialEntries[i].label, 140, 140, 140);
+            Practice_DrawTextColor(e->x, e->y, e->label, 140, 140, 140);
         } else {
-            Practice_DrawText(
-                sRadialEntries[i].x, sRadialEntries[i].y,
-                sRadialEntries[i].label);
+            Practice_DrawText(e->x, e->y, e->label);
         }
     }
+}
+
+void Practice_Menu_Draw(void) {
+    const RadialMenuDef* def = &sMenuDefs[sMenuDepth];
+    s32 hoveredSlice = sHovered[sMenuDepth];
+    bool hasSelection = (hoveredSlice != SLICE_NONE);
+
+    Practice_DrawBox(40, 35, 240, 175, 0, 0, 0, 210);
+
+    if (sMenuDepth > 0) {
+        RadialMenu_DrawLayer(&sMenuDefs[0], SLICE_NONE, true);
+    }
+
+    RadialMenu_DrawLayer(def, hoveredSlice, false);
 
     if (hasSelection) {
-        Practice_DrawTextOutline(
-            RADIAL_CENTER_X - 40, RADIAL_CENTER_Y - 5,
-            sRadialEntries[sHoveredSlice].desc, 0, 255, 128);
+        if (sMenuDepth == 1 && (hoveredSlice == DSLICE_SKIP_CUTS || hoveredSlice == DSLICE_INPUTS)) {
+            bool state = (hoveredSlice == DSLICE_SKIP_CUTS)
+                ? gPracticeConfig.skipCutscenes
+                : gPracticeConfig.showInputDisplay;
+            const char* name = (hoveredSlice == DSLICE_SKIP_CUTS) ? "SKIP CUTSCENES:" : "INPUT DISPLAY:";
+            Practice_DrawTextOutline(RADIAL_CENTER_X - 44, RADIAL_CENTER_Y - 10, name, 0, 255, 128);
+            Practice_DrawTextColor(RADIAL_CENTER_X - 44, RADIAL_CENTER_Y + 4,
+                state ? "ON" : "OFF",
+                state ? 0 : 255, state ? 255 : 100, 0);
+        } else {
+            Practice_DrawTextOutline(
+                RADIAL_CENTER_X - 40, RADIAL_CENTER_Y - 5,
+                def->entries[hoveredSlice].desc, 0, 255, 128);
+        }
+    } else if (sMenuDepth > 0) {
+        Practice_DrawTextColor(RADIAL_CENTER_X - 28, RADIAL_CENTER_Y - 5, "DISPLAY", 0, 255, 128);
     } else {
         Practice_DrawTextColor(RADIAL_CENTER_X - 36, RADIAL_CENTER_Y - 12, "PRACTICE", 0, 255, 128);
         Practice_DrawText(RADIAL_CENTER_X - 24, RADIAL_CENTER_Y + 2, "HITS:");
@@ -219,7 +325,11 @@ void Practice_Menu_Draw(void) {
         Practice_DrawTextColor(92, 218, "HOLD START: TITLE", 255, 100, 100);
     }
 
-    Practice_DrawTextColor(56, 198, "STICK:SELECT  A:GO  B:CLOSE", 150, 150, 150);
+    if (sMenuDepth > 0) {
+        Practice_DrawTextColor(56, 198, "STICK:SELECT  A:GO  B:BACK", 150, 150, 150);
+    } else {
+        Practice_DrawTextColor(56, 198, "STICK:SELECT  A:GO  B:CLOSE", 150, 150, 150);
+    }
 
     if (Practice_StateMenuIsOpen()) {
         Practice_StateMenu_Draw();
