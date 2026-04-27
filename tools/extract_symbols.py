@@ -32,6 +32,7 @@ SYMBOLS = [
     "gPathProgress",
     "gSavedPathProgress",
     "gPracticeCheckpointProgress",
+    "sIodevActive",
 ]
 
 # PracticeConfig field offsets (bool = int = 4 bytes, s32 = 4, u8 = 1)
