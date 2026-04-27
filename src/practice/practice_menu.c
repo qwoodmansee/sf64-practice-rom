@@ -289,10 +289,6 @@ void Practice_Menu_Draw(void) {
 
     Practice_DrawBox(40, 35, 240, 175, 0, 0, 0, 210);
 
-    if (sMenuDepth > 0) {
-        RadialMenu_DrawLayer(&sMenuDefs[0], SLICE_NONE, true);
-    }
-
     RadialMenu_DrawLayer(def, hoveredSlice, false);
 
     if (hasSelection) {
