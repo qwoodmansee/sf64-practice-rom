@@ -18,21 +18,19 @@
 - `lib/iodev/iodev.h` — public API: types (`iodev_id_t`, `iodev_result_t`), function decls.
 - `lib/iodev/iodev.c` — registry; `iodev_detect()` calls per-backend probes; dispatches `iodev_sd_*` to the active backend.
 - `lib/iodev/iodev_sc64.c` — SC64 protocol implementation.
-- `lib/iodev/iodev_stub.c` — no-op backend; built when `IODEV_BACKEND=stub` (for emulator/CI).
+- `lib/iodev/iodev_stub.c` — no-op backend; selected when no flashcart is detected.
 - `lib/iodev/iodev_internal.h` — internal interface between registry and backends; not part of public API.
-- `lib/test/Makefile` — host-side test runner (native gcc, not MIPS).
-- `lib/test/test_iodev.c` — host unit test for registry layer.
-- `lib/test/iodev_test.c` — mock backend over a host file (used by Phase 2+ tests too).
 - `tests/test_iodev_detect.lua` — BizHawk functional test (verifies `iodev_detect` returns `IODEV_NONE` on emulator without flashcart sim).
 - `docs/superpowers/plans/HW_VERIFY_phase1a.md` — manual hardware verification checklist.
 
 **Modified files:**
-- `Makefile` — add `lib/` to `SRC_DIRS`, add `-Ilib` to includes, add `lib-test` target.
+- `Makefile` — add `lib/` to `SRC_DIRS`, add `-Ilib` to includes.
 - `tools/patch_linker_script.py` — add `lib/iodev/*` `.o` files to linker injection.
 - `tools/practice_invariants.py` — add `check_lib_isolation` and `check_lib_libultra_scope` checks.
 - `src/practice/practice_main.c` — call `iodev_detect()` and `iodev_sd_init()` in `Practice_Init`; log result via existing ISViewer.
+- `tools/extract_symbols.py` — expose the `sIodevActive` symbol for BizHawk tests.
 
-**Not touched in this phase:** `iodev_ed64.c` (Phase 1b), `iodev_test.c` is created but its consumers come in Phase 2.
+**Not touched in this phase:** `iodev_ed64.c` (Phase 1b), `lib/test/*` (host unit test infra is created in Phase 2 alongside the FatFs glue tests, where it'll have meaningful coverage targets).
 
 ---
 
@@ -128,7 +126,7 @@ grep -n "^IINC" Makefile
 
 Add `-Ilib` after the existing `-Iinclude` entry. If `IINC` is composed across multiple lines, append to the same group.
 
-- [ ] **Step 3: Extend `tools/patch_linker_script.py` with lib objects**
+- [ ] **Step 3: Extend `tools/patch_linker_script.py` with lib objects (incremental, no `make extract` needed)**
 
 Modify `tools/patch_linker_script.py`. Add a new constant after `PRACTICE_OBJS`:
 
@@ -140,71 +138,80 @@ LIB_IODEV_OBJS = [
 ]
 ```
 
-In the `patch()` function, change the injection loop from:
+Replace the current `patch()` function body with one that handles three states:
+
+1. **Fully unpatched** (no `practice_main`): inject both practice and lib lines after the anchor (existing behavior, extended).
+2. **Practice-patched, lib-unpatched** (has `practice_main` but no `iodev.o`): inject only the lib lines, anchored on the last existing `practice_*.o` line per section. Incremental — does NOT require `make extract`.
+3. **Fully patched** (both practice and `iodev.o` present): no-op.
+
+Replacement `patch()` body:
 
 ```python
-injection = "\n".join(
-    f"        build/src/practice/{obj}.o({section});"
-    for obj in PRACTICE_OBJS
-)
+def patch():
+    with open(LINKER_SCRIPT, "r") as f:
+        content = f.read()
+
+    has_practice = "practice_main" in content
+    has_iodev = "iodev.o" in content
+
+    if has_practice and has_iodev:
+        print("Linker script already patched (practice + lib/iodev), skipping.")
+        return
+
+    for section in [".text", ".data", ".rodata", ".bss"]:
+        if not has_practice:
+            # Fresh inject: add both practice and iodev after the anchor.
+            anchor_line = f"{ANCHOR}({section});"
+            injection_practice = "\n".join(
+                f"        build/src/practice/{obj}.o({section});"
+                for obj in PRACTICE_OBJS
+            )
+            injection_iodev = "\n".join(
+                f"        build/lib/iodev/{obj}.o({section});"
+                for obj in LIB_IODEV_OBJS
+            )
+            injection = injection_practice + "\n" + injection_iodev
+            content = content.replace(
+                f"        {anchor_line}",
+                f"        {anchor_line}\n{injection}",
+            )
+        else:
+            # Incremental: practice already injected; anchor on the last
+            # practice_*.o line for this section and append iodev.
+            last_practice_obj = PRACTICE_OBJS[-1]
+            anchor_line = f"build/src/practice/{last_practice_obj}.o({section});"
+            injection_iodev = "\n".join(
+                f"        build/lib/iodev/{obj}.o({section});"
+                for obj in LIB_IODEV_OBJS
+            )
+            content = content.replace(
+                f"        {anchor_line}",
+                f"        {anchor_line}\n{injection_iodev}",
+            )
+
+    with open(LINKER_SCRIPT, "w") as f:
+        f.write(content)
+
+    print(f"Patched {LINKER_SCRIPT} with lib/iodev entries.")
 ```
 
-To:
+The script does NOT use `sys.exit`; it gracefully handles all three states. No new imports needed.
 
-```python
-injection_practice = "\n".join(
-    f"        build/src/practice/{obj}.o({section});"
-    for obj in PRACTICE_OBJS
-)
-injection_iodev = "\n".join(
-    f"        build/lib/iodev/{obj}.o({section});"
-    for obj in LIB_IODEV_OBJS
-)
-injection = injection_practice + "\n" + injection_iodev
-```
+- [ ] **Step 4: Run the patcher to inject `lib/iodev/*` lines**
 
-Update the "already patched" detection (line 31) to also check for `iodev`:
+Run: `python3 tools/patch_linker_script.py`
+Expected: prints `Patched linker_scripts/us/rev1/starfox64.ld with lib/iodev entries.` (since the script is currently practice-patched but lib-unpatched).
 
-```python
-if "practice_main" in content and "iodev.o" in content:
-    print("Linker script already patched, skipping.")
-    return
-```
-
-Also: if a previously-patched script has `practice_main` but lacks `iodev`, we want to re-patch. Replace the early-return logic with:
-
-```python
-if "iodev.o" in content:
-    print("Linker script already patched (with lib/iodev), skipping.")
-    return
-if "practice_main" in content:
-    # Patched by older version of this script; need to re-inject lib objects
-    # Strip prior practice injection so we can re-add cleanly with lib/iodev.
-    # (Alternatively: user runs `make extract` to regenerate the linker script.)
-    print("ERROR: linker script has stale patch missing lib/iodev/. Run 'make extract' to regenerate.")
-    sys.exit(1)
-```
-
-Add `import sys` at the top if not already present.
-
-- [ ] **Step 4: Run `make extract` to regenerate the linker script** (one-time setup for this branch)
-
-Per the project's CLAUDE.md, this is normally avoided. But since we're changing the linker script structure, we need a clean regeneration. **Confirm with the user before running** — they may prefer to manage this manually.
-
+Verify by grepping:
 ```bash
-# Only if user approves
-make extract
-python3 tools/patch_linker_script.py
+grep "iodev" linker_scripts/us/rev1/starfox64.ld | head
 ```
-
-Expected: linker script now contains lines like `build/lib/iodev/iodev.o(.text);`.
-
-If the user prefers manual editing: open `linker_scripts/us/rev1/starfox64.ld`, find the existing `practice_main` injections, and add the three `iodev*` `.o` entries to each of `.text`, `.data`, `.rodata`, `.bss` sections.
+Expected: 12 lines (3 `.o` files × 4 sections), each `build/lib/iodev/iodev*.o(.text/data/rodata/bss);`.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add Makefile tools/patch_linker_script.py
+git add Makefile tools/patch_linker_script.py linker_scripts/us/rev1/starfox64.ld
 git commit -m "build: add lib/ source discovery and iodev linker entries"
 ```
 
@@ -290,9 +297,9 @@ def check_lib_libultra_scope():
                     error(f"{path}: only iodev backends may include libultra (matched /{pat}/)")
 ```
 
-- [ ] **Step 3: Wire the new checks into the `__main__` block**
+- [ ] **Step 3: Wire the new checks into the `main()` function**
 
-Find the function-call list near the bottom of `practice_invariants.py` (where `check_config_inits()`, `check_function_definitions()` etc. are called). Add:
+In `tools/practice_invariants.py`, find `def main():` (around line 164). Add the two new check calls alongside the existing `check_*()` invocations:
 
 ```python
     check_lib_isolation()
@@ -379,12 +386,17 @@ const iodev_backend_t *iodev_backend_stub(void) { return &STUB_BACKEND; }
 #include "iodev.h"
 #include "iodev_internal.h"
 
-/* Cached after first detection. NULL until iodev_detect() runs. */
-static const iodev_backend_t *active = 0;
+/* Cached after first detection (lazy-initialized).
+ * After iodev_detect() runs once, sIodevActive points at exactly one of:
+ *   iodev_backend_sc64() / iodev_backend_ed64() / iodev_backend_stub()
+ *
+ * Named with a project-unique prefix so BizHawk symbol extraction can
+ * locate it without ambiguity. */
+static const iodev_backend_t *sIodevActive = 0;
 
 iodev_id_t iodev_detect(void) {
-    if (active) {
-        return active->id;
+    if (sIodevActive) {
+        return sIodevActive->id;
     }
 
     /* Probe order: SC64 first, then ED64 (Phase 1b), fallback to stub. */
@@ -394,30 +406,30 @@ iodev_id_t iodev_detect(void) {
     };
     for (int i = 0; i < (int)(sizeof(candidates) / sizeof(candidates[0])); i++) {
         if (candidates[i]->detect() == candidates[i]->id) {
-            active = candidates[i];
-            return active->id;
+            sIodevActive = candidates[i];
+            return sIodevActive->id;
         }
     }
 
-    active = iodev_backend_stub();
+    sIodevActive = iodev_backend_stub();
     return IODEV_NONE;
 }
 
 iodev_result_t iodev_sd_init(void) {
-    if (!active) iodev_detect();
-    return active->sd_init();
+    if (!sIodevActive) iodev_detect();
+    return sIodevActive->sd_init();
 }
 
 iodev_result_t iodev_sd_read_sectors(uint32_t lba, uint32_t count, void *buf) {
-    if (!active) iodev_detect();
+    if (!sIodevActive) iodev_detect();
     if (!buf || count == 0) return IODEV_ERR_PARAM;
-    return active->sd_read_sectors(lba, count, buf);
+    return sIodevActive->sd_read_sectors(lba, count, buf);
 }
 
 iodev_result_t iodev_sd_write_sectors(uint32_t lba, uint32_t count, const void *buf) {
-    if (!active) iodev_detect();
+    if (!sIodevActive) iodev_detect();
     if (!buf || count == 0) return IODEV_ERR_PARAM;
-    return active->sd_write_sectors(lba, count, buf);
+    return sIodevActive->sd_write_sectors(lba, count, buf);
 }
 ```
 
@@ -582,13 +594,18 @@ Insert into `iodev_sc64.c` between the register defines and `sc64_detect`:
 #define SD_OP_GET_STATUS      2
 #define SD_OP_GET_INFO        3
 
-/* PI cart-space targets for SD DMA buffers (FPGA SDRAM region). */
-#define SC64_SDRAM_BUF_BASE   0x10000000u  /* Start of cart ROM space */
-/* Use a 16 MB-aligned offset that doesn't overlap the running ROM. The
- * upper 64 KB of cart space (around the IS-Viewer at 0x13FF0000) is the
- * traditional scratch zone. We use 0x13FE0000 for SD DMA scratch — 64 KB
- * gives us 128 sectors of buffer space. */
-#define SC64_SD_DMA_SCRATCH   0x13FE0000u
+/* PI cart-space target for SD DMA buffers.
+ *
+ * Must point at SC64 SDRAM (the cart-bus ROM region 0x10000000..0x13FE0000),
+ * NOT at the SC64 flash-shadow region (0x13FE0000..0x13FFFFFF, where the
+ * IS-Viewer at 0x13FF0000 also lives — overlapping that region is a hardware
+ * conflict that would either silently fail or corrupt IS-Viewer logging).
+ *
+ * SF64's ROM is approximately 10 MiB. We reserve 64 KiB at offset 15 MiB
+ * (0x10F00000..0x10F0FFFF), well past the ROM's tail and well below the
+ * flash-shadow boundary. Gives us 128 sectors (64 KiB / 512) of buffer
+ * space, which caps a single SD R/W call at 128 sectors. */
+#define SC64_SD_DMA_SCRATCH   0x10F00000u
 
 /* Execute one command. Args go in arg[0..1], response (if any) lands in rsp[0..1].
  * Returns IODEV_OK on success, IODEV_ERR_IO on CMD_ERROR, IODEV_ERR_TIMEOUT if
@@ -642,62 +659,64 @@ static iodev_result_t sc64_sd_init(void) {
 
 - [ ] **Step 3: Implement `sc64_sd_read_sectors`**
 
-Replace the stub in `iodev_sc64.c`:
+Reference for the project's canonical `osPiStartDma` pattern: `src/sys/sys_lib.c:104-118` (`Lib_DmaRead`). The pattern is:
+- Allocate one `OSIoMesg` and one `OSMesgQueue` (we use file-statics so they persist between calls).
+- `osInvalDCache` the destination RDRAM buffer.
+- Call `osPiStartDma(&mb, 0, OS_READ, devAddr, dstAddr, nbytes, &mq)`.
+- Block on the queue with `osRecvMesg(&mq, NULL, OS_MESG_BLOCK)`.
+
+Add this include near the top of `iodev_sc64.c` (replacing any earlier libultra include):
 
 ```c
-/* DMA from cart-bus into RDRAM. We use the existing osPi machinery; for
- * Phase 1a we use the simpler blocking variant (osPiStartDma + waiting on
- * the message queue is overkill here — direct synchronous DMA is fine). */
-extern void osWritebackDCache(void *vaddr, s32 nbytes);
-extern void osInvalDCache(void *vaddr, s32 nbytes);
-extern s32 osPiStartDma(OSIoMesg *mb, s32 priority, s32 direction,
-                        u32 devAddr, void *vAddr, u32 nbytes,
-                        OSMesgQueue *mq);
+#include "libultra/ultra64.h"  /* OSIoMesg, OSMesgQueue, osPiStartDma, osCreateMesgQueue,
+                                * osRecvMesg, osInvalDCache, osWritebackDCache.
+                                * Path matches the project convention (see src/sys/sys.h). */
+```
 
-#include <ultra64.h>  /* OSIoMesg, OSMesgQueue, etc. */
+Then replace the stub:
 
-static OSMesgQueue sc64_dma_mq;
-static OSMesg      sc64_dma_msg_buf[1];
-static int         sc64_dma_mq_inited = 0;
+```c
+/* SD DMA bookkeeping. File-static because the queue must persist across
+ * calls; first call lazily creates it. NOT thread-safe — callers must
+ * not invoke iodev_sd_*_sectors concurrently. (The practice ROM is
+ * single-threaded for these calls; revisit if that ever changes.) */
+static OSMesgQueue sSc64DmaMq;
+static OSMesg      sSc64DmaMsgBuf[1];
+static int         sSc64DmaMqInited = 0;
 
 static void sc64_dma_setup(void) {
-    if (!sc64_dma_mq_inited) {
-        osCreateMesgQueue(&sc64_dma_mq, sc64_dma_msg_buf, 1);
-        sc64_dma_mq_inited = 1;
+    if (!sSc64DmaMqInited) {
+        osCreateMesgQueue(&sSc64DmaMq, sSc64DmaMsgBuf, 1);
+        sSc64DmaMqInited = 1;
     }
 }
 
 static iodev_result_t sc64_sd_read_sectors(uint32_t lba, uint32_t count, void *buf) {
     iodev_result_t res;
     OSIoMesg mb;
-    OSMesg dummy;
 
-    if (count > 128) {
-        return IODEV_ERR_PARAM;  /* exceeds our DMA scratch buffer */
+    if (count == 0 || count > 128) {
+        return IODEV_ERR_PARAM;  /* > 128 exceeds our 64 KiB DMA scratch */
     }
 
     sc64_dma_setup();
 
-    /* Tell SC64 where to start, then read sectors into FPGA SDRAM scratch. */
+    /* Tell SC64 firmware: read `count` sectors starting at `lba` into our
+     * cart-bus scratch buffer. */
     res = sc64_execute_cmd(SC64_CMD_SD_SECTOR_SET, lba, 0, 0, 0);
     if (res != IODEV_OK) return res;
-
     res = sc64_execute_cmd(SC64_CMD_SD_READ, SC64_SD_DMA_SCRATCH, count, 0, 0);
     if (res != IODEV_OK) return res;
 
-    /* DMA from cart-bus scratch into caller's RDRAM buffer. */
+    /* Now DMA cart-bus scratch -> caller's RDRAM buffer.
+     * Pattern follows src/sys/sys_lib.c:104-118 (Lib_DmaRead). */
     osInvalDCache(buf, (s32)(count * 512));
-    mb.hdr.pri = OS_MESG_PRI_NORMAL;
-    mb.hdr.retQueue = &sc64_dma_mq;
-    mb.dramAddr = buf;
-    mb.devAddr = SC64_SD_DMA_SCRATCH;
-    mb.size = count * 512;
-    if (osPiStartDma(&mb, OS_MESG_PRI_NORMAL, OS_READ,
+    if (osPiStartDma(&mb, 0, OS_READ,
                      SC64_SD_DMA_SCRATCH, buf, count * 512,
-                     &sc64_dma_mq) != 0) {
+                     &sSc64DmaMq) != 0) {
         return IODEV_ERR_IO;
     }
-    osRecvMesg(&sc64_dma_mq, &dummy, OS_MESG_BLOCK);
+    osRecvMesg(&sSc64DmaMq, NULL, OS_MESG_BLOCK);
 
     return IODEV_OK;
 }
@@ -709,32 +728,26 @@ static iodev_result_t sc64_sd_read_sectors(uint32_t lba, uint32_t count, void *b
 static iodev_result_t sc64_sd_write_sectors(uint32_t lba, uint32_t count, const void *buf) {
     iodev_result_t res;
     OSIoMesg mb;
-    OSMesg dummy;
 
-    if (count > 128) {
+    if (count == 0 || count > 128) {
         return IODEV_ERR_PARAM;
     }
 
     sc64_dma_setup();
 
-    /* DMA caller's RDRAM buffer into FPGA SDRAM scratch. */
+    /* DMA caller's RDRAM buffer into cart-bus scratch.
+     * Pattern: writeback dcache, then osPiStartDma with OS_WRITE direction. */
     osWritebackDCache((void *)buf, (s32)(count * 512));
-    mb.hdr.pri = OS_MESG_PRI_NORMAL;
-    mb.hdr.retQueue = &sc64_dma_mq;
-    mb.dramAddr = (void *)buf;
-    mb.devAddr = SC64_SD_DMA_SCRATCH;
-    mb.size = count * 512;
-    if (osPiStartDma(&mb, OS_MESG_PRI_NORMAL, OS_WRITE,
+    if (osPiStartDma(&mb, 0, OS_WRITE,
                      SC64_SD_DMA_SCRATCH, (void *)buf, count * 512,
-                     &sc64_dma_mq) != 0) {
+                     &sSc64DmaMq) != 0) {
         return IODEV_ERR_IO;
     }
-    osRecvMesg(&sc64_dma_mq, &dummy, OS_MESG_BLOCK);
+    osRecvMesg(&sSc64DmaMq, NULL, OS_MESG_BLOCK);
 
-    /* Now tell SC64 to flush scratch into the SD card. */
+    /* Tell SC64 firmware to flush scratch -> SD card at `lba`. */
     res = sc64_execute_cmd(SC64_CMD_SD_SECTOR_SET, lba, 0, 0, 0);
     if (res != IODEV_OK) return res;
-
     res = sc64_execute_cmd(SC64_CMD_SD_WRITE, SC64_SD_DMA_SCRATCH, count, 0, 0);
     return res;
 }
@@ -811,60 +824,70 @@ git commit -m "feat: log iodev detection and SD init in Practice_Init"
 **Files:**
 - Create: `tests/test_iodev_detect.lua`
 
-- [ ] **Step 1: Create `tests/test_iodev_detect.lua`**
+- [ ] **Step 1: Add `sIodevActive` to `tools/extract_symbols.py`**
 
-```lua
--- Verifies iodev_detect() returns IODEV_NONE on the emulator (no cart sim).
--- Run with: python3 tools/run_tests.py test_iodev_detect
-
-dofile("tests/harness.lua")
-H.test_name = "iodev_detect_emulator"
-
--- Boot to a state where Practice_Init has run.
-H.boot_to_practice()
-
--- Search RAM for the IS-Viewer log buffer; the line "[iodev] cart=0 sd_init=-2"
--- should be present (IODEV_NONE = 0, IODEV_ERR_NO_DEVICE = -2).
---
--- IS-Viewer buffer is at cart-bus 0x13FF0000 + 0x20 (ISV_BUFFER_OFF) but
--- on emulator without an IS-Viewer device the writes go nowhere. Instead,
--- check the iodev internal state by reading the iodev `active` symbol:
-
-local active_addr = H.symbol("active")  -- in lib/iodev/iodev.c
-if active_addr == nil then
-    H.fail("symbol 'active' not in symbol table — extract_symbols.py needs lib/iodev/iodev.c")
-end
-
--- 'active' is a pointer; if iodev_detect ran, it points to the stub backend.
--- The stub backend's `id` field is at offset 0 of the struct.
-local backend_ptr = H.read_u32(active_addr)
-H.assert_neq(backend_ptr, 0, "iodev_detect did not run — active pointer is NULL")
-
-local backend_id = H.read_u32(backend_ptr)
-H.assert_eq(backend_id, 0, "expected IODEV_NONE (0) on emulator")
-
-H.finish()
-```
-
-- [ ] **Step 2: Add iodev symbols to `tools/extract_symbols.py`**
-
-Find the symbol list in `tools/extract_symbols.py` (search for an existing entry like `gPlayer`). Add:
+Open `tools/extract_symbols.py`. Find the list of symbols extracted from `starfox64.us.rev1.map` (look for an existing entry like `gPracticeConfig` or `gCsWasNotSkipped`). Add `sIodevActive` to the same list:
 
 ```python
 SYMBOLS = [
-    # ... existing entries ...
-    "active",  # in lib/iodev/iodev.c — points to active backend descriptor
+    # ... existing ...
+    "sIodevActive",  # in lib/iodev/iodev.c — pointer to active backend descriptor
 ]
 ```
 
-(Adapt to the actual structure of `extract_symbols.py` — it may use a different format.)
+Match the format used by neighboring entries (the file may use a different identifier like `EXTRACT_SYMBOLS` or build the list dynamically — adapt accordingly).
+
+- [ ] **Step 2: Create `tests/test_iodev_detect.lua`**
+
+The test follows the exact pattern of `tests/test_config_defaults.lua`. It verifies that on an emulator without flashcart simulation, `iodev_detect()` returns `IODEV_NONE` and `sIodevActive` points to the stub backend (whose `id` field is `IODEV_NONE = 0`).
+
+```lua
+-- Verifies iodev_detect() returns IODEV_NONE on the emulator (no cart sim).
+-- Pattern follows tests/test_config_defaults.lua.
+--
+-- Run via: python3 tools/run_tests.py test_iodev_detect
+
+local H = dofile("tests/harness.lua")
+local S = H.S
+
+H.test_name = "iodev_detect_emulator"
+
+-- Boot to a state where Practice_Init has run (level select screen).
+local ok = H.wait_until(function()
+    return H.practice_screen() == S.const.PSCREEN_LEVEL_SELECT
+end, 600, "boot to level select")
+H.assert_true(ok, "Booted to level select")
+
+-- sIodevActive is a pointer (u32). After Practice_Init's iodev_detect call,
+-- it should point at the stub backend (no SC64 in BizHawk).
+local backend_ptr = H.read_u32(S.sIodevActive)
+H.assert_true(backend_ptr ~= 0, "sIodevActive is non-NULL after Practice_Init")
+
+-- The backend descriptor's first field is `id` (iodev_id_t). On emulator
+-- without flashcart sim, this should be IODEV_NONE = 0. Pointer is in
+-- KSEG0 / KSEG1 (0x80xxxxxx / 0xA0xxxxxx); strip to RDRAM offset.
+local rdram_offset = backend_ptr % 0x20000000
+local backend_id = H.read_u32(rdram_offset)
+H.assert_eq(backend_id, 0, "stub backend's id is IODEV_NONE (0)")
+
+-- Print summary
+print(string.format("[%s] passes=%d failures=%d",
+    H.test_name, #H.passes, #H.failures))
+if #H.failures > 0 then
+    for _, msg in ipairs(H.failures) do print("  FAIL: " .. msg) end
+    os.exit(1)
+end
+os.exit(0)
+```
+
+(`H.assert_true` and `H.assert_eq` are confirmed real harness functions; see `tests/harness.lua` and `tests/test_config_defaults.lua` for usage examples.)
 
 - [ ] **Step 3: Run the BizHawk test (if BizHawk available)**
 
 Run: `BIZHAWK_PATH=... python3 tools/run_tests.py test_iodev_detect`
-Expected: PASS.
+Expected: `[iodev_detect_emulator] passes=3 failures=0`, exit 0.
 
-If BizHawk is not available locally, document the test for CI and move on. The pre-commit hook gracefully skips functional tests when BizHawk is absent.
+If BizHawk is not available locally, document the test for CI and move on. The pre-commit hook gracefully skips functional tests when BizHawk is absent (per the existing `run_tests.py` behavior).
 
 - [ ] **Step 4: Commit**
 
