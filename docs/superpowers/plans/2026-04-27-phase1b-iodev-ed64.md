@@ -46,7 +46,7 @@ If during execution this constraint becomes a real blocker (e.g., the ED64 proto
 ## File Structure
 
 **New files:**
-- `lib/iodev/iodev_ed64.c` — ED64 X7/X8 protocol implementation (single file, ~400-500 LoC).
+- `lib/iodev/iodev_ed64.c` — ED64 X7/X8 protocol implementation (single file, realistically ~500-650 LoC: register macros + PI_WRITE_FLUSH + cart unlock + detect + ~8 SDIO primitives + CRC7+CRC16 + 6-step init + read_block + write_block + descriptor table).
 - `docs/superpowers/plans/HW_VERIFY_phase1b.md` — manual hardware verification checklist (run by future ED64-equipped contributor).
 
 **Modified files:**
@@ -93,7 +93,7 @@ Spend 30-60 minutes reading `~/code/gz/src/gz/ed64_x.c` and `~/code/gz/src/gz/ed
 
 - `REG_BASE = 0xBF800000` and the offsets to each register (`REG_SYS_CFG`, `REG_KEY`, `REG_EDID`, `REG_SD_CMD_RD/WR`, `REG_SD_DAT_RD/WR`, `REG_SD_STATUS`).
 - Cart-lock dance: ED64 X registers are inaccessible until the cart is unlocked via `REG_KEY` writes (sequence: `0xAA55`, `0x55AA`).
-- Detection: read `REG_EDID` after unlock; the upper byte identifies the model (X7 vs X8 vs older revs). The whole register's value tells you which generation you're talking to.
+- **Detection (hardware fact):** after unlock, read `REG_EDID` (a 32-bit register). The upper 16 bits of the result equal the literal value `0xED64` for any genuine EverDrive 64 X cart (X7 and X8 share this magic). The lower 16 bits encode model/firmware revision and can be ignored for detection. Pseudocode: `if (((reg_edid_value >> 16) & 0xFFFF) == 0xED64u) return IODEV_ED64;` else return `IODEV_NONE`. **Do not invent an "upper byte" check or look for separate X7/X8 magic** — they share the cart-class identifier.
 - Cart-bus access pattern: PI register reads/writes via `IO_READ`/`IO_WRITE` (same as SC64).
 
 After taking notes, **close the gz files**. Write the implementation from notes only. The notes are facts; reproduce facts. Don't reproduce code structure or variable names from gz.
@@ -119,62 +119,107 @@ Match the structure of `lib/iodev/iodev_sc64.c` (Phase 1a). Key elements:
 
 - [ ] **Step 3: Wire ED64 into the registry candidates list**
 
-In `lib/iodev/iodev.c`, find the `candidates[]` array in `iodev_detect()`:
+In `lib/iodev/iodev.c`, the candidates array currently looks like:
 
 ```c
-const iodev_backend_t *candidates[] = {
-    iodev_backend_sc64(),
-    /* iodev_backend_ed64(), */  /* Phase 1b */
-};
+const iodev_backend_t *candidates[1];
+candidates[0] = iodev_backend_sc64();
+/* candidates[1] = iodev_backend_ed64();  Phase 1b */
 ```
 
-Uncomment the ED64 entry:
+Two changes required (the array size declaration AND the assignment):
 
 ```c
-const iodev_backend_t *candidates[] = {
-    iodev_backend_sc64(),
-    iodev_backend_ed64(),
-};
+const iodev_backend_t *candidates[2];
+candidates[0] = iodev_backend_sc64();
+candidates[1] = iodev_backend_ed64();
 ```
+
+Both lines matter — leaving the array size at `[1]` while writing to `candidates[1]` is undefined behavior, and IDO won't necessarily warn. Verify by post-edit grep:
+
+```bash
+grep -A2 "candidates\[" lib/iodev/iodev.c
+```
+
+Expected output shows `candidates[2]`, both `candidates[0] =` and `candidates[1] =` lines, no commented-out remnant.
 
 - [ ] **Step 4: Add `iodev_ed64` to the linker patcher**
 
-In `tools/patch_linker_script.py`, extend `LIB_IODEV_OBJS`:
+In `tools/patch_linker_script.py`, extend `LIB_IODEV_OBJS`. **Order matters — `iodev_ed64` must come BEFORE `iodev_stub` so that incremental injection (next paragraph) anchors correctly:**
 
 ```python
 LIB_IODEV_OBJS = [
     "iodev",
     "iodev_sc64",
-    "iodev_ed64",  # Phase 1b
+    "iodev_ed64",  # Phase 1b — must precede iodev_stub
     "iodev_stub",
 ]
 ```
 
-The patcher's incremental mode (added in Phase 1a) needs a slight care here: it anchors on the last existing entry and inserts after. Running the patcher will detect the new entries and inject them. Verify with:
+**The harder part: extending the patcher's three-state logic to handle the "Phase 1a injected, Phase 1b not yet" intermediate state.**
+
+The current patcher (after Phase 1a) handles three states:
+
+| State | Detection | Action |
+|-------|-----------|--------|
+| Fully unpatched | no `practice_main` | Inject practice + lib lines after `fox_save.o` anchor |
+| Practice patched, lib unpatched | `practice_main` present, `iodev.o` missing | Inject lib lines after `practice_freecam.o` anchor |
+| Fully patched | both present | No-op |
+
+After Phase 1b, we need a fourth state:
+
+| State | Detection | Action |
+|-------|-----------|--------|
+| Practice + Phase-1a-iodev patched, ed64 missing | `practice_main` + `iodev.o` present, `iodev_ed64.o` missing | Inject `build/lib/iodev/iodev_ed64.o(...)` lines anchored on `build/lib/iodev/iodev_sc64.o(...)` (insert between sc64 and stub, NOT after stub or after practice) |
+
+**Why anchor on `iodev_sc64.o` and not `iodev_stub.o`:** the linker resolves symbols by section order, and the registry's `iodev_backend_*()` getters are called in `LIB_IODEV_OBJS` order. Keeping `iodev_stub` last preserves the "stub fallback" semantic. Inserting `iodev_ed64` after `iodev_sc64` (i.e., between sc64 and stub) keeps the order consistent with the `LIB_IODEV_OBJS` list and matches the registry's probe order in `iodev.c`.
+
+**Patcher revision sketch:**
+
+```python
+def patch():
+    with open(LINKER_SCRIPT, "r") as f:
+        content = f.read()
+
+    has_practice = "practice_main" in content
+    has_iodev = "iodev.o" in content
+    has_ed64 = "iodev_ed64.o" in content
+
+    if has_practice and has_iodev and has_ed64:
+        print("Linker script already patched (practice + full lib/iodev), skipping.")
+        return
+
+    for section in [".text", ".data", ".rodata", ".bss"]:
+        if not has_practice:
+            # Existing "fully unpatched" branch — inject practice + all lib lines.
+            # (No change from Phase 1a.)
+            ...
+        elif not has_iodev:
+            # Existing "practice patched, lib unpatched" branch — inject all lib lines
+            # anchored on practice_freecam.
+            # (No change from Phase 1a.)
+            ...
+        else:
+            # NEW: Phase 1a iodev injected, Phase 1b ed64 missing.
+            # Inject ONLY iodev_ed64.o lines, anchored on iodev_sc64.o.
+            anchor_line = f"build/lib/iodev/iodev_sc64.o({section});"
+            injection = f"        build/lib/iodev/iodev_ed64.o({section});"
+            content = _replace_after_anchor(content, anchor_line, injection)
+    ...
+```
+
+The `_replace_after_anchor` helper (added in Phase 1a's patcher hardening commit `ee5bb05`) raises `RuntimeError` if the anchor isn't found — that's the desired behavior here too.
+
+**Verify the change:**
 
 ```bash
 python3 tools/patch_linker_script.py
-grep "iodev_ed64" linker_scripts/us/rev1/starfox64.ld | wc -l
+grep "iodev" linker_scripts/us/rev1/starfox64.ld
 ```
 
-Expected: 4 (one per section: `.text`, `.data`, `.rodata`, `.bss`).
+Expected output: in each section, `iodev.o` → `iodev_sc64.o` → **`iodev_ed64.o`** → `iodev_stub.o`. 16 total lines (4 objects × 4 sections), with the ed64 entries between sc64 and stub.
 
-**Note**: the existing patcher logic checks `"iodev.o" in content` to decide if it's already patched. With the previous 3-object set already injected, the patcher will report "already patched" — **the new `iodev_ed64.o` lines will not be added incrementally**.
-
-**Fix needed in patcher:** the no-op detection should be more specific — check for `iodev_ed64.o` in addition to `iodev.o`:
-
-```python
-has_iodev = "iodev.o" in content
-has_iodev_ed64 = "iodev_ed64.o" in content
-
-if has_practice and has_iodev and has_iodev_ed64:
-    print("Linker script already patched (practice + lib/iodev incl. ed64), skipping.")
-    return
-```
-
-And add a third state to handle "iodev partially patched, missing ed64": insert the missing lines anchored on `iodev_stub.o` (or whichever is currently last in the linker script).
-
-If this gets fiddly, the simpler path: regenerate the linker script entries by running the patcher in a known-good clean state. Discuss with the user before forcing a `make extract`.
+If running the patcher reports `RuntimeError` ("anchor not found"), the linker script's `iodev_sc64.o` line probably doesn't exist in that section yet — investigate before continuing. Don't force `make extract` (forbidden by CLAUDE.md); manual edit is acceptable as a last resort.
 
 - [ ] **Step 5: Build & verify**
 
@@ -231,12 +276,16 @@ Each primitive should return `iodev_result_t` so timeout failures bubble up clea
 
 - [ ] **Step 2: Add CRC7 and CRC16 helpers**
 
-CRC7 polynomial: `0x89` (x⁷ + x³ + 1), used on every SD command transmission.
+CRC7 polynomial: x⁷ + x³ + 1 = `0x89`, used on every SD command transmission.
 CRC16-CCITT polynomial: `0x1021`, used on every data block.
 
 Public algorithms (write fresh — these are spec facts):
 
 ```c
+/* SD CRC7. The accumulator processes the input byte-by-byte. After 8 shifts
+ * per input byte, the 7-bit CRC sits in bits 7..1 of `crc` (bit 0 was always
+ * shifted in as 0). The SD spec mandates a trailing 1 bit in bit 0 of the
+ * output byte, so we OR 0x01 into the final value. NO right-shift. */
 static uint8_t ed64_crc7(const uint8_t *buf, size_t len) {
     uint8_t crc = 0;
     size_t i;
@@ -244,11 +293,11 @@ static uint8_t ed64_crc7(const uint8_t *buf, size_t len) {
     for (i = 0; i < len; i++) {
         crc ^= buf[i];
         for (j = 0; j < 8; j++) {
-            if (crc & 0x80) crc = (uint8_t)((crc << 1) ^ 0x12); /* x^7 + x^3 + 1 shifted */
+            if (crc & 0x80) crc = (uint8_t)((crc << 1) ^ 0x12);  /* poly 0x89 shifted to land in bit 7 */
             else            crc = (uint8_t)(crc << 1);
         }
     }
-    return (uint8_t)((crc >> 1) | 0x01);  /* SD CRC7 trailing 1 bit */
+    return (uint8_t)(crc | 0x01);  /* CRC in bits 7..1, trailing 1 bit in bit 0 */
 }
 
 /* CRC16-CCITT for 4-bit DAT lines: each of the 4 lines has its own CRC,
@@ -256,7 +305,15 @@ static uint8_t ed64_crc7(const uint8_t *buf, size_t len) {
  * detail — see SD spec section "CRC for 4-bit Wide Bus" */
 ```
 
-Verify against known SD spec test vectors before integrating.
+**Sanity-check `ed64_crc7` against known SD spec test vectors before integrating** (do this BEFORE running on hardware):
+
+| Command | Frame (5 bytes input) | Expected CRC7 byte |
+|---------|----------------------|-------------------|
+| CMD0 GO_IDLE_STATE, arg=0 | `0x40 0x00 0x00 0x00 0x00` | `0x95` |
+| CMD8 SEND_IF_COND, arg=0x000001AA | `0x48 0x00 0x00 0x01 0xAA` | `0x87` |
+| CMD17 READ_SINGLE_BLOCK, arg=0 | `0x51 0x00 0x00 0x00 0x00` | `0x55` |
+
+If your `ed64_crc7` returns different values, the algorithm is wrong — debug before continuing. Common mistakes: using `(crc >> 1) | 0x01` (off by one bit position), wrong polynomial constant, swapped bit-order.
 
 - [ ] **Step 3: Implement CMD send / response receive**
 
