@@ -14,10 +14,10 @@ local ok = H.wait_until(function()
 end, 600, "boot to level select")
 H.assert_true(ok, "Booted to level select")
 
--- sIodevActive is a pointer (u32). After Practice_Init's iodev_detect call,
+-- gIodevActive is a pointer (u32). After Practice_Init's iodev_detect call,
 -- it should point at the stub backend (no SC64 in BizHawk).
-local backend_ptr = H.read_u32(S.sIodevActive)
-H.assert_true(backend_ptr ~= 0, "sIodevActive is non-NULL after Practice_Init")
+local backend_ptr = H.read_u32(S.gIodevActive)
+H.assert_true(backend_ptr ~= 0, "gIodevActive is non-NULL after Practice_Init")
 
 -- The backend descriptor's first field is `id` (iodev_id_t). On emulator
 -- without flashcart sim, this should be IODEV_NONE = 0. Pointer is in
