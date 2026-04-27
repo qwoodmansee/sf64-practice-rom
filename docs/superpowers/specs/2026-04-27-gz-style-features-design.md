@@ -13,8 +13,8 @@ Macros are explicitly **deferred** — out of scope for this design.
 ## Constraints & assumptions
 
 - **Hardware target**: SC64 and EverDrive 64 X7/X8. Runtime detection at boot.
-- **RAM budget**: 4 MB stock with optional 8 MB Expansion Pak. Slot count adapts at boot. **Final slot counts (initial estimate: 2 stock, 8 with Pak) are TBD pending the Phase 3 heap audit** — current free-RAM during gameplay needs measurement before we commit. The static invariant initially assumes the conservative budget below; it tightens once Phase 3 measures actual headroom.
-- **Build size**: ~6 KLoC new C, plus ~3.5 KLoC vendored FatFs.
+- **RAM budget**: 4 MB stock with optional 8 MB Expansion Pak. Slot count adapts at boot. **Final slot counts (initial estimate: 2 stock, 8 with Pak) are TBD pending the Phase 4 heap audit** — current free-RAM during gameplay needs measurement before we commit. The static invariant initially assumes the conservative budget below; it tightens once Phase 4 measures actual headroom.
+- **Build size**: ~8 KLoC new code total (~6 KLoC `lib/`, ~1.5 KLoC `src/practice/`, ~0.5 KLoC tests), plus ~3.5 KLoC vendored FatFs.
 - **Portability goal**: the lower half of this stack must be liftable into other N64 ROM-hack practice tools without modification. The portability boundary stops at the iodev backends — `iodev_sc64.c`/`iodev_ed64.c` necessarily use libultra (`PI_*`, `osPi*`). Everything else under `lib/` (FatFs, serial, slot_manager, ui, watch_engine) MUST be host-portable so it can build with native gcc for unit tests.
 
 ## Identifier convention: LevelId vs SceneId
@@ -27,7 +27,13 @@ This spec keys all save state and overlay APIs on **`LevelId`** (with `levelPhas
 
 Save state files therefore store `LevelId` + `levelPhase`. The overlay region lookup translates `LevelId` → containing overlay segment (`ovl_i1..ovl_i6`) via `gDmaTable`. Cross-scene state load drives `gNextLevel`/`gNextLevelPhase` to trigger the existing transition path.
 
-Non-gameplay scenes (TITLE, MENU, MAP, GAME_OVER, CREDITS, VERSUS, LOGO, TRAINING) are **explicitly excluded** from save state targets; the menu refuses to offer save while in those scenes.
+Non-gameplay states are **explicitly excluded** from save state targets; the menu refuses to offer save in those states. The exclusion list is keyed on `LevelId`, not `SceneId`. Specifically:
+
+- During title/menu/map/game-over/credits/logo scenes, `gCurrentLevel == LEVEL_INVALID`.
+- `LEVEL_VERSUS`, `LEVEL_TRAINING`, and `LEVEL_WARP_ZONE` are gameplay-adjacent but excluded as save targets (out of scope).
+- `LEVEL_UNK_4` (`include/sf64level.h:90`) and `LEVEL_UNK_15` (line 101) are decomp placeholders for unused content; **excluded** until/unless they're given a real meaning.
+
+The full saveable LevelId set is the 18 enum values that appear as save targets in `practice_level.c`'s level list (CORNERIA, METEO, SECTOR_X, AREA_6, SECTOR_Y, VENOM_1, SOLAR, ZONESS, VENOM_ANDROSS, MACBETH, TITANIA, AQUAS, FORTUNA, KATINA, BOLSE, SECTOR_Z, VENOM_2). The exclusion list is everything else in the `LevelId` enum.
 
 ## Architecture
 
@@ -79,11 +85,22 @@ typedef enum {
     IODEV_ED64,
 } iodev_id_t;
 
-iodev_id_t iodev_detect(void);
-int iodev_sd_init(void);
-int iodev_sd_read_sectors(uint32_t lba, uint32_t count, void *buf);
-int iodev_sd_write_sectors(uint32_t lba, uint32_t count, const void *buf);
+typedef enum {
+    IODEV_OK            = 0,
+    IODEV_ERR_NO_CARD   = -1,
+    IODEV_ERR_NO_DEVICE = -2,
+    IODEV_ERR_IO        = -3,
+    IODEV_ERR_TIMEOUT   = -4,
+    IODEV_ERR_PARAM     = -5,
+} iodev_result_t;
+
+iodev_id_t      iodev_detect(void);
+iodev_result_t  iodev_sd_init(void);
+iodev_result_t  iodev_sd_read_sectors(uint32_t lba, uint32_t count, void *buf);
+iodev_result_t  iodev_sd_write_sectors(uint32_t lba, uint32_t count, const void *buf);
 ```
+
+All `iodev_*` functions returning `iodev_result_t` use the convention: `IODEV_OK == 0` on success, negative values on error. The `diskio.c` glue translates these to FatFs's `DRESULT` codes.
 
 - SC64 backend uses cart-bus PI commands: `'i'` `SD_CARD_OP`, `'I'` `SD_SECTOR_SET`, `'s'` `SD_READ`, `'S'` `SD_WRITE`. Reference: `~/code/SummerCart64/sw/bootloader/src/sc64.c:463-485`.
 - ED64 backend uses FPGA register I/O for the X7/X8 SDIO controller. Clean-room reimplementation guided by gz's `ed64_x.c` (avoiding GPL contamination — study, don't copy).
@@ -156,7 +173,7 @@ int  slot_manager_save_sd_named(const char *path);
 int  slot_manager_load_sd_named(const char *path);
 ```
 
-Owns: RAM slot pointer table, the `state_meta_t` header (magic + lib_version + state_version + size + name + scene_idx slot), version validation. The game injects two callbacks; everything else is game-agnostic.
+Owns: RAM slot pointer table, the `state_meta_t` header (magic + lib_version + state_version + size + name + level_id + level_phase — same fields as the on-disk header below), version validation. The game injects two callbacks; everything else is game-agnostic.
 
 ### `lib/ui/osk.{c,h}` — on-screen keyboard
 
@@ -230,8 +247,8 @@ int  practice_overlay_get_region(LevelId level_id,
                                  void **vram_start,
                                  uint32_t *size);
 
-/* Returns true iff this LevelId represents a loadable gameplay scene
- * (excludes TITLE, MENU, MAP, GAME_OVER, CREDITS, VERSUS, TRAINING). */
+/* Returns true iff this LevelId is a loadable save target. False for
+ * LEVEL_INVALID and the explicit exclusion set above. */
 bool practice_overlay_is_saveable(LevelId level_id);
 
 /* Computes a content hash of the overlay's ROM bytes (the containing
@@ -239,9 +256,8 @@ bool practice_overlay_is_saveable(LevelId level_id);
 uint32_t practice_overlay_build_id(LevelId level_id);
 
 /* Drives Practice_LaunchLevel-style transition for cross-scene state load.
- * Caller must wait until practice_overlay_loaded() before applying state. */
+ * Caller polls gCurrentLevel/gPlayState directly to detect completion. */
 void practice_overlay_request_load(LevelId level_id, int32_t level_phase);
-bool practice_overlay_loaded(LevelId level_id);
 ```
 
 This is the only file in the SF64-specific layer that knows how to translate `LevelId` → containing overlay segment.
@@ -286,7 +302,7 @@ offset  size   field
 | `TAG_AUDIO_SPEC_PACKED` | u32 | packed `(sfxLayout << 8) \| specId` — exactly the value `Audio_SetAudioSpec` expects (matches `AUDIO_SET_SPEC` macro in `include/sf64audio_external.h:21`) |
 | `TAG_AUDIO_SEQ_ID` | u32 | current `gBgmSeqId` |
 | `TAG_AUDIO_BANK_VOICE` | u32 | reserved for future audio-state coverage if needed (see Risk Register) |
-| `TAG_SEGMENTS` | bytes[16*15] | gSegments[] snapshot |
+| `TAG_SEGMENTS` | bytes[16*4] | `gSegments[]` snapshot — `u32[16]` per `include/sf64thread.h:129` (64 bytes total) |
 | `TAG_PLAYER_DATA` | bytes | sizeof(Player)*4 |
 | `TAG_ACTORS` / `TAG_BOSSES` / etc. | bytes | full PracticeSnapshot field-by-field |
 | `TAG_PATH_PROGRESS` | f32 | one tag per scalar field |
@@ -360,7 +376,7 @@ The reasoning: silent type-changing migrations are the most common source of sub
 
 ### Load (same scene) — single frame
 
-1. Validate header (magic, lib_version, state_version, scene_id sanity). Refuse on mismatch with descriptive log.
+1. Validate header (magic, lib_version, state_version, level_id sanity via `practice_overlay_is_saveable`). Refuse on mismatch with descriptive log.
 2. `load_state(payload, payload_size)`:
    a. Initialize all PracticeSnapshot fields to defaults (calls into `Practice_Init`'s reset path).
    b. Walk TLV: apply known tags, skip unknown.
@@ -390,7 +406,7 @@ state: AWAIT_SCENE_LOAD
     if (gPlayState == PLAY_UPDATE
         && gPlayer != NULL
         && gCurrentLevel == state.level_id): goto APPLY
-    if (frames_waited > MAX_LOAD_FRAMES): goto FAIL
+    if (frames_waited > MAX_LOAD_FRAMES): goto FAIL    /* default 600 (10s @ 60fps), tunable in Phase 5 */
 
 state: APPLY
   apply overlay bytes (if build ID matches)
