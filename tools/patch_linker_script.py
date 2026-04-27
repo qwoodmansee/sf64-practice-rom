@@ -30,6 +30,26 @@ LIB_IODEV_OBJS = [
 
 ANCHOR = "build/src/engine/fox_save.o"
 
+
+def _replace_after_anchor(content, anchor_line, injection):
+    """Append `injection` immediately after `anchor_line` in `content`.
+
+    Both `anchor_line` and `injection` are already-formatted snippets without
+    the 8-space linker-script indent; we add it here. Asserts the anchor
+    matches exactly once -- otherwise a silent no-op leaves the script
+    half-patched and produces a mysterious link error downstream.
+    """
+    needle = f"        {anchor_line}"
+    repl = f"        {anchor_line}\n{injection}"
+    new_content = content.replace(needle, repl)
+    if new_content == content:
+        raise RuntimeError(
+            f"Linker patcher anchor not found: {needle!r}. "
+            f"Has PRACTICE_OBJS or the linker-script structure changed?"
+        )
+    return new_content
+
+
 def patch():
     with open(LINKER_SCRIPT, "r") as f:
         content = f.read()
@@ -54,10 +74,7 @@ def patch():
                 for obj in LIB_IODEV_OBJS
             )
             injection = injection_practice + "\n" + injection_iodev
-            content = content.replace(
-                f"        {anchor_line}",
-                f"        {anchor_line}\n{injection}",
-            )
+            content = _replace_after_anchor(content, anchor_line, injection)
         else:
             # Incremental: practice already injected; anchor on the last
             # practice_*.o line for this section and append iodev.
@@ -67,10 +84,7 @@ def patch():
                 f"        build/lib/iodev/{obj}.o({section});"
                 for obj in LIB_IODEV_OBJS
             )
-            content = content.replace(
-                f"        {anchor_line}",
-                f"        {anchor_line}\n{injection_iodev}",
-            )
+            content = _replace_after_anchor(content, anchor_line, injection_iodev)
 
     with open(LINKER_SCRIPT, "w") as f:
         f.write(content)
