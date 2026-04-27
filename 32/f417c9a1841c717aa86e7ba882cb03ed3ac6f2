@@ -1,0 +1,23 @@
+CLAUDE.md
+  fbcc3c976ab4561a 140-187
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "32f417c9a1841c717aa86e7ba882cb03ed3ac6f2",
+  "prompts": {
+    "fbcc3c976ab4561a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1c3fb5c6-f65b-4074-808f-60d287629fda",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 48,
+      "total_deletions": 0,
+      "accepted_lines": 48,
+      "overriden_lines": 0
+    }
+  }
+}
