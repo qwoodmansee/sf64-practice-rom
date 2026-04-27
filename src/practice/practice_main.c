@@ -1,4 +1,5 @@
 #include "practice.h"
+#include "iodev/iodev.h"
 
 #ifdef PRACTICE_ROM
 
@@ -39,6 +40,12 @@ void Practice_Init(void) {
     gPracticeConfig.expertMode = false;
 
     osSyncPrintf("=== PRACTICE ROM boot @ %s %s ===\n", __DATE__, __TIME__);
+
+    {
+        iodev_id_t cart = iodev_detect();
+        iodev_result_t sd = iodev_sd_init();
+        osSyncPrintf("[iodev] cart=%d sd_init=%d\n", (int)cart, (int)sd);
+    }
 }
 
 void Practice_Update(void) {

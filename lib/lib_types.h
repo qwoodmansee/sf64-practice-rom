@@ -27,8 +27,14 @@
   typedef s64 int64_t;
   /* N64 is 32-bit; matches include/libc/stdint.h:7. Used for pointer
    * arithmetic / alignment checks (e.g. iodev SC64 buf alignment). */
-  typedef u32 uintptr_t;
-  typedef s32 intptr_t;
+  #ifndef _UINTPTR_T_DEFINED
+    typedef u32 uintptr_t;
+    #define _UINTPTR_T_DEFINED
+  #endif
+  #ifndef _INTPTR_T_DEFINED
+    typedef s32 intptr_t;
+    #define _INTPTR_T_DEFINED
+  #endif
 #endif
 
 #endif /* LIB_LIB_TYPES_H */
