@@ -1,0 +1,25 @@
+lib/iodev/iodev.h
+  cfdfd8b15b3e7343 4
+lib/lib_types.h
+  cfdfd8b15b3e7343 1-30
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "3ad80c2921718bae094215a8dd9b17fce5713bbd",
+  "prompts": {
+    "cfdfd8b15b3e7343": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6d77dcba-66d4-4cda-840e-b5513489ff2d",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 31,
+      "total_deletions": 15,
+      "accepted_lines": 1097,
+      "overriden_lines": 0
+    }
+  }
+}
