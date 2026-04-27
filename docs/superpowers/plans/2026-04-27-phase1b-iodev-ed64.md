@@ -1000,7 +1000,8 @@ contributors flash 'make practice IODEV_DIAG=1' once, capture output,
 report findings — no manual probe-code editing required.
 
 Six tests: cart detection, SD init, MBR read + signature check,
-write/read round-trip on safe sector 0x100000, count-cap guard,
+write/read round-trip on the card's last sector (CMD9/CSD-computed,
+rarely allocated even in FAT32 data regions), count-cap guard,
 misalignment guard."
 ```
 
