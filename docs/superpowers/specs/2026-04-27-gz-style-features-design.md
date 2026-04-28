@@ -566,7 +566,7 @@ Bottom-up, mapped to build order A. Each phase ships in isolation: builds, passe
 
 - `lib/serial.{c,h}`, `lib/slot_manager.{c,h}` without SD methods.
 - Tests: host unit (TLV roundtrip, slot manager state machine), BizHawk functional (fake state struct).
-- **Done**: in-BizHawk save/load of a fake game-state struct.
+- **Completed 2026-04-27**: TLV codec and caller-owned RAM slot manager landed with host tests, ROM build integration, and an in-ROM fake-state smoke test exposed to BizHawk via `test_slot_manager_fake_state.lua`. SD methods intentionally return unsupported until Phase 7.
 
 ### Phase 4: practice_save rewrite + practice_overlay (~800 LoC)
 

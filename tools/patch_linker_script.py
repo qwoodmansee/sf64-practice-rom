@@ -30,6 +30,7 @@ PRACTICE_OBJS = [
     "practice_hud",
     "practice_hitbox",
     "practice_freecam",
+    "practice_slot_test",  # Phase 3: in-ROM slot_manager fake-state smoke test
     "practice_test_fatfs",  # Phase 2: gated by IODEV_DIAG_FATFS, otherwise empty .o
 ]
 
@@ -47,6 +48,8 @@ LIB_IODEV_OBJS = [
 # entry; each subsequent entry anchors on the previous LIB_TOP entry.
 LIB_TOP_OBJS = [
     "sd_crc",       # Phase 1b: SD-spec CRC layer (host-portable)
+    "serial",       # Phase 3: TLV codec (host-portable)
+    "slot_manager", # Phase 3: RAM slot manager (host-portable)
 ]
 
 # lib/fatfs/* objects. Anchored on the last LIB_TOP entry; each subsequent

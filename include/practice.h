@@ -68,12 +68,20 @@ extern s32 gPracticeIndirectCount;
 extern s32 gPracticeIndirectBonus;
 extern s32 gPracticeDespawns;
 extern f32 gPracticeCheckpointProgress;
+extern s32 gPracticeSlotTestStatus;
+extern s32 gPracticeSlotTestFirstLoadedValue;
+extern s32 gPracticeSlotTestSecondLoadedValue;
+extern s32 gPracticeSlotTestLoadCalls;
+extern s32 gPracticeSlotTestSlotCount;
 
 /* practice_main.c */
 void Practice_Init(void);
 void Practice_Update(void);
 void Practice_Draw(void);
 void Practice_ApplyStartConditions(void);
+
+/* practice_slot_test.c -- Phase 3 in-ROM fake-state slot_manager smoke test. */
+void Practice_SlotTest_Run(void);
 
 /* practice_test_fatfs.c -- Phase 2 hardware verification probe.
  * Only built/called when IODEV_DIAG_FATFS=1. Writes SF64TEST.TXT to the

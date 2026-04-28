@@ -47,6 +47,8 @@ void Practice_Init(void) {
         osSyncPrintf("[iodev] cart=%d sd_init=%d\n", (int)cart, (int)sd);
     }
 
+    Practice_SlotTest_Run();
+
 #ifdef IODEV_DIAG_FATFS
     /* Phase 2 hardware verification probe. Build with IODEV_DIAG_FATFS=1
      * and follow docs/superpowers/plans/HW_VERIFY_phase2.md. */

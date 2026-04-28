@@ -33,6 +33,11 @@ SYMBOLS = [
     "gSavedPathProgress",
     "gPracticeCheckpointProgress",
     "gIodevActive",
+    "gPracticeSlotTestStatus",
+    "gPracticeSlotTestFirstLoadedValue",
+    "gPracticeSlotTestSecondLoadedValue",
+    "gPracticeSlotTestLoadCalls",
+    "gPracticeSlotTestSlotCount",
 ]
 
 # PracticeConfig field offsets (bool = int = 4 bytes, s32 = 4, u8 = 1)
