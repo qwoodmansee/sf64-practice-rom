@@ -16,9 +16,11 @@
 const iodev_backend_t *gIodevActive = 0;
 
 iodev_id_t iodev_detect(void) {
-    /* Probe order: SC64 first, then ED64 (Phase 1b), fallback to stub.
+    /* Probe order: SC64 first, then ED64, fallback to stub.
+     * First-match-wins; SC64's SCv2 IDENT magic and ED64's REG_EDID magic
+     * are distinct enough that cross-detection is not a concern.
      * IDO is C89, so all declarations must precede statements. */
-    const iodev_backend_t *candidates[1];
+    const iodev_backend_t *candidates[2];
     int i;
 
     if (gIodevActive) {
@@ -26,7 +28,7 @@ iodev_id_t iodev_detect(void) {
     }
 
     candidates[0] = iodev_backend_sc64();
-    /* candidates[1] = iodev_backend_ed64();  Phase 1b */
+    candidates[1] = iodev_backend_ed64();
 
     for (i = 0; i < (int)(sizeof(candidates) / sizeof(candidates[0])); i++) {
         if (candidates[i]->detect() == candidates[i]->id) {

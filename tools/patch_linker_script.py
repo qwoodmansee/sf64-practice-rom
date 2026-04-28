@@ -3,6 +3,16 @@
 
 Run after `make extract` which regenerates starfox64.ld from splat.
 This is called automatically by the Makefile.
+
+Algorithm:
+  - If the linker script has no practice block at all (fresh extract),
+    inject the full practice + lib block in one shot, anchored on
+    fox_save.o.
+  - Otherwise, walk the expected LIB_IODEV_OBJS list in order. For each
+    entry that's missing from the script, inject it anchored on its
+    predecessor (the previous entry in the list, or the last practice
+    obj if it's the first entry). This is N-state agnostic: appending
+    new lib files to the list "just works" without code changes here.
 """
 import sys
 
@@ -22,9 +32,13 @@ PRACTICE_OBJS = [
     "practice_freecam",
 ]
 
+# Order matters: each entry's predecessor must precede it in the list,
+# because the dynamic patcher anchors each missing entry on the previous
+# list element.
 LIB_IODEV_OBJS = [
     "iodev",
     "iodev_sc64",
+    "iodev_ed64",   # Phase 1b -- must precede iodev_stub
     "iodev_stub",
 ]
 
@@ -55,41 +69,52 @@ def patch():
         content = f.read()
 
     has_practice = "practice_main" in content
-    has_iodev = "iodev.o" in content
 
-    if has_practice and has_iodev:
-        print("Linker script already patched (practice + lib/iodev), skipping.")
-        return
-
-    for section in [".text", ".data", ".rodata", ".bss"]:
-        if not has_practice:
-            # Fresh inject: add both practice and iodev after the anchor.
+    if not has_practice:
+        # Fully unpatched: inject the full practice block + lib block after fox_save.o.
+        for section in [".text", ".data", ".rodata", ".bss"]:
             anchor_line = f"{ANCHOR}({section});"
-            injection_practice = "\n".join(
+            practice_block = "\n".join(
                 f"        build/src/practice/{obj}.o({section});"
                 for obj in PRACTICE_OBJS
             )
-            injection_iodev = "\n".join(
+            lib_block = "\n".join(
                 f"        build/lib/iodev/{obj}.o({section});"
                 for obj in LIB_IODEV_OBJS
             )
-            injection = injection_practice + "\n" + injection_iodev
+            injection = practice_block + "\n" + lib_block
             content = _replace_after_anchor(content, anchor_line, injection)
+        with open(LINKER_SCRIPT, "w") as f:
+            f.write(content)
+        print(f"Patched {LINKER_SCRIPT}: practice + lib/iodev (full).")
+        return
+
+    # Practice already patched. Walk LIB_IODEV_OBJS and inject any missing
+    # entries. The first entry's predecessor is the last practice obj;
+    # each subsequent entry anchors on the previous entry in LIB_IODEV_OBJS.
+    last_practice_obj = PRACTICE_OBJS[-1]
+    inject_count = 0
+    for i, obj in enumerate(LIB_IODEV_OBJS):
+        if f"build/lib/iodev/{obj}.o" in content:
+            continue  # Already present
+        if i == 0:
+            predecessor = f"build/src/practice/{last_practice_obj}"
         else:
-            # Incremental: practice already injected; anchor on the last
-            # practice_*.o line for this section and append iodev.
-            last_practice_obj = PRACTICE_OBJS[-1]
-            anchor_line = f"build/src/practice/{last_practice_obj}.o({section});"
-            injection_iodev = "\n".join(
-                f"        build/lib/iodev/{obj}.o({section});"
-                for obj in LIB_IODEV_OBJS
-            )
-            content = _replace_after_anchor(content, anchor_line, injection_iodev)
+            predecessor = f"build/lib/iodev/{LIB_IODEV_OBJS[i - 1]}"
+        for section in [".text", ".data", ".rodata", ".bss"]:
+            anchor_line = f"{predecessor}.o({section});"
+            injection = f"        build/lib/iodev/{obj}.o({section});"
+            content = _replace_after_anchor(content, anchor_line, injection)
+        inject_count += 1
+
+    if inject_count == 0:
+        print("Linker script already fully patched, skipping.")
+        return
 
     with open(LINKER_SCRIPT, "w") as f:
         f.write(content)
+    print(f"Patched {LINKER_SCRIPT}: injected {inject_count} lib/iodev entries.")
 
-    print(f"Patched {LINKER_SCRIPT} with lib/iodev entries.")
 
 if __name__ == "__main__":
     patch()
