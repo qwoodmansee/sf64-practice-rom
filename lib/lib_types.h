@@ -12,10 +12,15 @@
 #define LIB_LIB_TYPES_H
 
 #if defined(__STDC_HOSTED__) && __STDC_HOSTED__ == 1 && !defined(_LANGUAGE_C_NO_STDINT)
-  /* Host build (gcc + libc): use the real header. */
+  /* Host build (gcc + libc): use the real header. Callers needing
+   * size_t / ptrdiff_t should also `#include <stddef.h>` directly --
+   * we deliberately do NOT pull stddef in here because the project's
+   * own include/libc/stddef.h is on the search path and the two would
+   * collide for host CC_CHECK runs. */
   #include <stdint.h>
 #else
-  /* Embedded N64 / IDO build: bridge from Ultra64 types. */
+  /* Embedded N64 / IDO build: bridge from Ultra64 types.
+   * (PR/ultratypes.h defines size_t alongside the fixed-width types.) */
   #include "PR/ultratypes.h"
   typedef u8  uint8_t;
   typedef u16 uint16_t;

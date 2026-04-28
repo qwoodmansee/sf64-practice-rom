@@ -303,7 +303,7 @@ endif
 
 $(shell mkdir -p asm bin linker_scripts/$(VERSION)/$(REV)/auto)
 
-SRC_DIRS      := $(shell find src -type d) $(shell find lib -type d 2>/dev/null)
+SRC_DIRS      := $(shell find src -type d) $(shell find lib -type d -not -path 'lib/test*' 2>/dev/null)
 # Temporary, until we decide how we're gonna handle other versions
 ifeq ($(VERSION), jp)
 SRC_DIRS      := $(shell find srcjp -type d)
@@ -485,6 +485,9 @@ practice:
 	@$(PYTHON) tools/patch_linker_script.py
 	$(MAKE) PRACTICE_ROM=1
 
+lib-test:
+	@$(MAKE) -C lib/test run-all
+
 practice-compressed:
 	@$(PYTHON) tools/patch_linker_script.py
 	$(MAKE) PRACTICE_ROM=1 uncompressed
@@ -583,4 +586,4 @@ build/src/libultra/libc/ll.o: src/libultra/libc/ll.c
 # Print target for debugging
 print-% : ; $(info $* is a $(flavor $*) variable set to [$($*)]) @true
 
-.PHONY: all uncompressed compressed clean init extract expected format checkformat decompress compress assets context disasm toolchain practice practice-compressed practice-patch
+.PHONY: all uncompressed compressed clean init extract expected format checkformat decompress compress assets context disasm toolchain practice practice-compressed practice-patch lib-test
