@@ -322,8 +322,9 @@ endif
 ifeq ($(VERSION), eu)
 SRC_DIRS      := $(shell find srceu -type d)
 endif
-ASM_DIRS      := $(shell find asm/$(VERSION)/$(REV) -type d -not -path "asm/$(VERSION)/$(REV)/nonmatchings/*")
-BIN_DIRS      := $(shell find bin -type d)
+# find -L: worktrees may symlink asm/ and bin/; POSIX find does not traverse symlink dirs otherwise.
+ASM_DIRS      := $(shell find -L asm/$(VERSION)/$(REV) -type d -not -path "asm/$(VERSION)/$(REV)/nonmatchings/*")
+BIN_DIRS      := $(shell find -L bin -type d)
 
 
 C_FILES       := $(foreach dir,$(SRC_DIRS),$(wildcard $(dir)/*.c))

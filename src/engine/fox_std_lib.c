@@ -859,7 +859,7 @@ void Graphics_DisplayLargeText(s32 xPos, s32 yPos, f32 xScale, f32 yScale, char*
         while ((charIndex < ARRAY_COUNT(sLargeChars)) && sLargeChars[charIndex] != text[0]) {
             charIndex++;
         }
-        if (sLargeChars[charIndex] == text[0]) {
+        if ((charIndex < ARRAY_COUNT(sLargeChars)) && (sLargeChars[charIndex] == text[0])) {
             if ((startPrint == true) && (text[-1] == 'Y') && (text[0] == 'A')) {
                 xPosCurrent -= 3.0f;
             }
@@ -990,7 +990,7 @@ s32 Graphics_GetLargeTextWidth(char* text) {
         while ((charIndex < ARRAY_COUNT(sLargeChars)) && sLargeChars[charIndex] != text[0]) {
             charIndex++;
         }
-        if (sLargeChars[charIndex] == text[0]) {
+        if ((charIndex < ARRAY_COUNT(sLargeChars)) && (sLargeChars[charIndex] == text[0])) {
             if ((startPrint == true) && (text[-1] == 'Y') && (text[0] == 'A')) {
                 xPos -= 3.0f;
             }
@@ -1131,7 +1131,7 @@ void Graphics_DisplaySmallText(s32 xPos, s32 yPos, f32 xScale, f32 yScale, char*
         while ((var_t0 < ARRAY_COUNT(sSmallChars)) && sSmallChars[var_t0] != text[0]) {
             var_t0++;
         }
-        if (sSmallChars[var_t0] == text[0]) {
+        if ((var_t0 < ARRAY_COUNT(sSmallChars)) && (sSmallChars[var_t0] == text[0])) {
             if (sSmallCharTex[var_t0] != NULL) {
                 width = 8;
                 if (var_t0 > 30) {
@@ -1170,7 +1170,7 @@ s32 Graphics_GetSmallTextWidth(char* text) {
         while ((charIndex < ARRAY_COUNT(sSmallChars)) && sSmallChars[charIndex] != text[0]) {
             charIndex++;
         }
-        if (sSmallChars[charIndex] == text[0]) {
+        if ((charIndex < ARRAY_COUNT(sSmallChars)) && (sSmallChars[charIndex] == text[0])) {
             switch (text[0]) {
                 case '!':
                 case ':':
