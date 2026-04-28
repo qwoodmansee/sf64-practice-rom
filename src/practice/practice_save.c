@@ -5,6 +5,60 @@
 #include "variables.h"
 #include "bgm.h"
 
+/* ========================================================================
+ * Wave 1 skeleton temp; Wave 2.2 deletes this block.
+ *
+ * The Phase 4 plan adds new public APIs and diagnostic globals to
+ * include/practice.h (Practice_Save_Init / Practice_CanSaveHere /
+ * Practice_SaveStateSlot / Practice_LoadStateSlot / Practice_GetActiveSlot
+ * / Practice_CycleSlot, plus gPracticeActiveSlot / gPracticeSlotValidBits /
+ * gPracticeLastSaveResult / gPracticeLastLoadResult). Wave 2.2 owns the real
+ * definitions when it rewrites practice_save.c on top of slot_manager. Wave 1
+ * only needs the build to link and the static invariants (which require
+ * every Practice_* declared in practice.h to be defined under src/practice/)
+ * to pass.
+ *
+ * Grep PRACTICE_PHASE4_SKELETON_TEMP and delete the #define + the guarded
+ * block below when Wave 2.2 lands.
+ * ====================================================================== */
+#define PRACTICE_PHASE4_SKELETON_TEMP 1
+#ifdef PRACTICE_PHASE4_SKELETON_TEMP
+
+s32 gPracticeActiveSlot;
+s32 gPracticeSlotValidBits;
+s32 gPracticeLastSaveResult;
+s32 gPracticeLastLoadResult;
+
+void Practice_Save_Init(void) {
+    gPracticeActiveSlot = 0;
+    gPracticeSlotValidBits = 0;
+    gPracticeLastSaveResult = 0;
+    gPracticeLastLoadResult = 0;
+}
+
+bool Practice_CanSaveHere(void) {
+    return false;
+}
+
+void Practice_SaveStateSlot(s32 slot) {
+    (void)slot;
+}
+
+void Practice_LoadStateSlot(s32 slot) {
+    (void)slot;
+}
+
+s32 Practice_GetActiveSlot(void) {
+    return gPracticeActiveSlot;
+}
+
+void Practice_CycleSlot(s32 delta) {
+    (void)delta;
+}
+
+#endif /* PRACTICE_PHASE4_SKELETON_TEMP */
+/* ===================== End Wave 1 skeleton temp ======================== */
+
 typedef struct PracticeScalarState {
     f32 pathProgress;
     f32 savedPathProgress;

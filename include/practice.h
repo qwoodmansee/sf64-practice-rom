@@ -74,6 +74,14 @@ extern s32 gPracticeSlotTestSecondLoadedValue;
 extern s32 gPracticeSlotTestLoadCalls;
 extern s32 gPracticeSlotTestSlotCount;
 
+/* Phase 4 — slot-manager-backed save state diagnostics. Defined in
+ * practice_save.c (Wave 2.2 owns the real definitions; Wave 1 ships
+ * temporary zero stubs in practice_save.c so the build links). */
+extern s32 gPracticeActiveSlot;
+extern s32 gPracticeSlotValidBits;
+extern s32 gPracticeLastSaveResult;
+extern s32 gPracticeLastLoadResult;
+
 /* practice_main.c */
 void Practice_Init(void);
 void Practice_Update(void);
@@ -153,6 +161,14 @@ void Practice_SaveState(void);
 void Practice_LoadState(void);
 bool Practice_HasCheckpoint(void);
 void Practice_ClearCheckpoint(void);
+/* Phase 4 — slot-manager-backed save state. Wave 2.2 implements; Wave 1
+ * ships forward decls only with stub bodies in practice_save.c. */
+void Practice_Save_Init(void);
+bool Practice_CanSaveHere(void);
+void Practice_SaveStateSlot(s32 slot);
+void Practice_LoadStateSlot(s32 slot);
+s32  Practice_GetActiveSlot(void);
+void Practice_CycleSlot(s32 delta);
 
 #endif
 #endif

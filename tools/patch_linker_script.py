@@ -26,6 +26,7 @@ PRACTICE_OBJS = [
     "practice_state",
     "practice_menu",
     "practice_save",
+    "practice_overlay",     # Phase 4: LevelId -> ovl_iN region map (Wave 1: stubs)
     "practice_input_display",
     "practice_hud",
     "practice_hitbox",
@@ -50,6 +51,7 @@ LIB_TOP_OBJS = [
     "sd_crc",       # Phase 1b: SD-spec CRC layer (host-portable)
     "serial",       # Phase 3: TLV codec (host-portable)
     "slot_manager", # Phase 3: RAM slot manager (host-portable)
+    "crc32",        # Phase 4: CRC32-IEEE for overlay build IDs (host-portable)
 ]
 
 # lib/fatfs/* objects. Anchored on the last LIB_TOP entry; each subsequent

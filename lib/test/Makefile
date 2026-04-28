@@ -17,7 +17,7 @@ INCLUDES = -I.. -I.
 
 TEST_DISKIO_IMG = /tmp/test_diskio.img
 
-TESTS = test_sd_crc test_serial test_slot_manager test_diskio test_fatfs_smoke
+TESTS = test_sd_crc test_serial test_slot_manager test_crc32 test_diskio test_fatfs_smoke
 
 all: run-all
 
@@ -29,6 +29,9 @@ test_serial: test_serial.c ../serial.c ../serial.h ../lib_types.h
 
 test_slot_manager: test_slot_manager.c ../slot_manager.c ../slot_manager.h ../lib_types.h
 	$(CC) $(CFLAGS) $(INCLUDES) test_slot_manager.c ../slot_manager.c -o $@
+
+test_crc32: test_crc32.c ../crc32.c ../crc32.h ../lib_types.h
+	$(CC) $(CFLAGS) $(INCLUDES) test_crc32.c ../crc32.c -o $@
 
 test_diskio: test_diskio.c iodev_mock.c ../fatfs/diskio.c ../fatfs/ff.c ../fatfs/ffunicode.c
 	$(CC) $(CFLAGS) $(INCLUDES) \
@@ -62,7 +65,7 @@ run-all: $(TESTS)
 	@for t in $(TESTS); do \
 		echo "===> $$t"; \
 		case "$$t" in \
-		  test_sd_crc|test_serial|test_slot_manager) ./$$t || exit 1 ;; \
+		  test_sd_crc|test_serial|test_slot_manager|test_crc32) ./$$t || exit 1 ;; \
 		  *) \
 		    rm -f $(TEST_DISKIO_IMG); \
 		    $(MAKE) -s $(TEST_DISKIO_IMG); \

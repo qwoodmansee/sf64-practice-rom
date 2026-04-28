@@ -38,6 +38,28 @@ SYMBOLS = [
     "gPracticeSlotTestSecondLoadedValue",
     "gPracticeSlotTestLoadCalls",
     "gPracticeSlotTestSlotCount",
+    # Phase 4 — slot-manager-backed save state diagnostics. Defined in
+    # the Wave 1 skeleton block in practice_save.c (Wave 2.2 takes ownership).
+    "gPracticeActiveSlot",
+    "gPracticeSlotValidBits",
+    "gPracticeLastSaveResult",
+    "gPracticeLastLoadResult",
+    # Phase 4 — overlay segment ranges. These are linker-defined symbols
+    # in starfox64.ld; the existing regex matches them when present and the
+    # WARNING branch handles absence gracefully (some builds may not export
+    # all six). Tests only consume them when they appear.
+    "ovl_i1_VRAM",
+    "ovl_i1_VRAM_END",
+    "ovl_i2_VRAM",
+    "ovl_i2_VRAM_END",
+    "ovl_i3_VRAM",
+    "ovl_i3_VRAM_END",
+    "ovl_i4_VRAM",
+    "ovl_i4_VRAM_END",
+    "ovl_i5_VRAM",
+    "ovl_i5_VRAM_END",
+    "ovl_i6_VRAM",
+    "ovl_i6_VRAM_END",
 ]
 
 # PracticeConfig field offsets (bool = int = 4 bytes, s32 = 4, u8 = 1)
