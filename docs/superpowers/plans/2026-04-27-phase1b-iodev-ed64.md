@@ -2,6 +2,64 @@
 
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+---
+
+## ⚠️ EXECUTION STATUS — READ FIRST (Phase 1c handoff)
+
+**Last updated:** 2026-04-27 (after Phase 1a hardware verification).
+
+This plan was **partially executed**. A future agent picking it up is the **Phase 1c executor**. The plan body below is unchanged from its original form so Tasks 3-8 remain accurate; this section tells you what's already shipped, what isn't, and what you need to know that wasn't true when the plan was first written.
+
+### What is already shipped
+
+| Task | Status | Commit | Notes |
+|---|---|---|---|
+| 1 | ✅ Shipped | `f3cfcb4 feat: add ED64 X7/X8 cart detection (SD ops are stubs)` | `lib/iodev/iodev_ed64.c` exists with `ed64_detect()` working; `sd_init/read/write` return `IODEV_ERR_NO_DEVICE`. |
+| 2 | ✅ Shipped | `4952219 feat: add SD CRC layer with host unit tests` | `lib/sd_crc.{c,h}` + `lib/test/test_sd_crc.c`. 9/9 host tests pass against SD spec vectors. Run via `make lib-test`. |
+| 3 | ❌ Not started | — | SD card initialization (CMD0/CMD8/ACMD41/CMD2/CMD3/CMD7) |
+| 4 | ❌ Not started | — | Single-block read (CMD17) |
+| 5 | ❌ Not started | — | Single-block write (CMD24) |
+| 6 | ❌ Not started | — | `IODEV_DIAG=1` mode (the diag ROM you ship to the EverDrive contact) |
+| 7 | 🟡 Partial | `5032027 feat: add ED64 protocol invariants for Phase 1b Tasks 1-2` | `check_iodev_ed64()` exists in `tools/practice_invariants.py` but only covers Tasks 1-2; expand it as you ship Tasks 3-6. |
+| 8 | ❌ Not started | — | Phase exit gate (HW verification report). |
+
+### Why we stopped at Task 2
+
+Tasks 3-5 are ~400 LoC of timing-critical FPGA register code. Without an EverDrive in hand, the diag ROM (Task 6) would *be* the validation — but if Tasks 3-5 contain subtle bugs the EverDrive contributor's time gets wasted on a broken artifact. The original time-box ended cleanly at "verified Tasks 1-2 are correct, defer the rest until either (a) hardware is available for iterative dev, or (b) a hardware contributor is queued and willing to do multiple round-trips."
+
+### Lessons from Phase 1a that ED64 implementers MUST internalize
+
+Phase 1a (SC64) shipped Tasks 1-7 and was verified on real hardware on 2026-04-27. Two important bugs surfaced only on hardware. Both have direct ED64 analogs:
+
+1. **Detection probes must operate post-unlock, not pre-unlock.** Phase 1a's `sc64_detect` originally read `SC64_REG_IDENT` first and unlocked only on a magic match — that worked in BizHawk but failed on every real SC64 because the register interface is locked by default in user-ROM mode and IDENT returned garbage. Fix in commit `ad9c59a`. **For ED64 the analog is: `ed64_detect` must write the unlock magic (`0xAA55` to `REG_KEY`) BEFORE reading `REG_EDID`.** The current Task 1 implementation already follows this order — verify it's still correct before extending. The static invariant in `check_iodev_ed64` should grow an "unlock-before-EDID-read" check analogous to Phase 1a's `SC64_KEY_UNLOCK_2 < SC64_REG_IDENT` ordering check.
+
+2. **Rapid-fire small `osSyncPrintf` calls after SD command operations corrupt IS-Viewer / debug-print output.** Phase 1a's verification probe printed 18 separate `osSyncPrintf("%02X ", ...)` calls in a loop after a successful SD read; the deployer terminal flooded with KB of garbage (the wp<rp wrap-around bug from `CLAUDE.md`'s SC64 protocol gotchas). **For Task 6's diagnostic ROM: emit each result line as a SINGLE `osSyncPrintf` call with all hex bytes in one format string.** This applies whether you're using IS-Viewer (SC64) or UNFLoader (ED64). Stays inside the existing 512-byte `ISV_MAX_FLUSH` buffer.
+
+3. **BizHawk does not faithfully model flashcart register-lock state machines.** Phase 1a passed BizHawk functional tests but failed on hardware because BizHawk accepted IDENT reads without unlock. **You cannot trust BizHawk green checks as proof of hardware correctness for register-protocol code.** Plan ED64 the same way Phase 1a should have been planned: assume BizHawk = "compiles + linker is happy + dispatch logic is sane," and require a hardware verification artifact for everything else.
+
+4. **Pre-existing suspect comment in `lib/iodev/iodev_ed64.c:81-85`.** The `PI_WRITE_FLUSH` macro currently drains the PI bus via `IO_READ(ED64_REG_EDID)`, with a comment claiming EDID is "always-readable (even pre-unlock returns sensible open-bus or ID bits)." This is exactly the kind of unverified-pre-unlock claim that killed SC64 detection. The code path is functionally fine because the read value is `(void)`-discarded — the drain side-effect happens regardless of what value comes back — but the comment's claim should be either (a) verified on hardware as part of Phase 1c, or (b) rephrased to "we don't care what value comes back, only that the read drains the PI bus." Don't write any new code that *trusts* the value of a pre-unlock EDID read.
+
+### How to resume
+
+1. **Open this plan and skip to "Task 3: SD card initialization"** (line ~605 in the body below).
+2. **Re-read the License & clean-room constraints section** before opening any reference firmware. The `~/code/gz/src/gz/ed64_x.c` GPL-2 study-only constraint still applies.
+3. **Verify Tasks 1-2's outputs are still in place** before starting Task 3:
+   - `lib/iodev/iodev_ed64.c` exists, `ed64_detect()` writes `0xAA55` to `REG_KEY` then reads `REG_EDID` and matches `0xED64` in upper 16 bits.
+   - `lib/sd_crc.{c,h}` exists; `make lib-test` passes 9/9.
+   - `tools/practice_invariants.py::check_iodev_ed64` exists.
+   - `make practice -j4` builds clean.
+4. **Confirm with the user whether the EverDrive contact is still in the loop** before doing the work. The whole reason Tasks 3-6 were deferred is that the contact's time is finite — don't ship them a half-baked diag ROM.
+5. After Tasks 3-6, when sending the diag ROM to the contact, follow the **Phase 1a hardware verification probe pattern**: see commit `ad9c59a` and `docs/superpowers/plans/HW_VERIFY_phase1a.md`. Build with a one-shot probe gated by `IODEV_DIAG=1`, output via UNFLoader, single `osSyncPrintf` per result line.
+
+### Memories to consult before starting Phase 1c
+
+- `Phase 1a SC64 SD I/O — verified on hardware (write/read round-trip bit-perfect)` — what "good" looks like
+- `SC64 IDENT must be read AFTER unlock in user-ROM mode (corrects prior memory)` — the bug pattern Phase 1c must avoid
+- `Rapid-fire small osSyncPrintf calls after SD ops trigger IS-Viewer wrap-around storm` — the pattern Task 6's diag output must follow
+- `iodev_abstraction` entity memory — current state of the lib/iodev codebase (note: Known Issue #1 is now resolved)
+
+---
+
 **Goal:** Add an EverDrive 64 X7/X8 backend to the existing `lib/iodev/` abstraction so users on Krikzz hardware get the same SD card I/O surface that SC64 users got in Phase 1a — with enough confidence in the result that a hardware-equipped contributor can verify it in 10 minutes.
 
 **Architecture:** Single new file `lib/iodev/iodev_ed64.c` implementing the ED64 X protocol against the FPGA registers documented in Krikzz's public hardware spec. The file plugs into the existing registry pattern from Phase 1a (`iodev_backend_t` descriptor + getter). Unlike SC64's high-level `SD_READ`/`SD_WRITE` commands, ED64 X exposes raw SDIO bus primitives — the host drives the SD card protocol directly (CMD0, CMD8, ACMD41, CMD2/3/7, CMD17/24, CRC7/CRC16). A new `lib/sd_crc.{c,h}` extracts the SD-spec CRC code so it's host-portable and unit-testable. A new `lib/iodev/iodev_diag.c` (gated by `IODEV_DIAG=1`) ships a turnkey hardware-verification ROM.
