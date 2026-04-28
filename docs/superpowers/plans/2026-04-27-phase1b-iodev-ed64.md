@@ -105,7 +105,7 @@ Multi-block transfers (CMD18/CMD25) — the previous Task 5 — are **dropped fr
 Spend 30-60 minutes reading `~/code/gz/src/gz/ed64_x.c` and `~/code/gz/src/gz/ed64_x.h` to extract the protocol facts. **Take notes in a scratch file** (NOT in this repo) covering:
 
 - `REG_BASE = 0xBF800000` and the offsets to each register (`REG_SYS_CFG`, `REG_KEY`, `REG_EDID`, `REG_SD_CMD_RD/WR`, `REG_SD_DAT_RD/WR`, `REG_SD_STATUS`).
-- Cart-lock dance: ED64 X registers are inaccessible until the cart is unlocked via `REG_KEY` writes (sequence: `0xAA55`, `0x55AA`).
+- Cart-lock dance: ED64 X registers are inaccessible until the cart is unlocked via a single `REG_KEY` write of `0xAA55`. Lock = write `0`. **The plan's earlier draft incorrectly documented a two-write sequence (`0xAA55` + `0x55AA`); that was wrong. Verified against Krikzz public docs and gz reference firmware (`~/code/gz/src/gz/ed64_x.c:235`) — single write only. Phase 1b Task 1 implementation correction confirmed this.**
 - **Detection (hardware fact):** after unlock, read `REG_EDID` (a 32-bit register). The upper 16 bits of the result equal the literal value `0xED64` for any genuine EverDrive 64 X cart (X7 and X8 share this magic). The lower 16 bits encode model/firmware revision and can be ignored for detection. Pseudocode: `if (((reg_edid_value >> 16) & 0xFFFF) == 0xED64u) return IODEV_ED64;` else return `IODEV_NONE`. **Do not invent an "upper byte" check or look for separate X7/X8 magic** — they share the cart-class identifier.
 - Cart-bus access pattern: PI register reads/writes via `IO_READ`/`IO_WRITE` (same as SC64).
 
@@ -1029,11 +1029,13 @@ def check_iodev_ed64():
     if "PI_WRITE_FLUSH" not in src:
         error(f"{path}: must use PI_WRITE_FLUSH macro for cart-bus writes")
 
-    # Cart unlock sequence — hardware fact; if removed, cart is inaccessible.
-    # Match the literal magic values rather than any specific constant name,
-    # so the implementer is free to name them ED64_UNLOCK_KEY_1 / KEY_A / etc.
-    if "0xAA55" not in src or "0x55AA" not in src:
-        error(f"{path}: must use the cart-unlock magic sequence (0xAA55 + 0x55AA)")
+    # Cart-unlock magic — hardware fact; if removed, cart is inaccessible.
+    # Single write of 0xAA55 unlocks; lock is written as 0. (The plan's
+    # earlier draft documented an incorrect two-write sequence with
+    # 0x55AA — actual ED64 X hardware uses a single write of 0xAA55,
+    # confirmed during Phase 1b Task 1 implementation.)
+    if "0xAA55" not in src:
+        error(f"{path}: must use the cart-unlock magic value 0xAA55")
 
     # 128-sector cap matches SC64's; consistent caller contract.
     if src.count("count > 128") < 2:
@@ -1060,7 +1062,7 @@ Negative tests (each: edit, run, confirm fails, revert):
 - Comment out `PI_WRITE_FLUSH` macro definition → must fail
 - Remove `#include "sd_crc.h"` → must fail
 - Change `count > 128` to `count > 256` in one path → must fail
-- Change one `0xAA55` literal to `0xBA55` → must fail (cart-unlock magic check)
+- Change the `0xAA55` literal to `0xBA55` → must fail (cart-unlock magic check)
 
 - [ ] **Step 3: Create `docs/superpowers/plans/HW_VERIFY_phase1b.md`**
 

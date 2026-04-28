@@ -933,13 +933,15 @@ Run with 'make lib-test' (~5 seconds total)."
 
 - [ ] **Step 1: Extend `iodev_stub.c` with optional RAM-backed mode**
 
-Gated by a build flag `IODEV_STUB_RAM_FAT32=1`. When set, `iodev_stub.c` allocates a 1 MB RAM buffer at boot, populates it with a tiny FAT32 image (compiled in as a `.h` file containing the bytes), and dispatches `iodev_sd_*` to in-RAM read/write of that buffer.
+Gated by a build flag `IODEV_STUB_RAM_FAT32=1`. When set, `iodev_stub.c` allocates a 256 KB RAM buffer at boot, populates it with a tiny FAT32 image (compiled in as a `.h` file containing the bytes), and dispatches `iodev_sd_*` to in-RAM read/write of that buffer.
+
+**Why 256 KB and not 1 MB:** stock N64 has 4 MB RAM and the practice ROM uses much of it. A 256 KB FAT32 with 512-byte clusters is achievable via `newfs_msdos -c 1 -F 32` or `mkfs.fat -F 32 -s 1`, hex-dumps to ~64 KB of source, and is plenty for a single MARKER.TXT round-trip test.
 
 ```c
 #ifdef IODEV_STUB_RAM_FAT32
-#include "stub_fat32_image.h"  /* generated; 1 MB FAT32 image as a static const u8 array */
+#include "stub_fat32_image.h"  /* generated; 256 KB FAT32 image as a static const u8 array */
 
-static u8 sStubRam[1024 * 1024];
+static u8 sStubRam[256 * 1024];
 static int sStubRamInited = 0;
 
 static void stub_ram_init(void) {
@@ -972,9 +974,9 @@ static iodev_result_t  stub_sd_write_sectors(u32 lba, u32 count, const void *buf
 Build a minimal FAT32 image with a known file in it:
 
 ```bash
-# Create a 1MB FAT32 image with a known file
-dd if=/dev/zero of=/tmp/stub.img bs=1024 count=1024
-newfs_msdos -F 32 -v STUB /tmp/stub.img       # macOS; or mkfs.fat -F 32 /tmp/stub.img on Linux
+# Create a 256 KB FAT32 image with a known file
+dd if=/dev/zero of=/tmp/stub.img bs=1024 count=256
+newfs_msdos -c 1 -F 32 -v STUB /tmp/stub.img    # macOS; or: mkfs.fat -F 32 -s 1 /tmp/stub.img on Linux
 mkdir -p /tmp/stub_mount && hdiutil attach /tmp/stub.img -mountpoint /tmp/stub_mount
 echo "PHASE2 OK" > /tmp/stub_mount/MARKER.TXT
 hdiutil detach /tmp/stub_mount
@@ -982,13 +984,9 @@ xxd -i /tmp/stub.img > lib/iodev/stub_fat32_image.h
 sed -i 's/_tmp_stub_img/kStubFat32Image/g' lib/iodev/stub_fat32_image.h
 ```
 
-The generated `stub_fat32_image.h` contains `static const unsigned char kStubFat32Image[1048576] = { 0x..., ... };`.
+The generated `stub_fat32_image.h` contains `static const unsigned char kStubFat32Image[262144] = { 0x..., ... };` — about ~64 KB of source.
 
-Add `lib/iodev/stub_fat32_image.h` to `.gitignore` (it's a build artifact, not source).
-
-Actually — better: vendor the image as a tracked artifact so CI doesn't need `newfs_msdos`. Decide based on file size:
-- 1 MB FAT32 image → ~250 KB hex dump → tracked is OK (we already vendor a 256 KB practice ROM patch).
-- If too big, keep it gitignored and have the `lib-test` Makefile generate it.
+**Vendor as a tracked artifact** rather than gitignored — CI shouldn't need `newfs_msdos` to run the BizHawk test. The hex dump is small enough (~64 KB) to track without bloating the repo, and tracking it makes the test reproducible. Document its provenance in a comment at the top of the file ("generated from a 256 KB FAT32 image with cluster size 512 bytes; contains MARKER.TXT = 'PHASE2 OK\\n' at root").
 
 For Phase 2, **track the image** to keep the ROM build hermetic.
 
@@ -1073,9 +1071,57 @@ verifies the file content reaches the expected RAM buffer."
 
 **Goal:** End-to-end on real SC64. Boot the practice ROM with a FatFs probe, write a known file to the SD card, eject, read on PC, content matches.
 
-- [ ] **Step 1: Extend the Phase 1b diagnostic ROM with a FatFs test**
+- [ ] **Step 1: Extend the Phase 1b diagnostic ROM with a FatFs test (or author a Phase-2-only diag harness if Phase 1b's diag mode didn't ship)**
 
-If Phase 1b's `IODEV_DIAG=1` mode shipped, extend `iodev_diag.c`'s test suite (after the existing 6 sector-level tests) with FatFs tests:
+**Phase 1b status as of Phase 2 start:** Phase 1b shipped Tasks 1-2 only (ED64 detection + CRC). The `IODEV_DIAG=1` mode (Phase 1b Task 6) was deferred. This means `lib/iodev/iodev_diag.c` does NOT exist when Phase 2 starts.
+
+**Two paths:**
+
+**Path A (preferred if Phase 1b Task 6 ships before Phase 2 Task 7):** extend the existing diag suite as the original plan intended.
+
+**Path B (fallback when Phase 2 Task 7 runs without Phase 1b's diag mode):** create a minimal Phase-2-specific harness inline. Add a `Practice_TestFatfs` helper in `src/practice/practice_test_fatfs.c` (gated by `IODEV_DIAG_FATFS=1`), called from `Practice_Init` after the existing iodev log. Body:
+
+```c
+#ifdef IODEV_DIAG_FATFS
+{
+    FATFS fs;
+    FIL fp;
+    FRESULT fr;
+    UINT bw, br;
+    static const char marker_text[] = "phase2 round-trip ok\n";
+    static char rbuf[64];
+    
+    osSyncPrintf("\n[diag-fatfs] === Phase 2 hardware verification ===\n");
+    osSyncPrintf("[diag-fatfs] WARNING: this ROM writes SF64TEST.TXT to your SD card root.\n");
+    
+    fr = f_mount(&fs, "0:", 1);
+    osSyncPrintf("[diag-fatfs] T7 fatfs_mount=%d (expect 0=FR_OK)\n", (int)fr);
+    if (fr != FR_OK) return;
+    
+    fr = f_open(&fp, "0:/SF64TEST.TXT", FA_WRITE | FA_CREATE_ALWAYS);
+    if (fr == FR_OK) {
+        fr = f_write(&fp, marker_text, sizeof(marker_text) - 1, &bw);
+        f_close(&fp);
+    }
+    osSyncPrintf("[diag-fatfs] T8 write=%d bytes_written=%u\n", (int)fr, (unsigned)bw);
+    
+    fr = f_open(&fp, "0:/SF64TEST.TXT", FA_READ);
+    if (fr == FR_OK) {
+        fr = f_read(&fp, rbuf, sizeof(rbuf) - 1, &br);
+        rbuf[br < sizeof(rbuf) - 1 ? br : sizeof(rbuf) - 1] = '\0';
+        f_close(&fp);
+    }
+    osSyncPrintf("[diag-fatfs] T9 read=%d bytes_read=%u content=\"%s\"\n",
+                 (int)fr, (unsigned)br, rbuf);
+    
+    f_unmount("0:");
+}
+#endif
+```
+
+Either path produces the same IS-Viewer output for the user to capture. Path B doesn't depend on Phase 1b's Task 6 landing.
+
+**If extending Phase 1b's existing `iodev_diag.c` (Path A):** append after the existing 6 sector-level tests:
 
 ```c
 #include "ff.h"  /* added by Phase 2 */
@@ -1237,6 +1283,7 @@ git tag phase2-fatfs
 
 | Risk | Likelihood | Mitigation |
 |------|------------|-----------|
+| FatFs passes a misaligned buffer to `iodev_sd_*` from a caller's `f_read`/`f_write` | Medium | iodev requires 8-byte aligned buffers. FatFs's internal sector window is naturally aligned, but caller-supplied file payload buffers can be any alignment. Two viable fixes: (a) document in `iodev.h`'s public contract and trust callers, or (b) bounce-buffer in `diskio.c` via a 512-byte stack scratch when alignment check fails. Defer to whichever phase first hits this — Phase 7's save state code (which uses large aligned buffers) is unlikely to trigger; Phase 8's watch-engine I/O might. Track via TODO in `diskio.c`. |
 | FatFs source rejected by IDO C89 | High | Task 3 Step 4 documents the per-directory GCC fallback. Cost: a few minutes of build-system work. |
 | FatFs's `LBA_t` (32-bit in our config) overflows on >2 TB cards | Low | Practical SD cards in 2026 are <512 GB. Switch to `FF_LBA64=1` if it ever matters; small config change. |
 | `GET_SECTOR_COUNT` 32 GB cap rejects larger SDs | Low | Cards >32 GB are exFAT-formatted by default and FatFs (with `FF_FS_EXFAT=0`) won't mount them anyway. Users would need to reformat to FAT32. |
