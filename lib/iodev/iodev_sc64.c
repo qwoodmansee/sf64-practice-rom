@@ -111,14 +111,22 @@ static iodev_result_t sc64_execute_cmd(uint8_t cmd_id,
 }
 
 static iodev_id_t sc64_detect(void) {
-    /* The SC64 unlocks register access after a magic key sequence. We probe
-     * by reading IDENT -- even before unlock, IDENT is readable. */
-    uint32_t ident = IO_READ(SC64_REG_IDENT);
+    /* In user-ROM mode (post-handoff from the SC64 bootloader), the register
+     * interface is LOCKED by default and IDENT reads return garbage until the
+     * unlock key sequence is written. The bootloader's own sc64_check_presence
+     * works without unlock because it runs pre-handoff with full access; user
+     * ROMs must unlock first. Reference: gz's probe() in
+     * ~/code/gz/src/gz/sc64.c:75-94 unlocks before reading IDENT.
+     *
+     * Writing the keys to a non-SC64 cart is harmless: writes go nowhere or
+     * get silently dropped, and the subsequent IDENT read returns garbage,
+     * so we fall through to the next backend cleanly. */
+    uint32_t ident;
+    PI_WRITE_FLUSH(SC64_REG_KEY, SC64_KEY_RESET);
+    PI_WRITE_FLUSH(SC64_REG_KEY, SC64_KEY_UNLOCK_1);
+    PI_WRITE_FLUSH(SC64_REG_KEY, SC64_KEY_UNLOCK_2);
+    ident = IO_READ(SC64_REG_IDENT);
     if (ident == SC64_V2_IDENTIFIER) {
-        /* Found SC64; unlock command interface. */
-        PI_WRITE_FLUSH(SC64_REG_KEY, SC64_KEY_RESET);
-        PI_WRITE_FLUSH(SC64_REG_KEY, SC64_KEY_UNLOCK_1);
-        PI_WRITE_FLUSH(SC64_REG_KEY, SC64_KEY_UNLOCK_2);
         return IODEV_SC64;
     }
     return IODEV_NONE;

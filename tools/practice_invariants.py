@@ -178,6 +178,24 @@ def check_iodev_sc64():
     if src.count("count > 128") < 2:
         error(f"{path}: both sd_read_sectors and sd_write_sectors must enforce count > 128 -> ERR_PARAM (DMA scratch is 64 KiB / 128 sectors)")
 
+    # sc64_detect MUST issue the unlock key sequence BEFORE reading IDENT.
+    # In user-ROM mode (post-handoff from SC64 bootloader) the register
+    # interface is locked and IDENT returns garbage; only the SC64's own
+    # bootloader can read IDENT pre-unlock. Verified on hardware 2026-04-27.
+    # Reference: ~/code/gz/src/gz/sc64.c probe() does the same.
+    detect_match = re.search(r"sc64_detect\s*\([^)]*\)\s*\{(.*?)^\}", src,
+                             re.DOTALL | re.MULTILINE)
+    if not detect_match:
+        error(f"{path}: could not locate sc64_detect function body")
+    else:
+        body = detect_match.group(1)
+        unlock_pos = body.find("SC64_KEY_UNLOCK_2")
+        ident_pos  = body.find("SC64_REG_IDENT")
+        if unlock_pos < 0 or ident_pos < 0:
+            error(f"{path}: sc64_detect must reference SC64_KEY_UNLOCK_2 and SC64_REG_IDENT")
+        elif unlock_pos > ident_pos:
+            error(f"{path}: sc64_detect must write the unlock key sequence BEFORE reading SC64_REG_IDENT (in user-ROM mode the register interface is locked and IDENT returns garbage until unlocked)")
+
 def check_iodev_ed64():
     """ED64 X iodev backend must preserve protocol invariants.
 
