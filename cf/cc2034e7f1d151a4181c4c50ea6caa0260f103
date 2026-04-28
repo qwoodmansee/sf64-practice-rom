@@ -1,0 +1,33 @@
+src/practice/practice_main.c
+  428445d532e49e90 49-54
+docs/superpowers/plans/HW_VERIFY_phase2.md
+  428445d532e49e90 1-112
+Makefile
+  428445d532e49e90 160-167,494
+include/practice.h
+  428445d532e49e90 78-85
+tools/patch_linker_script.py
+  428445d532e49e90 33,122-124,127-150
+src/practice/practice_test_fatfs.c
+  428445d532e49e90 1-103
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "cfcc2034e7f1d151a4181c4c50ea6caa0260f103",
+  "prompts": {
+    "428445d532e49e90": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "44dbe8a4-4c39-4987-8da6-db56014f04a8",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 272,
+      "total_deletions": 11,
+      "accepted_lines": 284,
+      "overriden_lines": 0
+    }
+  }
+}
