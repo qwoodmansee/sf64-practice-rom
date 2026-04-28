@@ -1,0 +1,43 @@
+src/practice/practice_save.c
+  7dc9faacd745d172 7-11,13-22,133-134,136-206,210,212-309,312-317,319-354,356-472,475,477-563,569-570,577-1083,1086-1094,1096,1098-1117,1120-1133,1135-1227
+tools/extract_symbols.py
+  7dc9faacd745d172 6-12,16,20-21,126,128-136,141-142,202-207
+src/practice/practice_main.c
+  7dc9faacd745d172 51
+include/practice.h
+  7dc9faacd745d172 162-163,168
+tools/practice_invariants.py
+  7dc9faacd745d172 14-17,423-586,602-606
+lib/serial.h
+  7dc9faacd745d172 6-10,13-16
+src/practice/practice_menu.c
+  7dc9faacd745d172 150-159,322-326,339
+tests/test_state_two_slot_cycle.lua
+  7dc9faacd745d172 1-47
+tests/harness.lua
+  7dc9faacd745d172 147-193
+tests/test_state_refuse_during_cutscene.lua
+  7dc9faacd745d172 1-40
+tests/test_state_save_load_same_scene.lua
+  7dc9faacd745d172 1-43
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "3ed85756cd576881a375ba790b2ac5a46a70a262",
+  "prompts": {
+    "7dc9faacd745d172": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "9d98aea5-0f1d-418f-a06b-49fb83067395",
+        "model": "composer-2-fast"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 2063,
+      "total_deletions": 829,
+      "accepted_lines": 1487,
+      "overriden_lines": 0
+    }
+  }
+}
