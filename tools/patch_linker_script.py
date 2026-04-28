@@ -48,6 +48,16 @@ LIB_TOP_OBJS = [
     "sd_crc",       # Phase 1b: SD-spec CRC layer (host-portable)
 ]
 
+# lib/fatfs/* objects. Anchored on the last LIB_TOP entry; each subsequent
+# entry anchors on the previous LIB_FATFS entry. ff_libc supplies memset/
+# memcmp shims for FatFs (the project's libultra doesn't expose them).
+LIB_FATFS_OBJS = [
+    "ff",            # Phase 2: FatFs core
+    "ffunicode",     # Phase 2: FatFs Unicode tables (mostly empty for cp437)
+    "ff_libc",       # Phase 2: memset/memcmp shims for FatFs
+    "diskio",        # Phase 2: FatFs<->iodev glue
+]
+
 ANCHOR = "build/src/engine/fox_save.o"
 
 
@@ -77,7 +87,7 @@ def patch():
     has_practice = "practice_main" in content
 
     if not has_practice:
-        # Fully unpatched: inject practice + lib/iodev + lib-top after fox_save.o.
+        # Fully unpatched: inject practice + lib/iodev + lib-top + lib/fatfs after fox_save.o.
         for section in [".text", ".data", ".rodata", ".bss"]:
             anchor_line = f"{ANCHOR}({section});"
             practice_block = "\n".join(
@@ -92,14 +102,20 @@ def patch():
                 f"        build/lib/{obj}.o({section});"
                 for obj in LIB_TOP_OBJS
             )
+            fatfs_block = "\n".join(
+                f"        build/lib/fatfs/{obj}.o({section});"
+                for obj in LIB_FATFS_OBJS
+            )
             blocks = [practice_block, iodev_block]
             if top_block:
                 blocks.append(top_block)
+            if fatfs_block:
+                blocks.append(fatfs_block)
             injection = "\n".join(blocks)
             content = _replace_after_anchor(content, anchor_line, injection)
         with open(LINKER_SCRIPT, "w") as f:
             f.write(content)
-        print(f"Patched {LINKER_SCRIPT}: practice + lib/iodev + lib-top (full).")
+        print(f"Patched {LINKER_SCRIPT}: practice + lib/iodev + lib-top + lib/fatfs (full).")
         return
 
     # Practice already patched. Walk LIB_IODEV_OBJS first, then LIB_TOP_OBJS,
@@ -133,6 +149,26 @@ def patch():
         for section in [".text", ".data", ".rodata", ".bss"]:
             anchor_line = f"{predecessor}.o({section});"
             injection = f"        build/lib/{obj}.o({section});"
+            content = _replace_after_anchor(content, anchor_line, injection)
+        inject_count += 1
+
+    # lib/fatfs/* — anchored on the last LIB_TOP entry (or the last lib/iodev
+    # entry if LIB_TOP_OBJS is empty). Each subsequent entry anchors on the
+    # previous LIB_FATFS entry.
+    if LIB_TOP_OBJS:
+        last_top_predecessor = f"build/lib/{LIB_TOP_OBJS[-1]}"
+    else:
+        last_top_predecessor = f"build/lib/iodev/{last_iodev_obj}"
+    for i, obj in enumerate(LIB_FATFS_OBJS):
+        if f"build/lib/fatfs/{obj}.o" in content:
+            continue
+        if i == 0:
+            predecessor = last_top_predecessor
+        else:
+            predecessor = f"build/lib/fatfs/{LIB_FATFS_OBJS[i - 1]}"
+        for section in [".text", ".data", ".rodata", ".bss"]:
+            anchor_line = f"{predecessor}.o({section});"
+            injection = f"        build/lib/fatfs/{obj}.o({section});"
             content = _replace_after_anchor(content, anchor_line, injection)
         inject_count += 1
 

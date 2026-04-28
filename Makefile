@@ -303,9 +303,7 @@ endif
 
 $(shell mkdir -p asm bin linker_scripts/$(VERSION)/$(REV)/auto)
 
-SRC_DIRS      := $(shell find src -type d) $(shell find lib -type d -not -path 'lib/test*' -not -path 'lib/fatfs*' 2>/dev/null)
-# lib/fatfs is excluded here because it's vendored without build integration in Phase 2 Task 1.
-# Phase 2 Task 3 removes this exclusion and wires the patcher + libc shim.
+SRC_DIRS      := $(shell find src -type d) $(shell find lib -type d -not -path 'lib/test*' 2>/dev/null)
 # Temporary, until we decide how we're gonna handle other versions
 ifeq ($(VERSION), jp)
 SRC_DIRS      := $(shell find srcjp -type d)
