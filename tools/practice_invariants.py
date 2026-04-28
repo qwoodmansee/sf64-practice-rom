@@ -178,6 +178,48 @@ def check_iodev_sc64():
     if src.count("count > 128") < 2:
         error(f"{path}: both sd_read_sectors and sd_write_sectors must enforce count > 128 -> ERR_PARAM (DMA scratch is 64 KiB / 128 sectors)")
 
+def check_iodev_ed64():
+    """ED64 X iodev backend must preserve protocol invariants.
+
+    Phase 1b Tasks 1-2 only ship cart detection + the verified CRC layer;
+    SD init / read / write are stubs. The invariants below cover what is
+    actually implemented; once Tasks 3-5 land, additional checks (sd_crc.h
+    include, sd_crc7 callsite) should be added here.
+    """
+    path = "lib/iodev/iodev_ed64.c"
+    if not os.path.isfile(path):
+        return
+    src = read(path)
+
+    # Cart-bus writes must use PI_WRITE_FLUSH (same gotcha as SC64/IS-Viewer).
+    # Match the macro definition, not just any reference.
+    if not re.search(r"#define\s+PI_WRITE_FLUSH\b[^\n]*\\\s*\n[^\n]*IO_WRITE[^\n]*\\\s*\n[^\n]*IO_READ", src):
+        error(f"{path}: PI_WRITE_FLUSH macro must be defined and pair IO_WRITE with a draining IO_READ")
+
+    # Cart-unlock magic. The Krikzz X7/X8 hardware spec uses a single
+    # 0xAA55 write to open the FPGA register window. The Phase 1b plan
+    # called for a 0xAA55 + 0x55AA pair, but the gz reference firmware
+    # (mature working code on real ED64 X hardware) and Krikzz public
+    # docs use only 0xAA55. Match the literal 0xAA55 in a #define
+    # (not just any mention) so a typo in the constant is caught
+    # rather than passing because of an unchanged comment.
+    if not re.search(r"#define\s+\w+\s+0xAA55(?:[uU]?[lL]{0,2})?(?!\w)", src):
+        error(f"{path}: must define the cart-unlock magic 0xAA55 (#define <NAME> 0xAA55[u])")
+
+    # 128-sector cap matches SC64; consistent caller contract.
+    if src.count("count > 128") < 2 and "ED64_SD_MAX_SECTORS" not in src:
+        error(f"{path}: both sd_read_sectors and sd_write_sectors must enforce count > 128 -> ERR_PARAM")
+
+    # 8-byte buffer alignment check (matches iodev.h public contract).
+    if src.count("& 7u") < 2:
+        error(f"{path}: both sd_read_sectors and sd_write_sectors must enforce 8-byte buffer alignment")
+
+    # Detection magic. Removing this would make the backend match every
+    # cart on the bus.
+    if "0xED64" not in src:
+        error(f"{path}: detection must check REG_EDID for 0xED64 magic")
+
+
 def check_spawn_zone_typing():
     """Spawn zone draw loop must classify entries by type and respect per-type toggles."""
     hitbox = read("src/practice/practice_hitbox.c")
@@ -261,6 +303,7 @@ def main():
     check_cutscene_skip_hook()
     check_isviewer_sc64()
     check_iodev_sc64()
+    check_iodev_ed64()
     check_spawn_zone_typing()
     check_release_patch_workflow()
     check_lib_isolation()
