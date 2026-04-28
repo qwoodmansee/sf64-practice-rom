@@ -1,0 +1,23 @@
+tools/practice_invariants.py
+  428445d532e49e90 316-349,363
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "8debceed2b1d0355f690df29827178eee308bd8f",
+  "prompts": {
+    "428445d532e49e90": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "44dbe8a4-4c39-4987-8da6-db56014f04a8",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 35,
+      "total_deletions": 0,
+      "accepted_lines": 624,
+      "overriden_lines": 0
+    }
+  }
+}
