@@ -1,0 +1,58 @@
+include/practice.h
+  050baa1dfb820a10 71
+src/sys/sys_main.c
+  050baa1dfb820a10 4-6,301-303
+src/practice/practice_hud.c
+  050baa1dfb820a10 29,49,61-66,68-71
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "5643a72be60ac50c95d37aeb7c396f9325bfd044",
+  "prompts": {
+    "050baa1dfb820a10": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "479aa174-380c-49b8-8a2b-b619e67ff517",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 1281,
+      "total_deletions": 22,
+      "accepted_lines": 1274,
+      "overriden_lines": 7
+    },
+    "25814746297ca33b": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "7799b464-caba-44dd-8a7d-565e3ff2589b",
+        "model": "composer-2"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 275,
+      "total_deletions": 240,
+      "accepted_lines": 135,
+      "overriden_lines": 0
+    },
+    "b16de7c0ff84e322": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "9b41cf4d-1fa5-4352-8407-c57dc2e6513c",
+        "model": "gpt-5.3-codex-spark"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 125,
+      "total_deletions": 22,
+      "accepted_lines": 5,
+      "overriden_lines": 0
+    }
+  },
+  "humans": {
+    "h_da8a66190114c7": {
+      "author": "qwoodmansee"
+    }
+  }
+}
