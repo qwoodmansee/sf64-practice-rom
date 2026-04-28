@@ -313,6 +313,40 @@ def check_lib_libultra_scope():
                 if re.search(rf'#include\s*[<"]{pat}[>"]', src):
                     error(f"{path}: only iodev backends and lib_types.h may include libultra (matched /{pat}/)")
 
+def check_fatfs_isolation():
+    """FatFs source (vendored) must not include any project headers beyond its
+    own and iodev's. Vendored FatFs is meant to be drop-in replaceable on
+    upstream updates; coupling it to game-specific headers would block updates.
+
+    Allowlist (relative names; checked against the literal string between
+    `#include "..."` or `<...>`):
+      - ff.h, ffconf.h, diskio.h, string.h  -- FatFs-internal + our shim
+      - iodev/iodev.h                       -- the only legitimate cross-lib
+                                                 dependency, used by diskio.c
+      - any standard C header               -- <something.h> with simple name
+    """
+    fatfs_dir = os.path.join(LIB_DIR, "fatfs")
+    if not os.path.isdir(fatfs_dir):
+        return
+
+    allowed_includes = {"ff.h", "ffconf.h", "diskio.h", "string.h",
+                        "iodev/iodev.h", "libc/stddef.h"}
+    # Standard C: a single lowercase name with .h extension.
+    std_c_re = re.compile(r"^[a-z][a-z0-9_]*\.h$")
+
+    for fname in sorted(os.listdir(fatfs_dir)):
+        if not fname.endswith((".c", ".h")):
+            continue
+        path = os.path.join(fatfs_dir, fname)
+        src = read(path)
+        for m in re.finditer(r'#include\s+["<]([^">]+)[">]', src):
+            inc = m.group(1)
+            if inc in allowed_includes:
+                continue
+            if std_c_re.match(inc):
+                continue
+            error(f"{path}: forbidden include '{inc}' in vendored FatFs (only ff.h/ffconf.h/diskio.h/string.h/iodev/iodev.h/libc/stddef.h + std C allowed)")
+
 def main():
     check_config_inits()
     check_function_definitions()
@@ -326,6 +360,7 @@ def main():
     check_release_patch_workflow()
     check_lib_isolation()
     check_lib_libultra_scope()
+    check_fatfs_isolation()
 
     if errors:
         print("Practice ROM invariant check FAILED:")
