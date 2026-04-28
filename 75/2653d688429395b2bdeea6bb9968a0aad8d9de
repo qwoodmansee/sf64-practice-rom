@@ -1,0 +1,38 @@
+src/engine/fox_std_lib.c
+  4344db54888035d5 862,993,1134,1173
+Makefile
+  4344db54888035d5 325-327
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "752653d688429395b2bdeea6bb9968a0aad8d9de",
+  "prompts": {
+    "4344db54888035d5": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "e47df0ac-daa4-4e66-a762-0d36f2784886",
+        "model": "composer-2"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 10,
+      "total_deletions": 9,
+      "accepted_lines": 7,
+      "overriden_lines": 0
+    },
+    "aecede1708b77eac": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "83eee62f-f79b-48bb-9585-53fad0ecc25d",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 760,
+      "total_deletions": 42,
+      "accepted_lines": 718,
+      "overriden_lines": 0
+    }
+  }
+}
