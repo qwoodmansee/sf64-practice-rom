@@ -564,6 +564,9 @@ def check_max_state_size_budget():
         error(f"{cfg}: worst-case WITH_PAK footprint {mx * withpak_ceiling_n} "
               f"(check_max_state_size_budget)")
 
+SYS_MEMORY = os.path.join("src", "sys", "sys_memory.c")
+
+
 def check_phase4_engine_hooks():
     """slot-backed save initializes after Wave 3 slot regression test."""
     pm = PRACTICE_MAIN_INIT
@@ -581,6 +584,40 @@ def check_phase4_engine_hooks():
         error(
             "Practice_Save_Init() must appear after Practice_SlotTest_Run() "
             f"in {pm} (check_phase4_engine_hooks)"
+        )
+
+    hb = txt.find("Practice_HeapAudit_Boot();")
+    if hb < 0:
+        error(f"{pm}: Practice_HeapAudit_Boot() missing (check_phase4_engine_hooks)")
+    elif hb < ai:
+        error(
+            "Practice_HeapAudit_Boot() must appear after Practice_Save_Init() "
+            f"in {pm} (check_phase4_engine_hooks)"
+        )
+
+    if "Practice_HeapAudit_PerFrame();" not in txt:
+        error(
+            f"{pm}: Practice_HeapAudit_PerFrame() must be called from Practice_Update "
+            "(check_phase4_engine_hooks)"
+        )
+
+
+def check_sys_memory_practice_bump_getter():
+    """Practice_MemoryGetBumpUsed exposes bump-arena watermark for heap audit."""
+    if not os.path.isfile(SYS_MEMORY):
+        return
+    src = read(SYS_MEMORY)
+    i_ifdef = src.find("#ifdef PRACTICE_ROM")
+    i_fn = src.find("Practice_MemoryGetBumpUsed")
+    if i_fn < 0:
+        error(
+            f"{SYS_MEMORY}: Practice_MemoryGetBumpUsed missing "
+            "(check_sys_memory_practice_bump_getter)"
+        )
+    if i_ifdef < 0 or i_fn < i_ifdef:
+        error(
+            f"{SYS_MEMORY}: Practice_MemoryGetBumpUsed must follow "
+            "#ifdef PRACTICE_ROM (check_sys_memory_practice_bump_getter)"
         )
 
 
@@ -604,6 +641,7 @@ def main():
     check_state_version_defined_once()
     check_max_state_size_budget()
     check_phase4_engine_hooks()
+    check_sys_memory_practice_bump_getter()
 
     if errors:
         print("Practice ROM invariant check FAILED:")

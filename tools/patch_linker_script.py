@@ -26,6 +26,7 @@ PRACTICE_OBJS = [
     "practice_state",
     "practice_menu",
     "practice_save",
+    "practice_heap_audit",  # Phase 4 Wave 2.3: IS-Viewer heap audit
     "practice_overlay",     # Phase 4: LevelId -> ovl_iN region map (Wave 1: stubs)
     "practice_input_display",
     "practice_hud",

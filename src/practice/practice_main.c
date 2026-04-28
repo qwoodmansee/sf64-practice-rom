@@ -49,6 +49,7 @@ void Practice_Init(void) {
 
     Practice_SlotTest_Run();
     Practice_Save_Init();
+    Practice_HeapAudit_Boot();
 
 #ifdef IODEV_DIAG_FATFS
     /* Phase 2 hardware verification probe. Build with IODEV_DIAG_FATFS=1
@@ -58,6 +59,8 @@ void Practice_Init(void) {
 }
 
 void Practice_Update(void) {
+    Practice_HeapAudit_PerFrame();
+
     switch (gPracticeScreen) {
         case PSCREEN_LEVEL_SELECT:
             Practice_LevelSelect_Update();

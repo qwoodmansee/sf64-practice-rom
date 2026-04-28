@@ -82,6 +82,11 @@ extern s32 gPracticeSlotValidBits;
 extern s32 gPracticeLastSaveResult;
 extern s32 gPracticeLastLoadResult;
 
+/* practice_heap_audit.c — Phase 4 §7 (IS-Viewer heap / memory pressure). */
+extern s32 gPracticeMaxMemAllocHWM;
+extern s32 gPracticeFreeRamLow;
+extern s32 gPracticeOverlaySizes[6];
+
 /* practice_main.c */
 void Practice_Init(void);
 void Practice_Update(void);
@@ -170,6 +175,12 @@ void Practice_SaveStateSlot(s32 slot);
 void Practice_LoadStateSlot(s32 slot);
 s32  Practice_GetActiveSlot(void);
 void Practice_CycleSlot(s32 delta);
+
+/* practice_heap_audit.c */
+void Practice_HeapAudit_Boot(void);
+void Practice_HeapAudit_PerFrame(void);
+
+uintptr_t Practice_Save_SlotPoolBase(void);
 
 #endif
 #endif

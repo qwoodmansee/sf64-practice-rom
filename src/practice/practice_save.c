@@ -1224,4 +1224,8 @@ void Practice_CycleSlot(s32 delta) {
     }
 }
 
+uintptr_t Practice_Save_SlotPoolBase(void) {
+    return (uintptr_t)sSlotPool;
+}
+
 #endif /* PRACTICE_ROM */
