@@ -48,6 +48,7 @@ void Practice_Init(void) {
     }
 
     Practice_SlotTest_Run();
+    Practice_Save_Init();
 
 #ifdef IODEV_DIAG_FATFS
     /* Phase 2 hardware verification probe. Build with IODEV_DIAG_FATFS=1

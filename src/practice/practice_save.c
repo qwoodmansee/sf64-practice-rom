@@ -4,60 +4,27 @@
 
 #include "variables.h"
 #include "bgm.h"
+#include "sf64audio_external.h"
+#include "sf64thread.h"
+#include "practice_save_tags.h"
+#include "practice_save_config.h"
+#include "practice_overlay.h"
 
-/* ========================================================================
- * Wave 1 skeleton temp; Wave 2.2 deletes this block.
- *
- * The Phase 4 plan adds new public APIs and diagnostic globals to
- * include/practice.h (Practice_Save_Init / Practice_CanSaveHere /
- * Practice_SaveStateSlot / Practice_LoadStateSlot / Practice_GetActiveSlot
- * / Practice_CycleSlot, plus gPracticeActiveSlot / gPracticeSlotValidBits /
- * gPracticeLastSaveResult / gPracticeLastLoadResult). Wave 2.2 owns the real
- * definitions when it rewrites practice_save.c on top of slot_manager. Wave 1
- * only needs the build to link and the static invariants (which require
- * every Practice_* declared in practice.h to be defined under src/practice/)
- * to pass.
- *
- * Grep PRACTICE_PHASE4_SKELETON_TEMP and delete the #define + the guarded
- * block below when Wave 2.2 lands.
- * ====================================================================== */
-#define PRACTICE_PHASE4_SKELETON_TEMP 1
-#ifdef PRACTICE_PHASE4_SKELETON_TEMP
+#include "slot_manager.h"
+#include "serial.h"
+
+#ifndef PRACTICE_SAVE_SELFTEST
+#define PRACTICE_SAVE_SELFTEST 0
+#endif
+
+/* Slot pool (.bss): one TLV stream per RAM slot (+ slot_manager header slots). */
+static u8 sSlotPool[RAM_SLOT_COUNT * MAX_STATE_SIZE]
+    __attribute__((aligned(8)));
 
 s32 gPracticeActiveSlot;
 s32 gPracticeSlotValidBits;
 s32 gPracticeLastSaveResult;
 s32 gPracticeLastLoadResult;
-
-void Practice_Save_Init(void) {
-    gPracticeActiveSlot = 0;
-    gPracticeSlotValidBits = 0;
-    gPracticeLastSaveResult = 0;
-    gPracticeLastLoadResult = 0;
-}
-
-bool Practice_CanSaveHere(void) {
-    return false;
-}
-
-void Practice_SaveStateSlot(s32 slot) {
-    (void)slot;
-}
-
-void Practice_LoadStateSlot(s32 slot) {
-    (void)slot;
-}
-
-s32 Practice_GetActiveSlot(void) {
-    return gPracticeActiveSlot;
-}
-
-void Practice_CycleSlot(s32 delta) {
-    (void)delta;
-}
-
-#endif /* PRACTICE_PHASE4_SKELETON_TEMP */
-/* ===================== End Wave 1 skeleton temp ======================== */
 
 typedef struct PracticeScalarState {
     f32 pathProgress;
@@ -163,233 +130,1098 @@ typedef struct PracticeSnapshot {
     PracticeScalarState scalars;
 } PracticeSnapshot;
 
-static PracticeSnapshot sSnapshot;
+static uint32_t Practice_Save_Cb(void *buf, uint32_t buf_size);
+static int Practice_Load_Cb(const void *buf, uint32_t size);
 
-void Practice_SaveState(void) {
-    s32 i;
+/*---------------------------------------------------------------------*/
+/* Mirrors Practice_LaunchLevel - packed u16 equivalent to AUDIO_SET_SPEC. */
+/*---------------------------------------------------------------------*/
 
-    for (i = 0; i < 4; i++) {
-        sSnapshot.playerData[i] = gPlayer[i];
+static u16 Practice_AudioSpecPacked(LevelId lid) {
+    u8 sfx;
+    u8 spec;
+
+    sfx = SFX_LAYOUT_DEFAULT;
+    switch (lid) {
+        case LEVEL_CORNERIA:
+            spec = AUDIOSPEC_CO;
+            break;
+        case LEVEL_METEO:
+            spec = AUDIOSPEC_ME;
+            break;
+        case LEVEL_TITANIA:
+            spec = AUDIOSPEC_TI;
+            break;
+        case LEVEL_AQUAS:
+            spec = AUDIOSPEC_AQ;
+            break;
+        case LEVEL_BOLSE:
+            spec = AUDIOSPEC_BO;
+            break;
+        case LEVEL_KATINA:
+            spec = AUDIOSPEC_KA;
+            break;
+        case LEVEL_AREA_6:
+            spec = AUDIOSPEC_A6;
+            break;
+        case LEVEL_SECTOR_Z:
+            spec = AUDIOSPEC_SZ;
+            break;
+        case LEVEL_FORTUNA:
+            spec = AUDIOSPEC_FO;
+            break;
+        case LEVEL_SECTOR_X:
+            spec = AUDIOSPEC_SX;
+            break;
+        case LEVEL_MACBETH:
+            spec = AUDIOSPEC_MA;
+            break;
+        case LEVEL_ZONESS:
+            spec = AUDIOSPEC_ZO;
+            break;
+        case LEVEL_SECTOR_Y:
+            spec = AUDIOSPEC_SY;
+            break;
+        case LEVEL_SOLAR:
+            sfx = SFX_LAYOUT_SO;
+            spec = AUDIOSPEC_SO;
+            break;
+        case LEVEL_TRAINING:
+            spec = AUDIOSPEC_TR;
+            break;
+        case LEVEL_VENOM_1:
+        case LEVEL_VENOM_2:
+            spec = AUDIOSPEC_VE;
+            break;
+        case LEVEL_VENOM_ANDROSS:
+            spec = AUDIOSPEC_AND;
+            break;
+        default:
+            spec = AUDIOSPEC_CO;
+            break;
     }
-    bcopy(gActors, sSnapshot.actors, sizeof(sSnapshot.actors));
-    bcopy(gBosses, sSnapshot.bosses, sizeof(sSnapshot.bosses));
-    bcopy(gScenery, sSnapshot.scenery, sizeof(sSnapshot.scenery));
-    bcopy(gSprites, sSnapshot.sprites, sizeof(sSnapshot.sprites));
-    bcopy(gEffects, sSnapshot.effects, sizeof(sSnapshot.effects));
-    bcopy(gItems, sSnapshot.items, sizeof(sSnapshot.items));
-    bcopy(gPlayerShots, sSnapshot.playerShots, sizeof(sSnapshot.playerShots));
-    bcopy(gTexturedLines, sSnapshot.texturedLines, sizeof(sSnapshot.texturedLines));
-    bcopy(gRadarMarks, sSnapshot.radarMarks, sizeof(sSnapshot.radarMarks));
-    bcopy(gBonusText, sSnapshot.bonusText, sizeof(sSnapshot.bonusText));
-
-    sSnapshot.scalars.pathProgress = gPathProgress;
-    sSnapshot.scalars.savedPathProgress = gSavedPathProgress;
-    sSnapshot.scalars.objectLoadIndex = gObjectLoadIndex;
-    sSnapshot.scalars.savedObjectLoadIndex = gSavedObjectLoadIndex;
-    sSnapshot.scalars.pathVelZ = gPathVelZ;
-    sSnapshot.scalars.pathVelX = gPathVelX;
-    sSnapshot.scalars.pathVelY = gPathVelY;
-    sSnapshot.scalars.pathGroundScroll = gPathGroundScroll;
-    sSnapshot.scalars.pathTexScroll = gPathTexScroll;
-    sSnapshot.scalars.groundHeight = gGroundHeight;
-    sSnapshot.scalars.waterLevel = gWaterLevel;
-    sSnapshot.scalars.groundClipMode = gGroundClipMode;
-    sSnapshot.scalars.groundType = gGroundType;
-    sSnapshot.scalars.groundSurface = gGroundSurface;
-    sSnapshot.scalars.savedGroundSurface = gSavedGroundSurface;
-    sSnapshot.scalars.levelMode = gLevelMode;
-    sSnapshot.scalars.levelPhase = gLevelPhase;
-    sSnapshot.scalars.loadLevelObjects = gLoadLevelObjects;
-
-    bcopy(gLaserStrength, sSnapshot.scalars.laserStrength, sizeof(sSnapshot.scalars.laserStrength));
-    bcopy(gBombCount, sSnapshot.scalars.bombCount, sizeof(sSnapshot.scalars.bombCount));
-    bcopy(gLifeCount, sSnapshot.scalars.lifeCount, sizeof(sSnapshot.scalars.lifeCount));
-    bcopy(gChargeTimers, sSnapshot.scalars.chargeTimers, sizeof(sSnapshot.scalars.chargeTimers));
-    bcopy(gShieldTimer, sSnapshot.scalars.shieldTimer, sizeof(sSnapshot.scalars.shieldTimer));
-    bcopy(gHasShield, sSnapshot.scalars.hasShield, sizeof(sSnapshot.scalars.hasShield));
-    bcopy(gPlayerForms, sSnapshot.scalars.playerForms, sizeof(sSnapshot.scalars.playerForms));
-
-    sSnapshot.scalars.hitCount = gHitCount;
-    sSnapshot.scalars.displayedHitCount = gDisplayedHitCount;
-    sSnapshot.scalars.ringPassCount = gRingPassCount;
-
-    bcopy(gTeamShields, sSnapshot.scalars.teamShields, sizeof(sSnapshot.scalars.teamShields));
-    bcopy(gTeamDamage, sSnapshot.scalars.teamDamage, sizeof(sSnapshot.scalars.teamDamage));
-    bcopy(gStarWolfTeamAlive, sSnapshot.scalars.starWolfTeamAlive, sizeof(sSnapshot.scalars.starWolfTeamAlive));
-    bcopy(gSavedStarWolfTeamAlive, sSnapshot.scalars.savedStarWolfTeamAlive, sizeof(sSnapshot.scalars.savedStarWolfTeamAlive));
-    bcopy(gRightWingHealth, sSnapshot.scalars.rightWingHealth, sizeof(sSnapshot.scalars.rightWingHealth));
-    bcopy(gLeftWingHealth, sSnapshot.scalars.leftWingHealth, sizeof(sSnapshot.scalars.leftWingHealth));
-    sSnapshot.scalars.formationLeaderIndex = gFormationLeaderIndex;
-
-    sSnapshot.scalars.playCamEye = gPlayCamEye;
-    sSnapshot.scalars.playCamAt = gPlayCamAt;
-    sSnapshot.scalars.csCamEyeX = gCsCamEyeX;
-    sSnapshot.scalars.csCamEyeY = gCsCamEyeY;
-    sSnapshot.scalars.csCamEyeZ = gCsCamEyeZ;
-    sSnapshot.scalars.csCamAtX = gCsCamAtX;
-    sSnapshot.scalars.csCamAtY = gCsCamAtY;
-    sSnapshot.scalars.csCamAtZ = gCsCamAtZ;
-    sSnapshot.scalars.cameraShakeY = gCameraShakeY;
-    sSnapshot.scalars.cameraShake = gCameraShake;
-    sSnapshot.scalars.camCount = gCamCount;
-    sSnapshot.scalars.fovY = gFovY;
-    sSnapshot.scalars.projectNear = gProjectNear;
-    sSnapshot.scalars.projectFar = gProjectFar;
-
-    sSnapshot.scalars.gameFrameCount = gGameFrameCount;
-    sSnapshot.scalars.csFrameCount = gCsFrameCount;
-    sSnapshot.scalars.levelClearScreenTimer = gLevelClearScreenTimer;
-    sSnapshot.scalars.levelStartStatusScreenTimer = gLevelStartStatusScreenTimer;
-    sSnapshot.scalars.bossHealthBar = gBossHealthBar;
-    sSnapshot.scalars.bossActive = gBossActive;
-    sSnapshot.scalars.allRangeEventTimer = gAllRangeEventTimer;
-    sSnapshot.scalars.allRangeFrameCount = gAllRangeFrameCount;
-    sSnapshot.scalars.allRangeSpawnEvent = gAllRangeSpawnEvent;
-    sSnapshot.scalars.allRangeCheckpoint = gAllRangeCheckpoint;
-    bcopy(gAllRangeCountdown, sSnapshot.scalars.allRangeCountdown, sizeof(sSnapshot.scalars.allRangeCountdown));
-    sSnapshot.scalars.showAllRangeCountdown = gShowAllRangeCountdown;
-    sSnapshot.scalars.bossFrameCount = gBossFrameCount;
-
-    sSnapshot.scalars.showHud = gShowHud;
-    bcopy(gShowReticles, sSnapshot.scalars.showReticles, sizeof(sSnapshot.scalars.showReticles));
-    sSnapshot.scalars.fillScreenAlpha = gFillScreenAlpha;
-    sSnapshot.scalars.fillScreenRed = gFillScreenRed;
-    sSnapshot.scalars.fillScreenGreen = gFillScreenGreen;
-    sSnapshot.scalars.fillScreenBlue = gFillScreenBlue;
-    sSnapshot.scalars.fillScreenAlphaTarget = gFillScreenAlphaTarget;
-    sSnapshot.scalars.fillScreenAlphaStep = gFillScreenAlphaStep;
-
-    sSnapshot.scalars.radioState = gRadioState;
-    sSnapshot.scalars.radioStateTimer = gRadioStateTimer;
-    sSnapshot.scalars.radioMsgId = gRadioMsgId;
-
-    sSnapshot.scalars.killEventActors = gKillEventActors;
-    sSnapshot.scalars.prevEventActorIndex = gPrevEventActorIndex;
-
-    sSnapshot.scalars.bgmSeqId = gBgmSeqId;
-
-    sSnapshot.valid = true;
+    return (u16)(((u16)sfx << 8) | (u16)spec);
 }
 
-void Practice_LoadState(void) {
+static void Snapshot_FillFromGame(PracticeSnapshot *sn) {
     s32 i;
 
-    if (!sSnapshot.valid) {
-        return;
+    for (i = 0; i < 4; i++) {
+        sn->playerData[i] = gPlayer[i];
     }
+    bcopy(gActors, sn->actors, sizeof(sn->actors));
+    bcopy(gBosses, sn->bosses, sizeof(sn->bosses));
+    bcopy(gScenery, sn->scenery, sizeof(sn->scenery));
+    bcopy(gSprites, sn->sprites, sizeof(sn->sprites));
+    bcopy(gEffects, sn->effects, sizeof(sn->effects));
+    bcopy(gItems, sn->items, sizeof(sn->items));
+    bcopy(gPlayerShots, sn->playerShots, sizeof(sn->playerShots));
+    bcopy(gTexturedLines, sn->texturedLines, sizeof(sn->texturedLines));
+    bcopy(gRadarMarks, sn->radarMarks, sizeof(sn->radarMarks));
+    bcopy(gBonusText, sn->bonusText, sizeof(sn->bonusText));
+
+    sn->scalars.pathProgress = gPathProgress;
+    sn->scalars.savedPathProgress = gSavedPathProgress;
+    sn->scalars.objectLoadIndex = gObjectLoadIndex;
+    sn->scalars.savedObjectLoadIndex = gSavedObjectLoadIndex;
+    sn->scalars.pathVelZ = gPathVelZ;
+    sn->scalars.pathVelX = gPathVelX;
+    sn->scalars.pathVelY = gPathVelY;
+    sn->scalars.pathGroundScroll = gPathGroundScroll;
+    sn->scalars.pathTexScroll = gPathTexScroll;
+    sn->scalars.groundHeight = gGroundHeight;
+    sn->scalars.waterLevel = gWaterLevel;
+    sn->scalars.groundClipMode = gGroundClipMode;
+    sn->scalars.groundType = gGroundType;
+    sn->scalars.groundSurface = gGroundSurface;
+    sn->scalars.savedGroundSurface = gSavedGroundSurface;
+    sn->scalars.levelMode = gLevelMode;
+    sn->scalars.levelPhase = gLevelPhase;
+    sn->scalars.loadLevelObjects = gLoadLevelObjects;
+
+    bcopy(gLaserStrength, sn->scalars.laserStrength, sizeof(sn->scalars.laserStrength));
+    bcopy(gBombCount, sn->scalars.bombCount, sizeof(sn->scalars.bombCount));
+    bcopy(gLifeCount, sn->scalars.lifeCount, sizeof(sn->scalars.lifeCount));
+    bcopy(gChargeTimers, sn->scalars.chargeTimers, sizeof(sn->scalars.chargeTimers));
+    bcopy(gShieldTimer, sn->scalars.shieldTimer, sizeof(sn->scalars.shieldTimer));
+    bcopy(gHasShield, sn->scalars.hasShield, sizeof(sn->scalars.hasShield));
+    bcopy(gPlayerForms, sn->scalars.playerForms, sizeof(sn->scalars.playerForms));
+
+    sn->scalars.hitCount = gHitCount;
+    sn->scalars.displayedHitCount = gDisplayedHitCount;
+    sn->scalars.ringPassCount = gRingPassCount;
+
+    bcopy(gTeamShields, sn->scalars.teamShields, sizeof(sn->scalars.teamShields));
+    bcopy(gTeamDamage, sn->scalars.teamDamage, sizeof(sn->scalars.teamDamage));
+    bcopy(gStarWolfTeamAlive, sn->scalars.starWolfTeamAlive, sizeof(sn->scalars.starWolfTeamAlive));
+    bcopy(gSavedStarWolfTeamAlive, sn->scalars.savedStarWolfTeamAlive, sizeof(sn->scalars.savedStarWolfTeamAlive));
+    bcopy(gRightWingHealth, sn->scalars.rightWingHealth, sizeof(sn->scalars.rightWingHealth));
+    bcopy(gLeftWingHealth, sn->scalars.leftWingHealth, sizeof(sn->scalars.leftWingHealth));
+    sn->scalars.formationLeaderIndex = gFormationLeaderIndex;
+
+    sn->scalars.playCamEye = gPlayCamEye;
+    sn->scalars.playCamAt = gPlayCamAt;
+    sn->scalars.csCamEyeX = gCsCamEyeX;
+    sn->scalars.csCamEyeY = gCsCamEyeY;
+    sn->scalars.csCamEyeZ = gCsCamEyeZ;
+    sn->scalars.csCamAtX = gCsCamAtX;
+    sn->scalars.csCamAtY = gCsCamAtY;
+    sn->scalars.csCamAtZ = gCsCamAtZ;
+    sn->scalars.cameraShakeY = gCameraShakeY;
+    sn->scalars.cameraShake = gCameraShake;
+    sn->scalars.camCount = gCamCount;
+    sn->scalars.fovY = gFovY;
+    sn->scalars.projectNear = gProjectNear;
+    sn->scalars.projectFar = gProjectFar;
+
+    sn->scalars.gameFrameCount = gGameFrameCount;
+    sn->scalars.csFrameCount = gCsFrameCount;
+    sn->scalars.levelClearScreenTimer = gLevelClearScreenTimer;
+    sn->scalars.levelStartStatusScreenTimer = gLevelStartStatusScreenTimer;
+    sn->scalars.bossHealthBar = gBossHealthBar;
+    sn->scalars.bossActive = gBossActive;
+    sn->scalars.allRangeEventTimer = gAllRangeEventTimer;
+    sn->scalars.allRangeFrameCount = gAllRangeFrameCount;
+    sn->scalars.allRangeSpawnEvent = gAllRangeSpawnEvent;
+    sn->scalars.allRangeCheckpoint = gAllRangeCheckpoint;
+    bcopy(gAllRangeCountdown, sn->scalars.allRangeCountdown, sizeof(sn->scalars.allRangeCountdown));
+    sn->scalars.showAllRangeCountdown = gShowAllRangeCountdown;
+    sn->scalars.bossFrameCount = gBossFrameCount;
+
+    sn->scalars.showHud = gShowHud;
+    bcopy(gShowReticles, sn->scalars.showReticles, sizeof(sn->scalars.showReticles));
+    sn->scalars.fillScreenAlpha = gFillScreenAlpha;
+    sn->scalars.fillScreenRed = gFillScreenRed;
+    sn->scalars.fillScreenGreen = gFillScreenGreen;
+    sn->scalars.fillScreenBlue = gFillScreenBlue;
+    sn->scalars.fillScreenAlphaTarget = gFillScreenAlphaTarget;
+    sn->scalars.fillScreenAlphaStep = gFillScreenAlphaStep;
+
+    sn->scalars.radioState = gRadioState;
+    sn->scalars.radioStateTimer = gRadioStateTimer;
+    sn->scalars.radioMsgId = gRadioMsgId;
+
+    sn->scalars.killEventActors = gKillEventActors;
+    sn->scalars.prevEventActorIndex = gPrevEventActorIndex;
+
+    sn->scalars.bgmSeqId = gBgmSeqId;
+
+    sn->valid = true;
+}
+
+#define PUT(szlim, w, tag, ptr, nbytes)                                                                     \
+    do {                                                                                                      \
+        if (serial_put_tag((w), (tag), (ptr), (uint32_t)(nbytes)) != 0) {                                     \
+            return (uint32_t)((szlim) + 1u);                                                                   \
+        }                                                                                                     \
+    } while (0)
+
+static uint32_t Practice_Save_Cb(void *buf, uint32_t buf_size) {
+    serial_writer_t wr;
+    PracticeSnapshot snap;
+    u16 u16_lvl;
+    s16 hdr_phase;
+    u32 overlay_build_u32;
+    u32 overlay_vram_u32;
+    void *ovl_vptr;
+    u32 ovl_sz;
+    u16 audio_seq_pack;
+    u16 audio_spec_packed;
+    u32 bank_voice_placeholder;
+    u32 seg_flat[16];
+
+    bzero(seg_flat, sizeof(seg_flat));
+
+    Snapshot_FillFromGame(&snap);
+
+    serial_writer_init(&wr, buf, buf_size);
+
+    u16_lvl = (u16)gCurrentLevel;
+    hdr_phase = (s16)gLevelPhase;
+    PUT(buf_size, &wr, TAG_LEVEL_ID, &u16_lvl, sizeof(u16_lvl));
+    PUT(buf_size, &wr, TAG_LEVEL_PHASE, &hdr_phase, sizeof(hdr_phase));
+
+    overlay_build_u32 = practice_overlay_build_id(gCurrentLevel);
+    PUT(buf_size, &wr, TAG_OVERLAY_BUILD_ID, &overlay_build_u32, sizeof(u32));
+
+    ovl_sz = 0;
+    ovl_vptr = NULL;
+    practice_overlay_get_region(gCurrentLevel, &ovl_vptr, &ovl_sz);
+    if (ovl_vptr != NULL) {
+        overlay_vram_u32 = (u32)((uintptr_t)ovl_vptr);
+    } else {
+        overlay_vram_u32 = 0;
+        ovl_sz = 0;
+    }
+    PUT(buf_size, &wr, TAG_OVERLAY_VRAM, &overlay_vram_u32, sizeof(u32));
+    if ((ovl_sz > 0) && (ovl_vptr != NULL)) {
+        PUT(buf_size, &wr, TAG_OVERLAY_BYTES, ovl_vptr, ovl_sz);
+    } else {
+        PUT(buf_size, &wr, TAG_OVERLAY_BYTES, NULL, 0);
+    }
+
+    bcopy(gSegments, seg_flat, sizeof(gSegments));
+    PUT(buf_size, &wr, TAG_SEGMENTS, seg_flat, sizeof(gSegments));
+
+    audio_seq_pack = (u16)gBgmSeqId;
+    PUT(buf_size, &wr, TAG_AUDIO_SEQ_ID, &audio_seq_pack, sizeof(u16));
+    audio_spec_packed = Practice_AudioSpecPacked(gCurrentLevel);
+    PUT(buf_size, &wr, TAG_AUDIO_SPEC_PACKED, &audio_spec_packed, sizeof(u16));
+    bank_voice_placeholder = 0;
+    PUT(buf_size, &wr, TAG_AUDIO_BANK_VOICE, &bank_voice_placeholder, sizeof(u32));
+
+    PUT(buf_size, &wr, TAG_PLAYER_ARRAY, snap.playerData, sizeof(snap.playerData));
+    PUT(buf_size, &wr, TAG_ACTORS, snap.actors, sizeof(snap.actors));
+    PUT(buf_size, &wr, TAG_BOSSES, snap.bosses, sizeof(snap.bosses));
+    PUT(buf_size, &wr, TAG_SCENERY, snap.scenery, sizeof(snap.scenery));
+    PUT(buf_size, &wr, TAG_SPRITES, snap.sprites, sizeof(snap.sprites));
+    PUT(buf_size, &wr, TAG_EFFECTS, snap.effects, sizeof(snap.effects));
+    PUT(buf_size, &wr, TAG_ITEMS, snap.items, sizeof(snap.items));
+    PUT(buf_size, &wr, TAG_PLAYER_SHOTS, snap.playerShots, sizeof(snap.playerShots));
+    PUT(buf_size, &wr, TAG_TEXTURED_LINES, snap.texturedLines, sizeof(snap.texturedLines));
+    PUT(buf_size, &wr, TAG_RADAR_MARKS, snap.radarMarks, sizeof(snap.radarMarks));
+    PUT(buf_size, &wr, TAG_BONUS_TEXT, snap.bonusText, sizeof(snap.bonusText));
+
+#define PUT_SCALAR(szlim, w, tg, fld) PUT((szlim), (w), (tg), &(snap.scalars.fld), sizeof(snap.scalars.fld))
+
+    PUT_SCALAR(buf_size, &wr, TAG_PATH_PROGRESS, pathProgress);
+    PUT_SCALAR(buf_size, &wr, TAG_SAVED_PATH_PROGRESS, savedPathProgress);
+    PUT_SCALAR(buf_size, &wr, TAG_OBJECT_LOAD_INDEX, objectLoadIndex);
+    PUT_SCALAR(buf_size, &wr, TAG_SAVED_OBJECT_LOAD_INDEX, savedObjectLoadIndex);
+    PUT_SCALAR(buf_size, &wr, TAG_PATH_VEL_Z, pathVelZ);
+    PUT_SCALAR(buf_size, &wr, TAG_PATH_VEL_X, pathVelX);
+    PUT_SCALAR(buf_size, &wr, TAG_PATH_VEL_Y, pathVelY);
+    PUT_SCALAR(buf_size, &wr, TAG_PATH_GROUND_SCROLL, pathGroundScroll);
+    PUT_SCALAR(buf_size, &wr, TAG_PATH_TEX_SCROLL, pathTexScroll);
+    PUT_SCALAR(buf_size, &wr, TAG_GROUND_HEIGHT, groundHeight);
+    PUT_SCALAR(buf_size, &wr, TAG_WATER_LEVEL, waterLevel);
+    PUT_SCALAR(buf_size, &wr, TAG_GROUND_CLIP_MODE, groundClipMode);
+    PUT_SCALAR(buf_size, &wr, TAG_GROUND_TYPE, groundType);
+    PUT_SCALAR(buf_size, &wr, TAG_GROUND_SURFACE, groundSurface);
+    PUT_SCALAR(buf_size, &wr, TAG_SAVED_GROUND_SURFACE, savedGroundSurface);
+    PUT_SCALAR(buf_size, &wr, TAG_LEVEL_MODE, levelMode);
+    PUT_SCALAR(buf_size, &wr, TAG_SCALAR_LEVEL_PHASE, levelPhase);
+    PUT_SCALAR(buf_size, &wr, TAG_LOAD_LEVEL_OBJECTS, loadLevelObjects);
+    PUT(buf_size, &wr, TAG_LASER_STRENGTH, snap.scalars.laserStrength, sizeof(snap.scalars.laserStrength));
+    PUT(buf_size, &wr, TAG_BOMB_COUNT, snap.scalars.bombCount, sizeof(snap.scalars.bombCount));
+    PUT(buf_size, &wr, TAG_LIFE_COUNT, snap.scalars.lifeCount, sizeof(snap.scalars.lifeCount));
+    PUT(buf_size, &wr, TAG_CHARGE_TIMERS, snap.scalars.chargeTimers, sizeof(snap.scalars.chargeTimers));
+    PUT(buf_size, &wr, TAG_SHIELD_TIMER, snap.scalars.shieldTimer, sizeof(snap.scalars.shieldTimer));
+    PUT(buf_size, &wr, TAG_HAS_SHIELD, snap.scalars.hasShield, sizeof(snap.scalars.hasShield));
+    PUT(buf_size, &wr, TAG_PLAYER_FORMS, snap.scalars.playerForms, sizeof(snap.scalars.playerForms));
+    PUT_SCALAR(buf_size, &wr, TAG_HIT_COUNT, hitCount);
+    PUT_SCALAR(buf_size, &wr, TAG_DISPLAYED_HIT_COUNT, displayedHitCount);
+    PUT_SCALAR(buf_size, &wr, TAG_RING_PASS_COUNT, ringPassCount);
+    PUT(buf_size, &wr, TAG_TEAM_SHIELDS, snap.scalars.teamShields, sizeof(snap.scalars.teamShields));
+    PUT(buf_size, &wr, TAG_TEAM_DAMAGE, snap.scalars.teamDamage, sizeof(snap.scalars.teamDamage));
+    PUT(buf_size, &wr, TAG_STAR_WOLF_TEAM_ALIVE, snap.scalars.starWolfTeamAlive, sizeof(snap.scalars.starWolfTeamAlive));
+    PUT(buf_size, &wr, TAG_SAVED_STAR_WOLF_TEAM_ALIVE, snap.scalars.savedStarWolfTeamAlive,
+        sizeof(snap.scalars.savedStarWolfTeamAlive));
+    PUT(buf_size, &wr, TAG_RIGHT_WING_HEALTH, snap.scalars.rightWingHealth, sizeof(snap.scalars.rightWingHealth));
+    PUT(buf_size, &wr, TAG_LEFT_WING_HEALTH, snap.scalars.leftWingHealth, sizeof(snap.scalars.leftWingHealth));
+    PUT_SCALAR(buf_size, &wr, TAG_FORMATION_LEADER_INDEX, formationLeaderIndex);
+    PUT_SCALAR(buf_size, &wr, TAG_PLAY_CAM_EYE, playCamEye);
+    PUT_SCALAR(buf_size, &wr, TAG_PLAY_CAM_AT, playCamAt);
+    PUT_SCALAR(buf_size, &wr, TAG_CS_CAM_EYE_X, csCamEyeX);
+    PUT_SCALAR(buf_size, &wr, TAG_CS_CAM_EYE_Y, csCamEyeY);
+    PUT_SCALAR(buf_size, &wr, TAG_CS_CAM_EYE_Z, csCamEyeZ);
+    PUT_SCALAR(buf_size, &wr, TAG_CS_CAM_AT_X, csCamAtX);
+    PUT_SCALAR(buf_size, &wr, TAG_CS_CAM_AT_Y, csCamAtY);
+    PUT_SCALAR(buf_size, &wr, TAG_CS_CAM_AT_Z, csCamAtZ);
+    PUT_SCALAR(buf_size, &wr, TAG_CAMERA_SHAKE_Y, cameraShakeY);
+    PUT_SCALAR(buf_size, &wr, TAG_CAMERA_SHAKE, cameraShake);
+    PUT_SCALAR(buf_size, &wr, TAG_CAM_COUNT, camCount);
+    PUT_SCALAR(buf_size, &wr, TAG_FOV_Y, fovY);
+    PUT_SCALAR(buf_size, &wr, TAG_PROJECT_NEAR, projectNear);
+    PUT_SCALAR(buf_size, &wr, TAG_PROJECT_FAR, projectFar);
+    PUT_SCALAR(buf_size, &wr, TAG_GAME_FRAME_COUNT, gameFrameCount);
+    PUT_SCALAR(buf_size, &wr, TAG_CS_FRAME_COUNT, csFrameCount);
+    PUT_SCALAR(buf_size, &wr, TAG_LEVEL_CLEAR_SCREEN_TIMER, levelClearScreenTimer);
+    PUT_SCALAR(buf_size, &wr, TAG_LEVEL_START_STATUS_SCREEN_TIMER, levelStartStatusScreenTimer);
+    PUT_SCALAR(buf_size, &wr, TAG_BOSS_HEALTH_BAR, bossHealthBar);
+    PUT_SCALAR(buf_size, &wr, TAG_BOSS_ACTIVE, bossActive);
+    PUT_SCALAR(buf_size, &wr, TAG_ALL_RANGE_EVENT_TIMER, allRangeEventTimer);
+    PUT_SCALAR(buf_size, &wr, TAG_ALL_RANGE_FRAME_COUNT, allRangeFrameCount);
+    PUT_SCALAR(buf_size, &wr, TAG_ALL_RANGE_SPAWN_EVENT, allRangeSpawnEvent);
+    PUT_SCALAR(buf_size, &wr, TAG_ALL_RANGE_CHECKPOINT, allRangeCheckpoint);
+    PUT(buf_size, &wr, TAG_ALL_RANGE_COUNTDOWN, snap.scalars.allRangeCountdown, sizeof(snap.scalars.allRangeCountdown));
+    PUT_SCALAR(buf_size, &wr, TAG_SHOW_ALL_RANGE_COUNTDOWN, showAllRangeCountdown);
+    PUT_SCALAR(buf_size, &wr, TAG_BOSS_FRAME_COUNT, bossFrameCount);
+    PUT_SCALAR(buf_size, &wr, TAG_SHOW_HUD, showHud);
+    PUT(buf_size, &wr, TAG_SHOW_RETICLES, snap.scalars.showReticles, sizeof(snap.scalars.showReticles));
+    PUT_SCALAR(buf_size, &wr, TAG_FILL_SCREEN_ALPHA, fillScreenAlpha);
+    PUT_SCALAR(buf_size, &wr, TAG_FILL_SCREEN_RED, fillScreenRed);
+    PUT_SCALAR(buf_size, &wr, TAG_FILL_SCREEN_GREEN, fillScreenGreen);
+    PUT_SCALAR(buf_size, &wr, TAG_FILL_SCREEN_BLUE, fillScreenBlue);
+    PUT_SCALAR(buf_size, &wr, TAG_FILL_SCREEN_ALPHA_TARGET, fillScreenAlphaTarget);
+    PUT_SCALAR(buf_size, &wr, TAG_FILL_SCREEN_ALPHA_STEP, fillScreenAlphaStep);
+    PUT_SCALAR(buf_size, &wr, TAG_RADIO_STATE, radioState);
+    PUT_SCALAR(buf_size, &wr, TAG_RADIO_STATE_TIMER, radioStateTimer);
+    PUT_SCALAR(buf_size, &wr, TAG_RADIO_MSG_ID, radioMsgId);
+    PUT_SCALAR(buf_size, &wr, TAG_KILL_EVENT_ACTORS, killEventActors);
+    PUT_SCALAR(buf_size, &wr, TAG_PREV_EVENT_ACTOR_INDEX, prevEventActorIndex);
+    PUT_SCALAR(buf_size, &wr, TAG_BGM_SEQ_ID, bgmSeqId);
+
+#undef PUT_SCALAR
+#undef PUT
+
+    return (uint32_t)serial_writer_size(&wr);
+}
+
+static void Snapshot_ApplyToGame(const PracticeSnapshot *sn) {
+    s32 i;
 
     for (i = 0; i < 4; i++) {
-        gPlayer[i] = sSnapshot.playerData[i];
+        gPlayer[i] = sn->playerData[i];
     }
-    bcopy(sSnapshot.actors, gActors, sizeof(sSnapshot.actors));
-    bcopy(sSnapshot.bosses, gBosses, sizeof(sSnapshot.bosses));
-    bcopy(sSnapshot.scenery, gScenery, sizeof(sSnapshot.scenery));
-    bcopy(sSnapshot.sprites, gSprites, sizeof(sSnapshot.sprites));
-    bcopy(sSnapshot.effects, gEffects, sizeof(sSnapshot.effects));
-    bcopy(sSnapshot.items, gItems, sizeof(sSnapshot.items));
-    bcopy(sSnapshot.playerShots, gPlayerShots, sizeof(sSnapshot.playerShots));
-    bcopy(sSnapshot.texturedLines, gTexturedLines, sizeof(sSnapshot.texturedLines));
-    bcopy(sSnapshot.radarMarks, gRadarMarks, sizeof(sSnapshot.radarMarks));
-    bcopy(sSnapshot.bonusText, gBonusText, sizeof(sSnapshot.bonusText));
+    bcopy(sn->actors, gActors, sizeof(sn->actors));
+    bcopy(sn->bosses, gBosses, sizeof(sn->bosses));
+    bcopy(sn->scenery, gScenery, sizeof(sn->scenery));
+    bcopy(sn->sprites, gSprites, sizeof(sn->sprites));
+    bcopy(sn->effects, gEffects, sizeof(sn->effects));
+    bcopy(sn->items, gItems, sizeof(sn->items));
+    bcopy(sn->playerShots, gPlayerShots, sizeof(sn->playerShots));
+    bcopy(sn->texturedLines, gTexturedLines, sizeof(sn->texturedLines));
+    bcopy(sn->radarMarks, gRadarMarks, sizeof(sn->radarMarks));
+    bcopy(sn->bonusText, gBonusText, sizeof(sn->bonusText));
 
-    gPathProgress = sSnapshot.scalars.pathProgress;
-    gSavedPathProgress = sSnapshot.scalars.savedPathProgress;
-    gObjectLoadIndex = sSnapshot.scalars.objectLoadIndex;
-    gSavedObjectLoadIndex = sSnapshot.scalars.savedObjectLoadIndex;
-    gPathVelZ = sSnapshot.scalars.pathVelZ;
-    gPathVelX = sSnapshot.scalars.pathVelX;
-    gPathVelY = sSnapshot.scalars.pathVelY;
-    gPathGroundScroll = sSnapshot.scalars.pathGroundScroll;
-    gPathTexScroll = sSnapshot.scalars.pathTexScroll;
-    gGroundHeight = sSnapshot.scalars.groundHeight;
-    gWaterLevel = sSnapshot.scalars.waterLevel;
-    gGroundClipMode = sSnapshot.scalars.groundClipMode;
-    gGroundType = sSnapshot.scalars.groundType;
-    gGroundSurface = sSnapshot.scalars.groundSurface;
-    gSavedGroundSurface = sSnapshot.scalars.savedGroundSurface;
-    gLevelMode = sSnapshot.scalars.levelMode;
-    gLevelPhase = sSnapshot.scalars.levelPhase;
-    gLoadLevelObjects = sSnapshot.scalars.loadLevelObjects;
+    gPathProgress = sn->scalars.pathProgress;
+    gSavedPathProgress = sn->scalars.savedPathProgress;
+    gObjectLoadIndex = sn->scalars.objectLoadIndex;
+    gSavedObjectLoadIndex = sn->scalars.savedObjectLoadIndex;
+    gPathVelZ = sn->scalars.pathVelZ;
+    gPathVelX = sn->scalars.pathVelX;
+    gPathVelY = sn->scalars.pathVelY;
+    gPathGroundScroll = sn->scalars.pathGroundScroll;
+    gPathTexScroll = sn->scalars.pathTexScroll;
+    gGroundHeight = sn->scalars.groundHeight;
+    gWaterLevel = sn->scalars.waterLevel;
+    gGroundClipMode = sn->scalars.groundClipMode;
+    gGroundType = sn->scalars.groundType;
+    gGroundSurface = sn->scalars.groundSurface;
+    gSavedGroundSurface = sn->scalars.savedGroundSurface;
+    gLevelMode = sn->scalars.levelMode;
+    gLevelPhase = sn->scalars.levelPhase;
+    gLoadLevelObjects = sn->scalars.loadLevelObjects;
 
-    bcopy(sSnapshot.scalars.laserStrength, gLaserStrength, sizeof(sSnapshot.scalars.laserStrength));
-    bcopy(sSnapshot.scalars.bombCount, gBombCount, sizeof(sSnapshot.scalars.bombCount));
-    bcopy(sSnapshot.scalars.lifeCount, gLifeCount, sizeof(sSnapshot.scalars.lifeCount));
-    bcopy(sSnapshot.scalars.chargeTimers, gChargeTimers, sizeof(sSnapshot.scalars.chargeTimers));
-    bcopy(sSnapshot.scalars.shieldTimer, gShieldTimer, sizeof(sSnapshot.scalars.shieldTimer));
-    bcopy(sSnapshot.scalars.hasShield, gHasShield, sizeof(sSnapshot.scalars.hasShield));
-    bcopy(sSnapshot.scalars.playerForms, gPlayerForms, sizeof(sSnapshot.scalars.playerForms));
+    bcopy(sn->scalars.laserStrength, gLaserStrength, sizeof(sn->scalars.laserStrength));
+    bcopy(sn->scalars.bombCount, gBombCount, sizeof(sn->scalars.bombCount));
+    bcopy(sn->scalars.lifeCount, gLifeCount, sizeof(sn->scalars.lifeCount));
+    bcopy(sn->scalars.chargeTimers, gChargeTimers, sizeof(sn->scalars.chargeTimers));
+    bcopy(sn->scalars.shieldTimer, gShieldTimer, sizeof(sn->scalars.shieldTimer));
+    bcopy(sn->scalars.hasShield, gHasShield, sizeof(sn->scalars.hasShield));
+    bcopy(sn->scalars.playerForms, gPlayerForms, sizeof(sn->scalars.playerForms));
 
-    gHitCount = sSnapshot.scalars.hitCount;
-    gDisplayedHitCount = sSnapshot.scalars.displayedHitCount;
-    gRingPassCount = sSnapshot.scalars.ringPassCount;
+    gHitCount = sn->scalars.hitCount;
+    gDisplayedHitCount = sn->scalars.displayedHitCount;
+    gRingPassCount = sn->scalars.ringPassCount;
 
-    bcopy(sSnapshot.scalars.teamShields, gTeamShields, sizeof(sSnapshot.scalars.teamShields));
-    bcopy(sSnapshot.scalars.teamDamage, gTeamDamage, sizeof(sSnapshot.scalars.teamDamage));
-    bcopy(sSnapshot.scalars.starWolfTeamAlive, gStarWolfTeamAlive, sizeof(sSnapshot.scalars.starWolfTeamAlive));
-    bcopy(sSnapshot.scalars.savedStarWolfTeamAlive, gSavedStarWolfTeamAlive, sizeof(sSnapshot.scalars.savedStarWolfTeamAlive));
-    bcopy(sSnapshot.scalars.rightWingHealth, gRightWingHealth, sizeof(sSnapshot.scalars.rightWingHealth));
-    bcopy(sSnapshot.scalars.leftWingHealth, gLeftWingHealth, sizeof(sSnapshot.scalars.leftWingHealth));
-    gFormationLeaderIndex = sSnapshot.scalars.formationLeaderIndex;
+    bcopy(sn->scalars.teamShields, gTeamShields, sizeof(sn->scalars.teamShields));
+    bcopy(sn->scalars.teamDamage, gTeamDamage, sizeof(sn->scalars.teamDamage));
+    bcopy(sn->scalars.starWolfTeamAlive, gStarWolfTeamAlive, sizeof(sn->scalars.starWolfTeamAlive));
+    bcopy(sn->scalars.savedStarWolfTeamAlive, gSavedStarWolfTeamAlive, sizeof(sn->scalars.savedStarWolfTeamAlive));
+    bcopy(sn->scalars.rightWingHealth, gRightWingHealth, sizeof(sn->scalars.rightWingHealth));
+    bcopy(sn->scalars.leftWingHealth, gLeftWingHealth, sizeof(sn->scalars.leftWingHealth));
+    gFormationLeaderIndex = sn->scalars.formationLeaderIndex;
 
-    gPlayCamEye = sSnapshot.scalars.playCamEye;
-    gPlayCamAt = sSnapshot.scalars.playCamAt;
-    gCsCamEyeX = sSnapshot.scalars.csCamEyeX;
-    gCsCamEyeY = sSnapshot.scalars.csCamEyeY;
-    gCsCamEyeZ = sSnapshot.scalars.csCamEyeZ;
-    gCsCamAtX = sSnapshot.scalars.csCamAtX;
-    gCsCamAtY = sSnapshot.scalars.csCamAtY;
-    gCsCamAtZ = sSnapshot.scalars.csCamAtZ;
-    gCameraShakeY = sSnapshot.scalars.cameraShakeY;
-    gCameraShake = sSnapshot.scalars.cameraShake;
-    gCamCount = sSnapshot.scalars.camCount;
-    gFovY = sSnapshot.scalars.fovY;
-    gProjectNear = sSnapshot.scalars.projectNear;
-    gProjectFar = sSnapshot.scalars.projectFar;
+    gPlayCamEye = sn->scalars.playCamEye;
+    gPlayCamAt = sn->scalars.playCamAt;
+    gCsCamEyeX = sn->scalars.csCamEyeX;
+    gCsCamEyeY = sn->scalars.csCamEyeY;
+    gCsCamEyeZ = sn->scalars.csCamEyeZ;
+    gCsCamAtX = sn->scalars.csCamAtX;
+    gCsCamAtY = sn->scalars.csCamAtY;
+    gCsCamAtZ = sn->scalars.csCamAtZ;
+    gCameraShakeY = sn->scalars.cameraShakeY;
+    gCameraShake = sn->scalars.cameraShake;
+    gCamCount = sn->scalars.camCount;
+    gFovY = sn->scalars.fovY;
+    gProjectNear = sn->scalars.projectNear;
+    gProjectFar = sn->scalars.projectFar;
 
-    gGameFrameCount = sSnapshot.scalars.gameFrameCount;
-    gCsFrameCount = sSnapshot.scalars.csFrameCount;
-    gLevelClearScreenTimer = sSnapshot.scalars.levelClearScreenTimer;
-    gLevelStartStatusScreenTimer = sSnapshot.scalars.levelStartStatusScreenTimer;
-    gBossHealthBar = sSnapshot.scalars.bossHealthBar;
-    gBossActive = sSnapshot.scalars.bossActive;
-    gAllRangeEventTimer = sSnapshot.scalars.allRangeEventTimer;
-    gAllRangeFrameCount = sSnapshot.scalars.allRangeFrameCount;
-    gAllRangeSpawnEvent = sSnapshot.scalars.allRangeSpawnEvent;
-    gAllRangeCheckpoint = sSnapshot.scalars.allRangeCheckpoint;
-    bcopy(sSnapshot.scalars.allRangeCountdown, gAllRangeCountdown, sizeof(sSnapshot.scalars.allRangeCountdown));
-    gShowAllRangeCountdown = sSnapshot.scalars.showAllRangeCountdown;
-    gBossFrameCount = sSnapshot.scalars.bossFrameCount;
+    gGameFrameCount = sn->scalars.gameFrameCount;
+    gCsFrameCount = sn->scalars.csFrameCount;
+    gLevelClearScreenTimer = sn->scalars.levelClearScreenTimer;
+    gLevelStartStatusScreenTimer = sn->scalars.levelStartStatusScreenTimer;
+    gBossHealthBar = sn->scalars.bossHealthBar;
+    gBossActive = sn->scalars.bossActive;
+    gAllRangeEventTimer = sn->scalars.allRangeEventTimer;
+    gAllRangeFrameCount = sn->scalars.allRangeFrameCount;
+    gAllRangeSpawnEvent = sn->scalars.allRangeSpawnEvent;
+    gAllRangeCheckpoint = sn->scalars.allRangeCheckpoint;
+    bcopy(sn->scalars.allRangeCountdown, gAllRangeCountdown, sizeof(sn->scalars.allRangeCountdown));
+    gShowAllRangeCountdown = sn->scalars.showAllRangeCountdown;
+    gBossFrameCount = sn->scalars.bossFrameCount;
 
-    gShowHud = sSnapshot.scalars.showHud;
-    bcopy(sSnapshot.scalars.showReticles, gShowReticles, sizeof(sSnapshot.scalars.showReticles));
-    gFillScreenAlpha = sSnapshot.scalars.fillScreenAlpha;
-    gFillScreenRed = sSnapshot.scalars.fillScreenRed;
-    gFillScreenGreen = sSnapshot.scalars.fillScreenGreen;
-    gFillScreenBlue = sSnapshot.scalars.fillScreenBlue;
-    gFillScreenAlphaTarget = sSnapshot.scalars.fillScreenAlphaTarget;
-    gFillScreenAlphaStep = sSnapshot.scalars.fillScreenAlphaStep;
+    gShowHud = sn->scalars.showHud;
+    bcopy(sn->scalars.showReticles, gShowReticles, sizeof(sn->scalars.showReticles));
+    gFillScreenAlpha = sn->scalars.fillScreenAlpha;
+    gFillScreenRed = sn->scalars.fillScreenRed;
+    gFillScreenGreen = sn->scalars.fillScreenGreen;
+    gFillScreenBlue = sn->scalars.fillScreenBlue;
+    gFillScreenAlphaTarget = sn->scalars.fillScreenAlphaTarget;
+    gFillScreenAlphaStep = sn->scalars.fillScreenAlphaStep;
 
     gRadioState = 0;
     gRadioStateTimer = 0;
     gRadioMsgId = 0;
 
-    gKillEventActors = sSnapshot.scalars.killEventActors;
-    gPrevEventActorIndex = sSnapshot.scalars.prevEventActorIndex;
+    gKillEventActors = sn->scalars.killEventActors;
+    gPrevEventActorIndex = sn->scalars.prevEventActorIndex;
 
     gPlayer[0].state = PLAYERSTATE_ACTIVE;
 
     Practice_Hud_Reset();
 
     Audio_ClearVoice();
-    AUDIO_PLAY_BGM(sSnapshot.scalars.bgmSeqId);
+    /* Phase 5: apply TAG_AUDIO_SPEC_PACKED via Audio_SetAudioSpec (emit-only TLV in Phase 4). */
+    AUDIO_PLAY_BGM(sn->scalars.bgmSeqId);
 }
 
-bool Practice_HasCheckpoint(void) {
-    return sSnapshot.valid;
+static int Practice_Load_Cb(const void *buf, uint32_t size) {
+    serial_reader_t r;
+    PracticeSnapshot sn;
+    uint16_t raw_tag;
+    uint32_t len;
+    const void *data;
+    serial_status_t st;
+    u32 tlv_ov_build_id;
+    u32 tlv_ov_vram_u32;
+    const uint8_t *overlay_src;
+    uint32_t overlay_len;
+    bool have_overlay_meta;
+    u32 segments_copy[16];
+    bool have_segments;
+
+    tlv_ov_build_id = 0;
+    tlv_ov_vram_u32 = 0;
+    overlay_src = NULL;
+    overlay_len = 0;
+    have_overlay_meta = false;
+    have_segments = false;
+
+    bzero(&sn, sizeof(sn));
+    bzero(segments_copy, sizeof(segments_copy));
+
+    serial_reader_init(&r, buf, size);
+
+    for (;;) {
+        st = serial_get_next(&r, &raw_tag, &len, &data);
+        if (st == SERIAL_OK_END) {
+            break;
+        }
+        if (st != SERIAL_OK_TAG_READ) {
+            return -1;
+        }
+
+        switch ((practice_save_tag_t)raw_tag) {
+            case TAG_LEVEL_ID:
+                if (len != sizeof(u16)) {
+                    return -1;
+                }
+                break;
+
+            case TAG_LEVEL_PHASE:
+                if (len != sizeof(s16)) {
+                    return -1;
+                }
+                break;
+
+            case TAG_OVERLAY_BUILD_ID:
+                if (len != sizeof(u32)) {
+                    return -1;
+                }
+                tlv_ov_build_id = *(const u32 *)data;
+                have_overlay_meta = true;
+                break;
+
+            case TAG_OVERLAY_VRAM:
+                if (len != sizeof(u32)) {
+                    return -1;
+                }
+                tlv_ov_vram_u32 = *(const u32 *)data;
+                have_overlay_meta = true;
+                break;
+
+            case TAG_OVERLAY_BYTES:
+                overlay_src = (const uint8_t *)data;
+                overlay_len = len;
+                break;
+
+            case TAG_SEGMENTS:
+                if (len != sizeof(segments_copy)) {
+                    return -1;
+                }
+                bcopy((void *)data, segments_copy, sizeof(segments_copy));
+                have_segments = true;
+                break;
+
+            case TAG_AUDIO_SEQ_ID:
+                if (len != sizeof(u16)) {
+                    return -1;
+                }
+                sn.scalars.bgmSeqId = *(const u16 *)data;
+                break;
+
+            case TAG_AUDIO_SPEC_PACKED:
+                /* Phase 4 emit-only - Phase 5: Audio_SetAudioSpec. */
+                if (len != sizeof(u16)) {
+                    return -1;
+                }
+                break;
+
+            case TAG_AUDIO_BANK_VOICE:
+                if (len != sizeof(u32)) {
+                    return -1;
+                }
+                break;
+
+            case TAG_PLAYER_ARRAY:
+                if (len != sizeof(sn.playerData)) {
+                    return -1;
+                }
+                bcopy((void *)data, sn.playerData, sizeof(sn.playerData));
+                break;
+
+            case TAG_ACTORS:
+                if (len != sizeof(sn.actors)) {
+                    return -1;
+                }
+                bcopy((void *)data, sn.actors, sizeof(sn.actors));
+                break;
+
+            case TAG_BOSSES:
+                if (len != sizeof(sn.bosses)) {
+                    return -1;
+                }
+                bcopy((void *)data, sn.bosses, sizeof(sn.bosses));
+                break;
+
+            case TAG_SCENERY:
+                if (len != sizeof(sn.scenery)) {
+                    return -1;
+                }
+                bcopy((void *)data, sn.scenery, sizeof(sn.scenery));
+                break;
+
+            case TAG_SPRITES:
+                if (len != sizeof(sn.sprites)) {
+                    return -1;
+                }
+                bcopy((void *)data, sn.sprites, sizeof(sn.sprites));
+                break;
+
+            case TAG_EFFECTS:
+                if (len != sizeof(sn.effects)) {
+                    return -1;
+                }
+                bcopy((void *)data, sn.effects, sizeof(sn.effects));
+                break;
+
+            case TAG_ITEMS:
+                if (len != sizeof(sn.items)) {
+                    return -1;
+                }
+                bcopy((void *)data, sn.items, sizeof(sn.items));
+                break;
+
+            case TAG_PLAYER_SHOTS:
+                if (len != sizeof(sn.playerShots)) {
+                    return -1;
+                }
+                bcopy((void *)data, sn.playerShots, sizeof(sn.playerShots));
+                break;
+
+            case TAG_TEXTURED_LINES:
+                if (len != sizeof(sn.texturedLines)) {
+                    return -1;
+                }
+                bcopy((void *)data, sn.texturedLines, sizeof(sn.texturedLines));
+                break;
+
+            case TAG_RADAR_MARKS:
+                if (len != sizeof(sn.radarMarks)) {
+                    return -1;
+                }
+                bcopy((void *)data, sn.radarMarks, sizeof(sn.radarMarks));
+                break;
+
+            case TAG_BONUS_TEXT:
+                if (len != sizeof(sn.bonusText)) {
+                    return -1;
+                }
+                bcopy((void *)data, sn.bonusText, sizeof(sn.bonusText));
+                break;
+
+#define LD(field)                                                                                              \
+                if (len != sizeof(sn.scalars.field))                                                        \
+                    return -1;                                                                                \
+                bcopy((void *)data, &(sn.scalars.field), sizeof(sn.scalars.field));                            \
+                break
+
+
+            case TAG_PATH_PROGRESS:
+                LD(pathProgress);
+            case TAG_SAVED_PATH_PROGRESS:
+                LD(savedPathProgress);
+            case TAG_OBJECT_LOAD_INDEX:
+                LD(objectLoadIndex);
+            case TAG_SAVED_OBJECT_LOAD_INDEX:
+                LD(savedObjectLoadIndex);
+            case TAG_PATH_VEL_Z:
+                LD(pathVelZ);
+            case TAG_PATH_VEL_X:
+                LD(pathVelX);
+            case TAG_PATH_VEL_Y:
+                LD(pathVelY);
+            case TAG_PATH_GROUND_SCROLL:
+                LD(pathGroundScroll);
+            case TAG_PATH_TEX_SCROLL:
+                LD(pathTexScroll);
+            case TAG_GROUND_HEIGHT:
+                LD(groundHeight);
+            case TAG_WATER_LEVEL:
+                LD(waterLevel);
+            case TAG_GROUND_CLIP_MODE:
+                LD(groundClipMode);
+            case TAG_GROUND_TYPE:
+                LD(groundType);
+            case TAG_GROUND_SURFACE:
+                LD(groundSurface);
+            case TAG_SAVED_GROUND_SURFACE:
+                LD(savedGroundSurface);
+            case TAG_LEVEL_MODE:
+                LD(levelMode);
+            case TAG_SCALAR_LEVEL_PHASE:
+                LD(levelPhase);
+            case TAG_LOAD_LEVEL_OBJECTS:
+                LD(loadLevelObjects);
+            case TAG_HIT_COUNT:
+                LD(hitCount);
+            case TAG_DISPLAYED_HIT_COUNT:
+                LD(displayedHitCount);
+            case TAG_RING_PASS_COUNT:
+                LD(ringPassCount);
+            case TAG_FORMATION_LEADER_INDEX:
+                LD(formationLeaderIndex);
+            case TAG_PLAY_CAM_EYE:
+                LD(playCamEye);
+            case TAG_PLAY_CAM_AT:
+                LD(playCamAt);
+            case TAG_CS_CAM_EYE_X:
+                LD(csCamEyeX);
+            case TAG_CS_CAM_EYE_Y:
+                LD(csCamEyeY);
+            case TAG_CS_CAM_EYE_Z:
+                LD(csCamEyeZ);
+            case TAG_CS_CAM_AT_X:
+                LD(csCamAtX);
+            case TAG_CS_CAM_AT_Y:
+                LD(csCamAtY);
+            case TAG_CS_CAM_AT_Z:
+                LD(csCamAtZ);
+            case TAG_CAMERA_SHAKE_Y:
+                LD(cameraShakeY);
+            case TAG_CAMERA_SHAKE:
+                LD(cameraShake);
+            case TAG_CAM_COUNT:
+                LD(camCount);
+            case TAG_FOV_Y:
+                LD(fovY);
+            case TAG_PROJECT_NEAR:
+                LD(projectNear);
+            case TAG_PROJECT_FAR:
+                LD(projectFar);
+            case TAG_GAME_FRAME_COUNT:
+                LD(gameFrameCount);
+            case TAG_CS_FRAME_COUNT:
+                LD(csFrameCount);
+            case TAG_LEVEL_CLEAR_SCREEN_TIMER:
+                LD(levelClearScreenTimer);
+            case TAG_LEVEL_START_STATUS_SCREEN_TIMER:
+                LD(levelStartStatusScreenTimer);
+            case TAG_BOSS_HEALTH_BAR:
+                LD(bossHealthBar);
+            case TAG_BOSS_ACTIVE:
+                LD(bossActive);
+            case TAG_ALL_RANGE_EVENT_TIMER:
+                LD(allRangeEventTimer);
+            case TAG_ALL_RANGE_FRAME_COUNT:
+                LD(allRangeFrameCount);
+            case TAG_ALL_RANGE_SPAWN_EVENT:
+                LD(allRangeSpawnEvent);
+            case TAG_ALL_RANGE_CHECKPOINT:
+                LD(allRangeCheckpoint);
+            case TAG_SHOW_ALL_RANGE_COUNTDOWN:
+                LD(showAllRangeCountdown);
+            case TAG_BOSS_FRAME_COUNT:
+                LD(bossFrameCount);
+            case TAG_SHOW_HUD:
+                LD(showHud);
+
+#undef LD
+
+            case TAG_LASER_STRENGTH:
+                if (len != sizeof(sn.scalars.laserStrength)) {
+                    return -1;
+                }
+                bcopy((void *)data, sn.scalars.laserStrength, sizeof(sn.scalars.laserStrength));
+                break;
+
+            case TAG_BOMB_COUNT:
+                if (len != sizeof(sn.scalars.bombCount)) {
+                    return -1;
+                }
+                bcopy((void *)data, sn.scalars.bombCount, sizeof(sn.scalars.bombCount));
+                break;
+
+            case TAG_LIFE_COUNT:
+                if (len != sizeof(sn.scalars.lifeCount)) {
+                    return -1;
+                }
+                bcopy((void *)data, sn.scalars.lifeCount, sizeof(sn.scalars.lifeCount));
+                break;
+
+            case TAG_CHARGE_TIMERS:
+                if (len != sizeof(sn.scalars.chargeTimers)) {
+                    return -1;
+                }
+                bcopy((void *)data, sn.scalars.chargeTimers, sizeof(sn.scalars.chargeTimers));
+                break;
+
+            case TAG_SHIELD_TIMER:
+                if (len != sizeof(sn.scalars.shieldTimer)) {
+                    return -1;
+                }
+                bcopy((void *)data, sn.scalars.shieldTimer, sizeof(sn.scalars.shieldTimer));
+                break;
+
+            case TAG_HAS_SHIELD:
+                if (len != sizeof(sn.scalars.hasShield)) {
+                    return -1;
+                }
+                bcopy((void *)data, sn.scalars.hasShield, sizeof(sn.scalars.hasShield));
+                break;
+
+            case TAG_PLAYER_FORMS:
+                if (len != sizeof(sn.scalars.playerForms)) {
+                    return -1;
+                }
+                bcopy((void *)data, sn.scalars.playerForms, sizeof(sn.scalars.playerForms));
+                break;
+
+            case TAG_TEAM_SHIELDS:
+                if (len != sizeof(sn.scalars.teamShields)) {
+                    return -1;
+                }
+                bcopy((void *)data, sn.scalars.teamShields, sizeof(sn.scalars.teamShields));
+                break;
+
+            case TAG_TEAM_DAMAGE:
+                if (len != sizeof(sn.scalars.teamDamage)) {
+                    return -1;
+                }
+                bcopy((void *)data, sn.scalars.teamDamage, sizeof(sn.scalars.teamDamage));
+                break;
+
+            case TAG_STAR_WOLF_TEAM_ALIVE:
+                if (len != sizeof(sn.scalars.starWolfTeamAlive)) {
+                    return -1;
+                }
+                bcopy((void *)data, sn.scalars.starWolfTeamAlive, sizeof(sn.scalars.starWolfTeamAlive));
+                break;
+
+            case TAG_SAVED_STAR_WOLF_TEAM_ALIVE:
+                if (len != sizeof(sn.scalars.savedStarWolfTeamAlive)) {
+                    return -1;
+                }
+                bcopy((void *)data, sn.scalars.savedStarWolfTeamAlive, sizeof(sn.scalars.savedStarWolfTeamAlive));
+                break;
+
+            case TAG_RIGHT_WING_HEALTH:
+                if (len != sizeof(sn.scalars.rightWingHealth)) {
+                    return -1;
+                }
+                bcopy((void *)data, sn.scalars.rightWingHealth, sizeof(sn.scalars.rightWingHealth));
+                break;
+
+            case TAG_LEFT_WING_HEALTH:
+                if (len != sizeof(sn.scalars.leftWingHealth)) {
+                    return -1;
+                }
+                bcopy((void *)data, sn.scalars.leftWingHealth, sizeof(sn.scalars.leftWingHealth));
+                break;
+
+            case TAG_ALL_RANGE_COUNTDOWN:
+                if (len != sizeof(sn.scalars.allRangeCountdown)) {
+                    return -1;
+                }
+                bcopy((void *)data, sn.scalars.allRangeCountdown, sizeof(sn.scalars.allRangeCountdown));
+                break;
+
+            case TAG_SHOW_RETICLES:
+                if (len != sizeof(sn.scalars.showReticles)) {
+                    return -1;
+                }
+                bcopy((void *)data, sn.scalars.showReticles, sizeof(sn.scalars.showReticles));
+                break;
+
+            case TAG_FILL_SCREEN_ALPHA:
+                if (len != sizeof(sn.scalars.fillScreenAlpha)) {
+                    return -1;
+                }
+                bcopy((void *)data, &(sn.scalars.fillScreenAlpha), sizeof(sn.scalars.fillScreenAlpha));
+                break;
+
+            case TAG_FILL_SCREEN_RED:
+                if (len != sizeof(sn.scalars.fillScreenRed)) {
+                    return -1;
+                }
+                bcopy((void *)data, &(sn.scalars.fillScreenRed), sizeof(sn.scalars.fillScreenRed));
+                break;
+
+            case TAG_FILL_SCREEN_GREEN:
+                if (len != sizeof(sn.scalars.fillScreenGreen)) {
+                    return -1;
+                }
+                bcopy((void *)data, &(sn.scalars.fillScreenGreen), sizeof(sn.scalars.fillScreenGreen));
+                break;
+
+            case TAG_FILL_SCREEN_BLUE:
+                if (len != sizeof(sn.scalars.fillScreenBlue)) {
+                    return -1;
+                }
+                bcopy((void *)data, &(sn.scalars.fillScreenBlue), sizeof(sn.scalars.fillScreenBlue));
+                break;
+
+            case TAG_FILL_SCREEN_ALPHA_TARGET:
+                if (len != sizeof(sn.scalars.fillScreenAlphaTarget)) {
+                    return -1;
+                }
+                bcopy((void *)data, &(sn.scalars.fillScreenAlphaTarget), sizeof(sn.scalars.fillScreenAlphaTarget));
+                break;
+
+            case TAG_FILL_SCREEN_ALPHA_STEP:
+                if (len != sizeof(sn.scalars.fillScreenAlphaStep)) {
+                    return -1;
+                }
+                bcopy((void *)data, &(sn.scalars.fillScreenAlphaStep), sizeof(sn.scalars.fillScreenAlphaStep));
+                break;
+
+            case TAG_RADIO_STATE:
+                if (len != sizeof(sn.scalars.radioState)) {
+                    return -1;
+                }
+                bcopy((void *)data, &(sn.scalars.radioState), sizeof(sn.scalars.radioState));
+                break;
+
+            case TAG_RADIO_STATE_TIMER:
+                if (len != sizeof(sn.scalars.radioStateTimer)) {
+                    return -1;
+                }
+                bcopy((void *)data, &(sn.scalars.radioStateTimer), sizeof(sn.scalars.radioStateTimer));
+                break;
+
+            case TAG_RADIO_MSG_ID:
+                if (len != sizeof(sn.scalars.radioMsgId)) {
+                    return -1;
+                }
+                bcopy((void *)data, &(sn.scalars.radioMsgId), sizeof(sn.scalars.radioMsgId));
+                break;
+
+            case TAG_KILL_EVENT_ACTORS:
+                if (len != sizeof(sn.scalars.killEventActors)) {
+                    return -1;
+                }
+                bcopy((void *)data, &(sn.scalars.killEventActors), sizeof(sn.scalars.killEventActors));
+                break;
+
+            case TAG_PREV_EVENT_ACTOR_INDEX:
+                if (len != sizeof(sn.scalars.prevEventActorIndex)) {
+                    return -1;
+                }
+                bcopy((void *)data, &(sn.scalars.prevEventActorIndex), sizeof(sn.scalars.prevEventActorIndex));
+                break;
+
+            case TAG_BGM_SEQ_ID:
+                if (len != sizeof(sn.scalars.bgmSeqId)) {
+                    return -1;
+                }
+                bcopy((void *)data, &(sn.scalars.bgmSeqId), sizeof(sn.scalars.bgmSeqId));
+                break;
+
+            default:
+                break;
+        }
+    }
+
+    (void)have_overlay_meta;
+
+    if ((overlay_src != NULL) && (overlay_len > 0)) {
+        void *dst;
+        u32 ds;
+        u32 cur_build;
+        u32 cur_va;
+
+        if (practice_overlay_get_region(gCurrentLevel, &dst, &ds) == 0) {
+            cur_va = (u32)(uintptr_t)dst;
+            cur_build = practice_overlay_build_id(gCurrentLevel);
+            if ((tlv_ov_build_id == cur_build) && (tlv_ov_vram_u32 == cur_va) && (overlay_len == ds)) {
+                bcopy((void *)overlay_src, dst, ds);
+            } else if (overlay_len != 0) {
+                osSyncPrintf("[practice_save] WARN partial overlay skipped (tlv_build=%08x cur=%08x)\n",
+                             tlv_ov_build_id, cur_build);
+            }
+        }
+    }
+
+    if (have_segments) {
+        bcopy(segments_copy, gSegments, sizeof(gSegments));
+    }
+
+    Snapshot_ApplyToGame(&sn);
+    return 0;
+}
+
+#if PRACTICE_SAVE_SELFTEST
+static void Practice_Save_InvalidSlotProbe(void) {
+    s32 r;
+
+    /* slot_manager rejects out-of-range slot without invoking save/load callbacks */
+    r = slot_manager_load_ram(99);
+    if (r != SLOT_MANAGER_ERR_INVALID_SLOT) {
+        osSyncPrintf("[practice_save] WARN invalid-slot probe: got %d\n", r);
+    }
+}
+#endif
+
+s32 Practice_CanSaveHere(void) {
+    if (gGameState != GSTATE_PLAY) {
+        return 0;
+    }
+    if (gPlayState != PLAY_UPDATE) {
+        return 0;
+    }
+    if (gPracticeMenuState != PMENU_CLOSED) {
+        return 0;
+    }
+    if (!practice_overlay_is_saveable(gCurrentLevel)) {
+        return 0;
+    }
+    if (gPlayer == NULL) {
+        return 0;
+    }
+    if (gPlayer[0].state != PLAYERSTATE_ACTIVE) {
+        return 0;
+    }
+    return 1;
+}
+
+void Practice_Save_Init(void) {
+    slot_manager_init(STATE_VERSION, LIB_VERSION, Practice_Save_Cb, Practice_Load_Cb, RAM_SLOT_COUNT);
+
+    if (slot_manager_set_ram_storage(sSlotPool, (uint32_t)sizeof(sSlotPool), MAX_STATE_SIZE) != SLOT_MANAGER_OK) {
+        osSyncPrintf("[practice_save] Practice_Save_Init slot_manager_set_ram_storage failed\n");
+    }
+
+    gPracticeActiveSlot = 0;
+    gPracticeSlotValidBits = 0;
+    gPracticeLastSaveResult = 0;
+    gPracticeLastLoadResult = 0;
+
+#if PRACTICE_SAVE_SELFTEST
+    Practice_Save_InvalidSlotProbe();
+#endif
 }
 
 void Practice_ClearCheckpoint(void) {
-    sSnapshot.valid = false;
+    s32 i;
+
+    for (i = 0; i < RAM_SLOT_COUNT; i++) {
+        slot_manager_clear_ram(i);
+    }
+    gPracticeSlotValidBits = 0;
 }
 
-#endif
+s32 Practice_HasCheckpoint(void) {
+    return slot_manager_ram_valid(gPracticeActiveSlot) ? 1 : 0;
+}
+
+static void SyncValidBits(void) {
+    s32 i;
+    u32 bits;
+
+    bits = 0;
+    for (i = 0; i < RAM_SLOT_COUNT; i++) {
+        if (slot_manager_ram_valid(i)) {
+            bits |= (u32)((u32)1u << i);
+        }
+    }
+    gPracticeSlotValidBits = (s32)bits;
+}
+
+void Practice_SaveStateSlot(s32 slot) {
+    s32 rr;
+
+    gPracticeLastSaveResult = SLOT_MANAGER_ERR_INVALID_SLOT;
+
+    if ((slot < 0) || (slot >= RAM_SLOT_COUNT)) {
+        osSyncPrintf("[save] refuse: bad slot=%d\n", slot);
+        return;
+    }
+
+    if (!Practice_CanSaveHere()) {
+        gPracticeLastSaveResult = SLOT_MANAGER_ERR_INVALID_SLOT;
+        osSyncPrintf("[save] refuse: not saveable (level=%d play=%d menu=%d)\n", (s32)gCurrentLevel,
+                     (s32)gPlayState, (s32)gPracticeMenuState);
+        return;
+    }
+
+    rr = slot_manager_save_ram(slot);
+    gPracticeLastSaveResult = rr;
+    SyncValidBits();
+}
+
+void Practice_SaveState(void) {
+    Practice_SaveStateSlot(gPracticeActiveSlot);
+}
+
+void Practice_LoadStateSlot(s32 slot) {
+    s32 rr;
+
+    gPracticeLastLoadResult = SLOT_MANAGER_ERR_INVALID_SLOT;
+
+    if ((slot < 0) || (slot >= RAM_SLOT_COUNT)) {
+        return;
+    }
+    if (!slot_manager_ram_valid(slot)) {
+        gPracticeLastLoadResult = SLOT_MANAGER_ERR_INVALID_SLOT;
+        return;
+    }
+
+    rr = slot_manager_load_ram(slot);
+    gPracticeLastLoadResult = rr;
+}
+
+void Practice_LoadState(void) {
+    Practice_LoadStateSlot(gPracticeActiveSlot);
+}
+
+s32 Practice_GetActiveSlot(void) {
+    return gPracticeActiveSlot;
+}
+
+void Practice_CycleSlot(s32 delta) {
+    s32 n;
+
+    if (delta <= 0) {
+        n = slot_manager_prev_slot(gPracticeActiveSlot);
+    } else {
+        n = slot_manager_next_slot(gPracticeActiveSlot);
+    }
+    if (n >= 0) {
+        gPracticeActiveSlot = n;
+    }
+}
+
+#endif /* PRACTICE_ROM */

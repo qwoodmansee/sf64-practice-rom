@@ -144,6 +144,53 @@ function H.wait_for_gameplay(max_frames)
     end, max_frames, "gameplay active")
 end
 
+--- KSEG0/KSEG1 pointer → physical RDRAM offset (0 .. 8 MiB Expansion Pak maps here).
+local function rdram_phys(ptr)
+    if ptr == 0 then return 0 end
+    return ptr % 0x20000000
+end
+
+--- RDRAM offset of Player[0]; nil while unallocated / NULL pointer.
+function H.player_rdram()
+    local p = H.read_u32(S.gPlayer)
+    if p == 0 then return nil end
+    return rdram_phys(p)
+end
+
+function H.player_pos_xyz()
+    local r = H.player_rdram()
+    if r == nil then return nil end
+    local px = H.read_float(r + S.player.pos_x)
+    local py = H.read_float(r + S.player.pos_y)
+    local pz = H.read_float(r + S.player.pos_z)
+    return px, py, pz
+end
+
+--- Practice checkpoint bindings: L + D-Left save, L + D-Right load.
+function H.press_save_checkpoint()
+    H.hold({L = true}, 2)
+    H.press({L = true, Left = true})
+end
+
+function H.press_load_checkpoint()
+    H.hold({L = true}, 2)
+    H.press({L = true, Right = true})
+end
+
+function H.last_save_result()
+    return H.read_s32(S.gPracticeLastSaveResult)
+end
+
+function H.last_load_result()
+    return H.read_s32(S.gPracticeLastLoadResult)
+end
+
+function H.float_near(a, b, eps)
+    eps = eps or 0.05
+    if a == nil or b == nil then return false end
+    return math.abs(a - b) < eps
+end
+
 -- Assertions
 function H.assert_eq(actual, expected, message)
     if actual == expected then

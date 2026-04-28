@@ -3,13 +3,22 @@
 
 Usage: python3 tools/extract_symbols.py > tests/symbols.lua
 
+Also supported (empty worktrees with a bogus build/ symlink):
+  PRACTICE_LINK_MAP=/path/to/full/starfox64.us.rev1.map python3 tools/extract_symbols.py ...
+
+Practice-only BSS symbols listed in SYMBOLS sometimes need hand-merging after
+changing practice_save bss layout — keep tests/symbols.lua in sync once the
+practice ROM links and re-run this script.
+
 The output is consumed by BizHawk Lua test scripts so they can reference
 game variables by name instead of hardcoded addresses.
 """
+import os
 import re
 import sys
 
-MAP_FILE = "build/starfox64.us.rev1.map"
+# Default layout; overridden by PRACTICE_LINK_MAP env (worktrees may symlink empty build/).
+MAP_FILE = os.environ.get("PRACTICE_LINK_MAP", "build/starfox64.us.rev1.map")
 
 SYMBOLS = [
     "gGameState",
@@ -114,13 +123,23 @@ CONFIG_OFFSETS = {
     "expertMode":       0x58,
 }
 
-# Player struct field offsets (from include/sf64player.h comments)
+# Player struct field offsets (include/sf64player.h Player)
 PLAYER_OFFSETS = {
-    "state": 0x1C8,
+    "pos_x":   0x074,
+    "pos_y":   0x078,
+    "pos_z":   0x07C,
+    "state":   0x1C8,
+}
+
+# Actor fields (first gActors[], include/sf64object.h Actor)
+ACTOR_OFFSETS = {
+    "state": 0x0B8,
 }
 
 # Enum constants needed by tests
 CONSTANTS = {
+    "SAVE_OK":                  0,
+    "SAVE_ERR_SLOT":           -2,
     "GSTATE_PLAY":              7,
     "GSTATE_MAP":               4,
     "PLAY_STANDBY":             0,
@@ -178,6 +197,12 @@ def main():
     print("S.player = {}")
     for field, off in sorted(PLAYER_OFFSETS.items(), key=lambda x: x[1]):
         print(f"S.player.{field} = 0x{off:03X}")
+    print("")
+
+    print("-- Actor (gActors[0]) field offsets")
+    print("S.actor = {}")
+    for field, off in sorted(ACTOR_OFFSETS.items(), key=lambda x: x[1]):
+        print(f"S.actor.{field} = 0x{off:03X}")
     print("")
 
     print("-- Enum constants")

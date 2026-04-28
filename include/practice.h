@@ -159,12 +159,13 @@ void Practice_FreeCam_Draw(void);
 /* practice_save.c */
 void Practice_SaveState(void);
 void Practice_LoadState(void);
-bool Practice_HasCheckpoint(void);
+/* s32 0/1 — avoids Clang CC_CHECK bool vs libc/stdbool quirks on some hosts */
+s32 Practice_HasCheckpoint(void);
 void Practice_ClearCheckpoint(void);
 /* Phase 4 — slot-manager-backed save state. Wave 2.2 implements; Wave 1
  * ships forward decls only with stub bodies in practice_save.c. */
 void Practice_Save_Init(void);
-bool Practice_CanSaveHere(void);
+s32 Practice_CanSaveHere(void);
 void Practice_SaveStateSlot(s32 slot);
 void Practice_LoadStateSlot(s32 slot);
 s32  Practice_GetActiveSlot(void);

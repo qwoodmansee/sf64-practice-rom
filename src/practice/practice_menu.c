@@ -147,6 +147,16 @@ void Practice_Menu_Update(void) {
         return;
     }
 
+    /* Slot cycle: L-only / R-only shoulder (distinct from L+DPAD save/load combos). */
+    if ((press->button & L_TRIG) && !(press->button & (U_JPAD | D_JPAD | L_JPAD | R_JPAD))) {
+        Practice_CycleSlot(-1);
+        return;
+    }
+    if ((press->button & R_TRIG) && !(press->button & (U_JPAD | D_JPAD | L_JPAD | R_JPAD))) {
+        Practice_CycleSlot(1);
+        return;
+    }
+
     if (hold->button & START_BUTTON) {
         sStartHoldTimer++;
         if (sStartHoldTimer >= START_HOLD_FRAMES) {
@@ -309,9 +319,11 @@ void Practice_Menu_Draw(void) {
     } else if (sMenuDepth > 0) {
         Practice_DrawTextColor(RADIAL_CENTER_X - 28, RADIAL_CENTER_Y - 5, "DISPLAY", 0, 255, 128);
     } else {
-        Practice_DrawTextColor(RADIAL_CENTER_X - 36, RADIAL_CENTER_Y - 12, "PRACTICE", 0, 255, 128);
-        Practice_DrawText(RADIAL_CENTER_X - 24, RADIAL_CENTER_Y + 2, "HITS:");
-        Practice_DrawNumber(RADIAL_CENTER_X + 16, RADIAL_CENTER_Y + 2, gHitCount);
+        Practice_DrawTextColor(RADIAL_CENTER_X - 36, RADIAL_CENTER_Y - 14, "PRACTICE", 0, 255, 128);
+        Practice_DrawText(RADIAL_CENTER_X - 24, RADIAL_CENTER_Y + 0, "HITS:");
+        Practice_DrawNumber(RADIAL_CENTER_X + 16, RADIAL_CENTER_Y + 0, gHitCount);
+        Practice_DrawText(RADIAL_CENTER_X - 44, RADIAL_CENTER_Y + 14, "SLOT");
+        Practice_DrawNumber(RADIAL_CENTER_X + 8, RADIAL_CENTER_Y + 14, Practice_GetActiveSlot());
     }
 
     if (sStartHoldTimer > 0) {
@@ -324,7 +336,7 @@ void Practice_Menu_Draw(void) {
     if (sMenuDepth > 0) {
         Practice_DrawTextColor(56, 198, "STICK:SELECT  A:GO  B:BACK", 150, 150, 150);
     } else {
-        Practice_DrawTextColor(56, 198, "STICK:SELECT  A:GO  B:CLOSE", 150, 150, 150);
+        Practice_DrawTextColor(52, 198, "L:R SLOT STICK:A B:CLOSE", 150, 150, 150);
     }
 
     if (Practice_StateMenuIsOpen()) {

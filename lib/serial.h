@@ -3,8 +3,16 @@
 
 #include "lib_types.h"
 
-#if defined(__STDC_HOSTED__) && __STDC_HOSTED__ == 1
+/* Hosted gcc unit tests pull system <stddef.h>. The mips-elf Clang build for the
+ * ROM carries -D_LANGUAGE_C/-D_MIPS_ISA=... rather than stripping __STDC_HOSTED__,
+ * so guarding on __mips__ alone is unreliable; omit system stddef whenever the ROM
+ * MIPS ISA macros are active to avoid clashes with include/libc/stddef.h */
+#if defined(__STDC_HOSTED__) && __STDC_HOSTED__ == 1 && !defined(_MIPS_ISA)
 #include <stddef.h>
+#endif
+#if defined(_MIPS_ISA)
+/* ROM build: skip system <stddef.h> (clashes with libc) but we still need size_t. */
+#include "libc/stddef.h"
 #endif
 
 typedef struct {

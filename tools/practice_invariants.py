@@ -11,6 +11,10 @@ import sys
 SRC_PRACTICE = "src/practice"
 INCLUDE_PRACTICE = "include/practice.h"
 PATCH_SCRIPT = "tools/patch_linker_script.py"
+PRACTICE_SAVE_TAGS = os.path.join("src", "practice", "practice_save_tags.h")
+PRACTICE_SAVE_C = os.path.join("src", "practice", "practice_save.c")
+PRACTICE_SAVE_CONFIG = os.path.join("src", "practice", "practice_save_config.h")
+PRACTICE_MAIN_INIT = os.path.join("src", "practice", "practice_main.c")
 FOX_GAME = "src/engine/fox_game.c"
 FOX_PLAY = "src/engine/fox_play.c"
 FOX_DISPLAY = "src/engine/fox_display.c"
@@ -416,6 +420,170 @@ def check_fatfs_isolation():
                 continue
             error(f"{path}: forbidden include '{inc}' in vendored FatFs (only ff.h/ffconf.h/diskio.h/string.h/iodev/iodev.h/libc/stddef.h + std C allowed)")
 
+def check_tag_registry():
+    """Every TAG_* numeric value in practice_save_tags.h must be unique."""
+    if not os.path.isfile(PRACTICE_SAVE_TAGS):
+        return
+    src = read(PRACTICE_SAVE_TAGS)
+    matches = re.findall(r"\b(TAG_\w+)\s*=\s*(0x[0-9a-fA-F]+)", src)
+    if not matches:
+        error(f"{PRACTICE_SAVE_TAGS}: could not parse TAG_* = 0x... entries "
+              f"(check_tag_registry)")
+        return
+
+    vals = []
+    for name, hexv in matches:
+        vals.append(int(hexv, 16))
+
+    dupes = sorted({v for v in vals if vals.count(v) > 1})
+    if dupes:
+        error(f"{PRACTICE_SAVE_TAGS}: duplicate tag values "
+              f"{[hex(v) for v in dupes]} (check_tag_registry)")
+
+def check_serializer_parity():
+    """Every TLV tag must appear in Practice_Save_Cb (emit) and Practice_Load_Cb (apply)."""
+    if not os.path.isfile(PRACTICE_SAVE_TAGS):
+        return
+
+    hdr = read(PRACTICE_SAVE_TAGS)
+    tag_names = re.findall(r"\b(TAG_\w+)\s*=\s*0x", hdr)
+    if not tag_names:
+        error(f"{PRACTICE_SAVE_TAGS}: could not enumerate TAG_* (check_serializer_parity)")
+        return
+
+    sb = read(PRACTICE_SAVE_C)
+    save_impl = (
+        "static uint32_t Practice_Save_Cb(void *buf, uint32_t buf_size) {"
+    )
+    load_impl = "static int Practice_Load_Cb(const void *buf, uint32_t size) {"
+
+    cb_start = sb.find(save_impl)
+    cb_end = sb.find(load_impl)
+
+    emit = sb[cb_start:cb_end] if cb_start >= 0 and cb_end > cb_start else ""
+
+    lb_start = cb_end if cb_end >= 0 else sb.find(load_impl)
+    next_fn = sb.find("\n#ifdef", lb_start + 10) if lb_start >= 0 else -1
+    if lb_start < 0:
+        apply = ""
+    elif next_fn > lb_start:
+        apply = sb[lb_start:next_fn]
+    else:
+        brace = sb.find("\n}", lb_start + 800)
+        apply = sb[lb_start:brace + 2] if brace > lb_start else sb[lb_start:]
+
+    for tag in sorted(set(tag_names)):
+        if tag not in emit:
+            error(f"{PRACTICE_SAVE_C}: TLV {tag} must appear in Practice_Save_Cb "
+                  f"(check_serializer_parity)")
+        if f"case {tag}:" not in apply:
+            error(f"{PRACTICE_SAVE_C}: TLV {tag} missing `case {tag}:` in "
+                  f"Practice_Load_Cb (check_serializer_parity)")
+
+def check_state_version_defined_once():
+    """STATE_VERSION / MAX_STATE_SIZE must stay single-definition in practice_save_config.h."""
+    cfg = PRACTICE_SAVE_CONFIG
+    if not os.path.isfile(cfg):
+        return
+
+    proj = ""
+    skip_dirs = frozenset({
+        ".git", ".claude", "build", "node_modules",
+        "asm", "bin", "baserom", "deps", "venv", ".venv",
+        "torch", ".splat_cache",
+    })
+    exclude_cfg = lambda p: (
+        os.path.normpath(os.path.abspath(p)).endswith(cfg.replace("/", os.sep))
+    )
+
+    for walk_root, dirs, filenames in os.walk("."):
+        dirs[:] = sorted(d for d in dirs if d not in skip_dirs)
+        depth = os.path.relpath(walk_root).count(os.sep)
+        if depth > 14:
+            dirs[:] = []
+
+        for fname in filenames:
+            if not fname.endswith((".c", ".h")):
+                continue
+            path = os.path.join(walk_root, fname)
+            if exclude_cfg(path):
+                continue
+            try:
+                proj += read(path) + "\n"
+            except OSError:
+                continue
+
+    if "#define STATE_VERSION " in proj:
+        error("#define STATE_VERSION must appear only in "
+              f"{cfg}, not elsewhere (check_state_version_defined_once)")
+    if "#define MAX_STATE_SIZE " in proj:
+        error("#define MAX_STATE_SIZE must appear only in "
+              f"{cfg}, not elsewhere (check_state_version_defined_once)")
+
+    body = read(cfg)
+    if "#define STATE_VERSION" not in body:
+        error(f"{cfg}: STATE_VERSION macro missing (check_state_version_defined_once)")
+    if "#define MAX_STATE_SIZE" not in body:
+        error(f"{cfg}: MAX_STATE_SIZE macro missing (check_state_version_defined_once)")
+
+def check_max_state_size_budget():
+    """RAM-slot footprint must satisfy documented Expansion Pak budgeting."""
+    cfg = PRACTICE_SAVE_CONFIG
+    if not os.path.isfile(cfg):
+        return
+
+    txt = read(cfg)
+    m_mx = re.search(r"#define\s+MAX_STATE_SIZE\s+(.+)", txt)
+    m_rn = re.search(r"#define\s+MAX_RAM_SLOTS_NO_PAK\s+(.+)", txt)
+    m_rp = re.search(r"#define\s+MAX_RAM_SLOTS_WITH_PAK\s+(.+)", txt)
+
+    mx = None
+    if m_mx:
+        raw = re.sub(r"/\*.*?\*/", "", m_mx.group(1)).strip()
+        mx = int(raw, 0)
+
+    nopak_ceiling_n = None
+    withpak_ceiling_n = None
+    if m_rn:
+        nopak_ceiling_n = int(m_rn.group(1).strip(), 0)
+    if m_rp:
+        withpak_ceiling_n = int(m_rp.group(1).strip(), 0)
+
+    if mx is None or nopak_ceiling_n is None or withpak_ceiling_n is None:
+        error(f"{cfg}: MAX_STATE_SIZE / MAX_RAM_SLOTS_* not parseable "
+              f"(check_max_state_size_budget)")
+        return
+
+    nopak_budget = 1048576
+    withpak_budget = 2621440
+
+    if mx * nopak_ceiling_n > nopak_budget:
+        error(f"{cfg}: worst-case NOPAK footprint {mx * nopak_ceiling_n} "
+              f"(check_max_state_size_budget)")
+    if mx * withpak_ceiling_n > withpak_budget:
+        error(f"{cfg}: worst-case WITH_PAK footprint {mx * withpak_ceiling_n} "
+              f"(check_max_state_size_budget)")
+
+def check_phase4_engine_hooks():
+    """slot-backed save initializes after Wave 3 slot regression test."""
+    pm = PRACTICE_MAIN_INIT
+    if not os.path.isfile(pm):
+        return
+
+    txt = read(pm)
+    seq = txt.find("Practice_SlotTest_Run();")
+    if seq < 0:
+        error(f"{pm}: Practice_SlotTest_Run missing (check_phase4_engine_hooks)")
+        return
+
+    ai = txt.find("Practice_Save_Init();")
+    if ai < seq:
+        error(
+            "Practice_Save_Init() must appear after Practice_SlotTest_Run() "
+            f"in {pm} (check_phase4_engine_hooks)"
+        )
+
+
 def main():
     check_config_inits()
     check_function_definitions()
@@ -431,6 +599,11 @@ def main():
     check_lib_libultra_scope()
     check_fatfs_isolation()
     check_overlay_table_complete()
+    check_tag_registry()
+    check_serializer_parity()
+    check_state_version_defined_once()
+    check_max_state_size_budget()
+    check_phase4_engine_hooks()
 
     if errors:
         print("Practice ROM invariant check FAILED:")
