@@ -313,6 +313,75 @@ def check_lib_libultra_scope():
                 if re.search(rf'#include\s*[<"]{pat}[>"]', src):
                     error(f"{path}: only iodev backends and lib_types.h may include libultra (matched /{pat}/)")
 
+def check_overlay_table_complete():
+    """Every LevelId enum value must appear in EITHER sLevelOverlayMap or
+    sLevelExclusionList in src/practice/practice_overlay.c. If a future
+    LevelId is added to include/sf64level.h and neither table is updated,
+    drift becomes silent — practice_overlay_is_saveable() would return
+    false for the new ID without anyone noticing. The invariant catches
+    that drift at build time."""
+    level_h = read("include/sf64level.h")
+    overlay_path = os.path.join(SRC_PRACTICE, "practice_overlay.c")
+    if not os.path.isfile(overlay_path):
+        error(f"{overlay_path} missing — practice_overlay.c is required for Phase 4")
+        return
+    overlay_c = read(overlay_path)
+
+    enum_match = re.search(
+        r"typedef enum LevelId\s*\{(.*?)\}\s*LevelId;",
+        level_h, re.DOTALL,
+    )
+    if not enum_match:
+        enum_match = re.search(
+            r"enum LevelId\s*\{(.*?)\}",
+            level_h, re.DOTALL,
+        )
+    if not enum_match:
+        error("Could not find LevelId enum in include/sf64level.h "
+              "(check_overlay_table_complete)")
+        return
+
+    enum_body = enum_match.group(1)
+    raw_levels = re.findall(r"\b(LEVEL_\w+)\b", enum_body)
+    levels = []
+    seen = set()
+    for name in raw_levels:
+        if name == "LevelId":
+            continue
+        if name.endswith("_MAX"):
+            continue
+        if name in seen:
+            continue
+        seen.add(name)
+        levels.append(name)
+
+    map_match = re.search(
+        r"sLevelOverlayMap\s*\[\s*\]\s*=\s*\{(.*?)\};",
+        overlay_c, re.DOTALL,
+    )
+    excl_match = re.search(
+        r"sLevelExclusionList\s*\[\s*\]\s*=\s*\{(.*?)\};",
+        overlay_c, re.DOTALL,
+    )
+    if not map_match:
+        error("Could not locate sLevelOverlayMap[] in practice_overlay.c "
+              "(check_overlay_table_complete)")
+        return
+    if not excl_match:
+        error("Could not locate sLevelExclusionList[] in practice_overlay.c "
+              "(check_overlay_table_complete)")
+        return
+
+    map_body = map_match.group(1)
+    excl_body = excl_match.group(1)
+
+    for level in levels:
+        in_map = re.search(rf"\b{re.escape(level)}\b", map_body) is not None
+        in_excl = re.search(rf"\b{re.escape(level)}\b", excl_body) is not None
+        if not (in_map or in_excl):
+            error(f"{level} not in sLevelOverlayMap or sLevelExclusionList "
+                  f"in practice_overlay.c (check_overlay_table_complete)")
+
 def check_fatfs_isolation():
     """FatFs source (vendored) must not include any project headers beyond its
     own and iodev's. Vendored FatFs is meant to be drop-in replaceable on
@@ -361,6 +430,7 @@ def main():
     check_lib_isolation()
     check_lib_libultra_scope()
     check_fatfs_isolation()
+    check_overlay_table_complete()
 
     if errors:
         print("Practice ROM invariant check FAILED:")

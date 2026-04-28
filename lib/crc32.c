@@ -7,9 +7,9 @@ uint32_t crc32_init(void) {
     return CRC32_INIT;
 }
 
-uint32_t crc32_update(uint32_t state, const void *data, size_t len) {
+uint32_t crc32_update(uint32_t state, const void *data, uint32_t len) {
     const uint8_t *p = (const uint8_t *)data;
-    size_t i;
+    uint32_t i;
     int bit;
 
     if (len == 0) {
@@ -33,6 +33,6 @@ uint32_t crc32_finalize(uint32_t state) {
     return state ^ 0xFFFFFFFFu;
 }
 
-uint32_t crc32(const void *data, size_t len) {
+uint32_t crc32(const void *data, uint32_t len) {
     return crc32_finalize(crc32_update(crc32_init(), data, len));
 }
