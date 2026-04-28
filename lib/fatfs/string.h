@@ -16,7 +16,13 @@
 #ifndef LIB_FATFS_STRING_H
 #define LIB_FATFS_STRING_H
 
-#include "libc/stddef.h"   /* size_t */
+/* size_t source -- toolchain-conditional like lib/lib_types.h. On host
+ * test builds the system stddef provides it; on IDO the project shim does. */
+#if defined(__STDC_HOSTED__) && __STDC_HOSTED__ == 1
+#  include <stddef.h>
+#else
+#  include "libc/stddef.h"
+#endif
 
 void *memcpy(void *dst, const void *src, size_t n);
 void *memset(void *dst, int c, size_t n);

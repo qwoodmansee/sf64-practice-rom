@@ -11,6 +11,7 @@
 
 #include "ff.h"
 #include "diskio.h"
+#include "string.h"
 #include "iodev/iodev.h"
 
 /* FatFs has only one volume in our config (FF_VOLUMES=1); pdrv is always 0. */
@@ -18,6 +19,36 @@
 
 /* Track init state so disk_status returns sane values pre-init. */
 static int sFatfsDiskInited = 0;
+
+/* 512-byte 8-byte-aligned bounce buffer for misaligned caller buffers.
+ *
+ * iodev_sd_*'s API requires 8-byte alignment (PI DMA constraint). FatFs's
+ * internal sector window FATFS.win[] lands at offset 0x44 inside FATFS
+ * struct -- 4-byte aligned but NOT 8-byte aligned. Same for FIL.buf[].
+ * Any caller passing those into disk_read/disk_write would be rejected
+ * with IODEV_ERR_PARAM, mapped here to RES_PARERR, mapped by FatFs to
+ * FR_DISK_ERR -- a confusing failure mode for a real config issue.
+ *
+ * When buf is misaligned we copy through this bounce buffer one sector
+ * at a time. Cost: an extra 512-byte memcpy per misaligned sector. The
+ * practice ROM is single-threaded (FF_FS_REENTRANT=0) so a file-static
+ * bounce is safe; a multi-threaded port would need to put this on the
+ * caller's stack or per-volume.
+ *
+ * The Phase 2 plan's risk register documented this and offered two fixes:
+ * (a) document alignment in iodev's contract and trust callers, or
+ * (b) bounce-buffer in diskio.c when alignment check fails. We chose (b)
+ * because (a) would require FatFs callers to know about iodev's internal
+ * DMA constraint -- a leaky abstraction.
+ *
+ * Type chosen to guarantee 8-byte alignment on both IDO and host: uint64_t
+ * has natural 8-byte alignment under MIPS3 ABI and any modern host ABI,
+ * so no compiler-specific __attribute__((aligned)) is needed (which IDO
+ * would silently no-op via the project's macros.h __attribute__ stub). */
+static uint64_t sBounceWords[64];   /* 64 * 8 = 512 bytes */
+#define sBounce ((unsigned char *) sBounceWords)
+
+#define IS_ALIGNED8(p) ((((uintptr_t)(const void *)(p)) & 7u) == 0)
 
 /* Map iodev_result_t to FatFs's DRESULT. */
 static DRESULT iodev_to_dresult(iodev_result_t r) {
@@ -60,7 +91,21 @@ DRESULT disk_read(BYTE pdrv, BYTE *buff, LBA_t sector, UINT count) {
     if (!sFatfsDiskInited) return RES_NOTRDY;
     if (!buff) return RES_PARERR;
 
-    /* iodev caps at 128 sectors per call; chunk larger requests. */
+    if (!IS_ALIGNED8(buff)) {
+        /* Misaligned caller buffer (typically FATFS.win[] or FIL.buf[]).
+         * Bounce one sector at a time through our 8-byte-aligned scratch. */
+        while (count > 0) {
+            r = iodev_sd_read_sectors((uint32_t)sector, 1, sBounce);
+            if (r != IODEV_OK) return iodev_to_dresult(r);
+            memcpy(buff, sBounce, 512);
+            sector++;
+            buff   += 512;
+            count--;
+        }
+        return RES_OK;
+    }
+
+    /* Aligned: chunk at iodev's 128-sector cap and drive the device direct. */
     while (count > 0) {
         chunk = (count > 128u) ? 128u : count;
         r = iodev_sd_read_sectors((uint32_t)sector, (uint32_t)chunk, buff);
@@ -80,6 +125,20 @@ DRESULT disk_write(BYTE pdrv, const BYTE *buff, LBA_t sector, UINT count) {
     if (!sFatfsDiskInited) return RES_NOTRDY;
     if (!buff) return RES_PARERR;
 
+    if (!IS_ALIGNED8(buff)) {
+        /* Misaligned caller buffer; bounce one sector at a time. */
+        while (count > 0) {
+            memcpy(sBounce, buff, 512);
+            r = iodev_sd_write_sectors((uint32_t)sector, 1, sBounce);
+            if (r != IODEV_OK) return iodev_to_dresult(r);
+            sector++;
+            buff   += 512;
+            count--;
+        }
+        return RES_OK;
+    }
+
+    /* Aligned: chunk at iodev's 128-sector cap and drive the device direct. */
     while (count > 0) {
         chunk = (count > 128u) ? 128u : count;
         r = iodev_sd_write_sectors((uint32_t)sector, (uint32_t)chunk, buff);
