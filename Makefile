@@ -157,6 +157,14 @@ ifeq ($(PRACTICE_ROM),1)
     COMPARE := 0
 endif
 
+# Phase 2 FatFs hardware verification probe. Build with IODEV_DIAG_FATFS=1
+# to enable a one-shot mount/write/read round-trip test on boot, output
+# via IS-Viewer. WRITES A REAL FILE TO THE USER'S SD CARD ROOT (SF64TEST.TXT).
+# See docs/superpowers/plans/HW_VERIFY_phase2.md.
+ifeq ($(IODEV_DIAG_FATFS),1)
+    BUILD_DEFINES   += -DIODEV_DIAG_FATFS=1
+endif
+
 MAKE = make
 CPPFLAGS += -fno-dollars-in-identifiers -P
 LDFLAGS  := --no-check-sections --accept-unknown-input-arch --emit-relocs
@@ -483,7 +491,7 @@ mod:
 
 practice:
 	@$(PYTHON) tools/patch_linker_script.py
-	$(MAKE) PRACTICE_ROM=1
+	$(MAKE) PRACTICE_ROM=1 IODEV_DIAG_FATFS=$(IODEV_DIAG_FATFS)
 
 lib-test:
 	@$(MAKE) -C lib/test run-all

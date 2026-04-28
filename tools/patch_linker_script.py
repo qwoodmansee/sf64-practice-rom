@@ -30,6 +30,7 @@ PRACTICE_OBJS = [
     "practice_hud",
     "practice_hitbox",
     "practice_freecam",
+    "practice_test_fatfs",  # Phase 2: gated by IODEV_DIAG_FATFS, otherwise empty .o
 ]
 
 # Order matters: each entry's predecessor must precede it in the list,
@@ -118,12 +119,35 @@ def patch():
         print(f"Patched {LINKER_SCRIPT}: practice + lib/iodev + lib-top + lib/fatfs (full).")
         return
 
-    # Practice already patched. Walk LIB_IODEV_OBJS first, then LIB_TOP_OBJS,
-    # and inject any missing entries. Each entry anchors on its predecessor
-    # in injection order: lib/iodev follows the last practice obj, lib-top
-    # follows the last lib/iodev obj.
-    last_practice_obj = PRACTICE_OBJS[-1]
+    # Practice already patched. Walk PRACTICE_OBJS first, then LIB_IODEV_OBJS,
+    # then LIB_TOP_OBJS, then LIB_FATFS_OBJS, injecting any missing entries.
+    # Each entry anchors on its predecessor in injection order.
     inject_count = 0
+
+    # Pass 0: missing practice objs anchor on the previous PRACTICE_OBJS entry
+    # (the first entry is always present from the initial full-patch).
+    for i, obj in enumerate(PRACTICE_OBJS):
+        if f"build/src/practice/{obj}.o" in content:
+            continue
+        if i == 0:
+            # Should never happen -- practice_main was injected during the
+            # initial full-patch. If we hit this, the linker script is in
+            # an unexpected state.
+            raise RuntimeError(
+                "First PRACTICE_OBJS entry missing from a partially-patched "
+                "linker script. This shouldn't happen."
+            )
+        predecessor = f"build/src/practice/{PRACTICE_OBJS[i - 1]}"
+        for section in [".text", ".data", ".rodata", ".bss"]:
+            anchor_line = f"{predecessor}.o({section});"
+            injection = f"        build/src/practice/{obj}.o({section});"
+            content = _replace_after_anchor(content, anchor_line, injection)
+        inject_count += 1
+
+    # last_practice_obj: anchor for the first lib/iodev entry. Because Pass 0
+    # has now ensured all PRACTICE_OBJS entries are present, the last one is
+    # safe to reference.
+    last_practice_obj = PRACTICE_OBJS[-1]
 
     for i, obj in enumerate(LIB_IODEV_OBJS):
         if f"build/lib/iodev/{obj}.o" in content:

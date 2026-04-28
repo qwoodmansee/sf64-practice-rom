@@ -75,6 +75,14 @@ void Practice_Update(void);
 void Practice_Draw(void);
 void Practice_ApplyStartConditions(void);
 
+/* practice_test_fatfs.c -- Phase 2 hardware verification probe.
+ * Only built/called when IODEV_DIAG_FATFS=1. Writes SF64TEST.TXT to the
+ * SD card root and reads it back; prints results via IS-Viewer.
+ * Remove this from production builds before shipping. */
+#ifdef IODEV_DIAG_FATFS
+void Practice_TestFatfs(void);
+#endif
+
 /* practice_draw.c */
 void Practice_DrawBox(s32 x, s32 y, s32 w, s32 h, u8 r, u8 g, u8 b, u8 a);
 void Practice_DrawText(s32 x, s32 y, const char* text);
