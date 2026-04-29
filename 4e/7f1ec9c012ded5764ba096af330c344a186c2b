@@ -1,0 +1,23 @@
+src/practice/practice_save.c
+  0abdd9b08032bd0a 59-63,636-645,1303-1304,1547-1554
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "4e7f1ec9c012ded5764ba096af330c344a186c2b",
+  "prompts": {
+    "0abdd9b08032bd0a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c88d3c2d-e5ed-4f97-9aac-df25ea0122a5",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 39,
+      "total_deletions": 23,
+      "accepted_lines": 25,
+      "overriden_lines": 0
+    }
+  }
+}
