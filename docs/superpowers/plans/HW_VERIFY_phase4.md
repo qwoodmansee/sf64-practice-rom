@@ -1,19 +1,40 @@
 # Phase 4 — heap audit (hardware verification)
 
+## BLOCKED — read first
+
+The static slot pool (`.practice_pool`, 512 KB) **overlaps the dynamic overlay/
+asset load window** in stock 4 MB RAM (see Phase 4 plan §0.3). Until Wave 6 picks
+a real layout, **do not exercise SAVE / LOAD on hardware** — saving will write
+256 KB of TLV stream into whatever overlay is currently resident and crash the
+ROM. Boot, browse levels, and play levels are all safe.
+
+The audit run below is **still useful**: its outputs feed Wave 6's layout choice.
+Specifically, we need the dynamic-load high-water-mark per scene, not just the
+"free RAM" approximation we used to want for `MAX_STATE_SIZE`.
+
+Static layout proof (no ROM run needed):
+
+```bash
+python3 tools/audit_ram_layout.py
+```
+
+That report names every overlapping practice section. The current build's overlap
+should appear as `.practice_pool OVERLAPS ovl_menu` (~287 KB) and
+`.practice_pool OVERLAPS dynamic-load window` (~466 KB).
+
 ## Purpose
 
-Collect **IS-Viewer** telemetry for RAM pressure while visiting every **saveable**
-scene, so Wave 4 can pin `MAX_STATE_SIZE` / slot counts in
-`src/practice/practice_save_config.h`. This doc is the checklist; paste measured
-numbers into the table after you run the procedure.
+Collect IS-Viewer telemetry while visiting every saveable scene to:
 
-**Static slot pool size (current build):** from `practice_save_config.h`:
-
-- Bytes reserved in `.bss`: `RAM_SLOT_COUNT * MAX_STATE_SIZE` (e.g. `2 * 0x40000` = **524288** bytes with provisional constants).
+1. Bound the dynamic-load high-water-mark — needed by Wave 6 to decide whether
+   a smaller pool can sit between the highest scene-load extent and `.buffers`
+   (`0x80281000`).
+2. Pin `MAX_STATE_SIZE` and the slot count once the layout is chosen.
+3. Confirm `osMemSize` reporting (Expansion Pak detection on this setup).
 
 ## Prerequisites
 
-- **SummerCart64** (or equivalent) with IS-Viewer path working.
+- SummerCart64 (or equivalent) with IS-Viewer path working.
 - Patched `sc64deployer` that flushes stdout after each line (see `CLAUDE.md`
   IS-Viewer / deployer notes).
 
@@ -23,7 +44,7 @@ numbers into the table after you run the procedure.
 sc64deployer debug --isv 0x03FF0000
 ```
 
-Wait until the tool reports it is listening.
+Wait until it reports listening.
 
 ## Build and flash
 
@@ -31,72 +52,81 @@ Wait until the tool reports it is listening.
 make practice -j4
 ```
 
-Upload the ROM (`build/starfox64.us.rev1.uncompressed.z64` or your usual
-artifact). **Hard-reset** the N64 after upload so the IS-Viewer buffer resets
-cleanly (see `CLAUDE.md`).
+Upload `build/starfox64.us.rev1.uncompressed.z64`. Hard-reset the N64 after
+upload so the IS-Viewer buffer resets cleanly.
 
 ## What you should see at boot
 
-One-shot lines similar to:
+The current heap-audit print format (Wave 2.3, split across lines for IS-Viewer
+buffering):
 
 ```text
-[heap] boot osMemSize=... bss_span~... headroom~... bump=... slot_pool=... slot_pool_sz=... (RAM_SLOT_COUNT*MAX_STATE_SIZE=...)
-[heap] ovl_i1=... ovl_i2=... ovl_i3=... ovl_i4=... ovl_i5=... ovl_i6=...
+[heap] boot memSz=<u32> bss~<u32> free~<u32>
+[heap] boot bump=<u32> pool=<hex8> poolsz=<u32>
+[heap] ovl i1=<bytes> i2=<bytes> i3=<bytes>
+[heap] ovl i4=<bytes> i5=<bytes> i6=<bytes>
 ```
 
-Then, on **level changes** or about every **60 frames**:
+`memSz` is `osMemSize` (`0x400000` stock, `0x800000` with Pak).
+`bss~` is `BSS_END - 0x80000000`.
+`pool=` is the runtime address of `sSlotPool` — should match
+`practice_pool_BSS_START` from the linker map.
+
+On level changes or every 60 frames during gameplay:
 
 ```text
-[heap] enter level=... bump=... gfx_peak=... audio=... audio_peak=... free~... bump_hwm=... free_low=...
+[heap] enter level=<id> bump=<u32> gfx_peak=<u32> audio=<u32> audio_peak=<u32> free~<u32> bump_hwm=<s32> free_low=<s32>
+[heap] tick60 level=<id> bump=<u32> gfx_peak=<u32> audio=<u32> audio_peak=<u32> free~<u32> bump_hwm=<s32> free_low=<s32>
 ```
 
-Use the `free~` and `free_low` columns while stressing each scene (enemies,
-charge shots, bombs, dense spawns). **`free_low`** is the smallest approximate
-“slack” seen so far since boot (conservative diagnostic; see plan §7.3).
+`free_low` is the lowest `free~` seen since boot (conservative diagnostic).
 
 ## Per-scene pass (17 saveable levels)
 
-For **each** saveable level:
+For each saveable level:
 
 1. Select the level from practice level select.
-2. Play **~10 seconds** with heavy action (match plan §7.2 guidance).
-3. Note the **lowest** `free~` (and/or `free_low` after leaving the scene) from
-   the deployer log.
+2. Play ~10 seconds with heavy action (charge shots, dense spawns, bombs).
+3. Note the lowest `free~` (and `free_low` after leaving the scene).
+4. **DO NOT press SAVE / LOAD** — see BLOCKED banner above.
 
-Fill in:
-
-| LevelId / scene | Lowest `free~` (notes) | Notes |
-|-------------------|------------------------|-------|
-| CORNERIA | | |
-| METEO | | |
-| SECTOR_X | | |
-| AREA_6 | | |
-| SECTOR_Y | | |
-| VENOM_1 | | |
-| SOLAR | | |
-| ZONESS | | |
-| VENOM_ANDROSS | | |
-| MACBETH | | |
-| TITANIA | | |
-| AQUAS | | |
-| FORTUNA | | |
-| KATINA | | |
-| BOLSE | | |
-| SECTOR_Z | | |
-| VENOM_2 | | |
+| LevelId | Lowest `free~` | `osMemSize` (Pak?) | Notes |
+|---------|----------------|---------------------|-------|
+| CORNERIA | | | |
+| METEO | | | |
+| SECTOR_X | | | |
+| AREA_6 | | | |
+| SECTOR_Y | | | |
+| VENOM_1 | | | |
+| SOLAR | | | |
+| ZONESS | | | |
+| VENOM_ANDROSS | | | |
+| MACBETH | | | |
+| TITANIA | | | |
+| AQUAS | | | |
+| FORTUNA | | | |
+| KATINA | | | |
+| BOLSE | | | |
+| SECTOR_Z | | | |
+| VENOM_2 | | | |
 
 ## Optional: Expansion Pak
 
-Repeat on hardware with the **Expansion Pak** if available. If `osMemSize` does
-not increase on your setup, document **4 MB only** and treat Pak sizing as a
-follow-up (plan §7.2 step 6).
+Repeat with the Expansion Pak if available. Document whether `memSz=` jumps to
+`0x800000` automatically, or whether the user's setup requires a different
+trigger (libultra default behaviour varies by emulator/flashcart).
 
 ## After the run
 
-- Worst-case `free~` / overlay footprint feeds **Wave 4** tightening of
-  `MAX_STATE_SIZE` and `RAM_SLOT_COUNT` (not changed in Wave 2.3).
-- Re-run `python3 tools/practice_invariants.py` and `make practice -j4` after any
-  constant changes.
+- Worst-case `free~` across all levels feeds Wave 6's layout decision:
+  - If `worst_free >= 256 KB` and the user has Expansion Pak available, a
+    1-slot pool past `.buffers` works.
+  - If `worst_free < 256 KB` and we're stock-only, `MAX_STATE_SIZE` must drop
+    (likely to ~192 KB) and the pool moves to a measured-safe gap.
+- Re-run `python3 tools/audit_ram_layout.py` after any layout change — it must
+  exit 0 (no overlaps) before Wave 4 can resume.
+- Re-run `python3 tools/practice_invariants.py` and `make practice -j4` after
+  any constant changes.
 
 ## Compile-out audit (release / tournament)
 
