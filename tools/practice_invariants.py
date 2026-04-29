@@ -16,6 +16,7 @@ PRACTICE_SAVE_C = os.path.join("src", "practice", "practice_save.c")
 PRACTICE_SAVE_SLOTPOOL = os.path.join("src", "practice", "practice_save_slotpool.c")
 PRACTICE_SAVE_CONFIG = os.path.join("src", "practice", "practice_save_config.h")
 PRACTICE_MAIN_INIT = os.path.join("src", "practice", "practice_main.c")
+PRACTICE_LEVEL = os.path.join("src", "practice", "practice_level.c")
 FOX_GAME = "src/engine/fox_game.c"
 FOX_PLAY = "src/engine/fox_play.c"
 FOX_DISPLAY = "src/engine/fox_display.c"
@@ -257,6 +258,69 @@ def check_spawn_zone_typing():
     for field in ("showSpawnActors", "showSpawnItems", "showSpawnScenery"):
         if field not in hitbox:
             error(f"Hitbox_DrawSpawnZones must respect gPracticeConfig.{field}")
+
+
+def check_level_select_bgm_ready_gate():
+    """Level-select BGM preview must not stack audio heap resets.
+
+    Audio_SetAudioSpec queues SEQCMD_RESET_AUDIO_HEAP. Audio_Update skips
+    queued seq commands while Audio_HandleReset() is not READY, so queuing a
+    second reset from fast L/R input can wedge BGM on hardware.
+    """
+    src = read(PRACTICE_LEVEL)
+
+    fn_match = re.search(
+        r"static\s+void\s+Practice_ServiceLevelSelectBgm\s*\([^)]*\)\s*\{(.*?)^}",
+        src, re.DOTALL | re.MULTILINE,
+    )
+    if not fn_match:
+        error(f"{PRACTICE_LEVEL}: Practice_ServiceLevelSelectBgm missing")
+        return
+
+    body = fn_match.group(1)
+    if "Audio_HandleReset() != 0" not in body:
+        error(
+            f"{PRACTICE_LEVEL}: Practice_ServiceLevelSelectBgm must gate preview "
+            "audio on Audio_HandleReset() == 0"
+        )
+    if "sBgmPlayPending" not in body:
+        error(
+            f"{PRACTICE_LEVEL}: Practice_ServiceLevelSelectBgm must defer "
+            "AUDIO_PLAY_BGM after cross-spec AUDIO_SET_SPEC"
+        )
+    if "gGameFrameCount" in body or "osGetTime" in body:
+        error(
+            f"{PRACTICE_LEVEL}: level-select BGM preview must use Audio_HandleReset, "
+            "not frame/time throttles"
+        )
+    if "AUDIO_SET_SPEC" in body:
+        first_gate = body.find("Audio_HandleReset() != 0")
+        first_set = body.find("AUDIO_SET_SPEC")
+        if first_gate < 0 or first_gate > first_set:
+            error(
+                f"{PRACTICE_LEVEL}: first level-select BGM AUDIO_SET_SPEC must be "
+                "preceded by Audio_HandleReset()"
+            )
+    if not re.search(r"if\s*\([^)]*L_TRIG[^)]*\)\s*\{.*?\}\s*else\s+if\s*\([^)]*R_TRIG", src, re.DOTALL):
+        error(
+            f"{PRACTICE_LEVEL}: L/R BGM input must use else-if so same-frame "
+            "shoulder presses apply once"
+        )
+
+    update_match = re.search(
+        r"void\s+Practice_LevelSelect_Update\s*\([^)]*\)\s*\{(.*?)^}",
+        src, re.DOTALL | re.MULTILINE,
+    )
+    if update_match:
+        update_body = update_match.group(1)
+        launch_pos = update_body.find("Practice_LaunchLevel")
+        service_after_launch = update_body.find("Practice_ServiceLevelSelectBgm", launch_pos)
+        return_after_launch = update_body.find("return", launch_pos, service_after_launch)
+        if launch_pos >= 0 and service_after_launch >= 0 and return_after_launch < 0:
+            error(
+                f"{PRACTICE_LEVEL}: Practice_LevelSelect_Update must return after "
+                "Practice_LaunchLevel so launch audio is not followed by preview audio"
+            )
 
 LIB_DIR = "lib"
 
@@ -898,6 +962,7 @@ def main():
     check_iodev_sc64()
     check_iodev_ed64()
     check_spawn_zone_typing()
+    check_level_select_bgm_ready_gate()
     check_release_patch_workflow()
     check_lib_isolation()
     check_lib_libultra_scope()

@@ -9,6 +9,7 @@ PracticeMenuState gPracticeMenuState;
 
 void Practice_Init(void) {
     gPracticeScreen = PSCREEN_LEVEL_SELECT;
+    Practice_LevelSelect_OnEnter();
     gPracticeMenuState = PMENU_CLOSED;
 
     gPracticeConfig.laserStrength = LASERS_SINGLE;

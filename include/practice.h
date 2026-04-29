@@ -130,6 +130,7 @@ const char* Practice_GetActionName(PracticeAction action);
 const char* Practice_GetDPadName(u16 button);
 
 /* practice_level.c */
+void Practice_LevelSelect_OnEnter(void);
 void Practice_LevelSelect_Update(void);
 void Practice_LevelSelect_Draw(void);
 void Practice_LaunchLevel(LevelId levelId, s32 phase, f32 checkpointProgress);

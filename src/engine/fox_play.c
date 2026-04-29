@@ -5908,6 +5908,7 @@ void Player_Update(Player* player) {
             if (gPracticeConfig.skipCutscenes) {
                 Practice_Menu_Close();
                 gPracticeScreen = PSCREEN_LEVEL_SELECT;
+                Practice_LevelSelect_OnEnter();
                 gGameState = GSTATE_MAP;
                 gDrawMode = DRAW_NONE;
                 Audio_FadeOutAll(1);

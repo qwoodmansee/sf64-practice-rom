@@ -201,6 +201,7 @@ void Practice_Menu_Update(void) {
                 case RSLICE_LEVELS:
                     Practice_Menu_Close();
                     gPracticeScreen = PSCREEN_LEVEL_SELECT;
+                    Practice_LevelSelect_OnEnter();
                     gGameState = GSTATE_MAP;
                     gDrawMode = DRAW_NONE;
                     Audio_FadeOutAll(1);

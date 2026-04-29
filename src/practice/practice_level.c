@@ -56,10 +56,9 @@ static LevelEntry sLevelList[] = {
 
 #define LEVEL_COUNT (s32)(sizeof(sLevelList) / sizeof(sLevelList[0]))
 
-/* Audio_SetAudioSpec issues SEQCMD_RESET_AUDIO_HEAP. Spamming it (fast L/R on
- * level select) can wedge the audio driver; coalesce applies and throttle
- * heap resets across frames. */
-#define BGM_HEAP_RESET_MIN_FRAMES 3
+/* Audio_SetAudioSpec queues SEQCMD_RESET_AUDIO_HEAP. While sAudioResetStatus
+ * is not AUDIORESET_READY (0), Audio_Update skips Audio_ProcessSeqCmds;
+ * stacking another reset wedges BGM. Defer until Audio_HandleReset() == 0. */
 
 typedef struct {
     const char* name;
@@ -96,8 +95,8 @@ static s32 sSelectedPhase = 0;
 static s32 sBgmIndex = 0;
 static bool sBgmPlaying = false;
 static bool sBgmAudioDirty = false;
+static bool sBgmPlayPending = false;
 static u16 sBgmLastSpecPacked = 0xFFFF;
-static s32 sBgmLastHeapResetFrame = -1000;
 
 f32 gPracticeCheckpointProgress = 0.0f;
 
@@ -110,30 +109,47 @@ static void Practice_ServiceLevelSelectBgm(void) {
     u16 packed = Practice_BgmSpecPacked(e);
 
     if (!sBgmPlaying) {
+        sBgmAudioDirty = true;
+    }
+
+    if (!sBgmAudioDirty && !sBgmPlayPending) {
+        return;
+    }
+
+    if (Audio_HandleReset() != 0) {
+        return;
+    }
+
+    if (packed != sBgmLastSpecPacked) {
         AUDIO_SET_SPEC(e->sfxLayout, e->audioSpec);
-        AUDIO_PLAY_BGM(e->bgmId);
         sBgmLastSpecPacked = packed;
-        sBgmLastHeapResetFrame = gGameFrameCount;
+        sBgmPlayPending = true;
         sBgmPlaying = true;
         sBgmAudioDirty = false;
         return;
     }
 
-    if (!sBgmAudioDirty) {
-        return;
-    }
-
-    if (packed != sBgmLastSpecPacked) {
-        if ((gGameFrameCount - sBgmLastHeapResetFrame) < BGM_HEAP_RESET_MIN_FRAMES) {
-            return;
-        }
-        AUDIO_SET_SPEC(e->sfxLayout, e->audioSpec);
-        sBgmLastSpecPacked = packed;
-        sBgmLastHeapResetFrame = gGameFrameCount;
-    }
-
     AUDIO_PLAY_BGM(e->bgmId);
+    sBgmPlayPending = false;
+    sBgmPlaying = true;
     sBgmAudioDirty = false;
+}
+
+void Practice_LevelSelect_OnEnter(void) {
+    f32 r;
+
+    r = Rand_ZeroOne();
+    sBgmIndex = (s32)(r * (f32)BGM_COUNT);
+    if (sBgmIndex >= BGM_COUNT) {
+        sBgmIndex = BGM_COUNT - 1;
+    }
+    if (sBgmIndex < 0) {
+        sBgmIndex = 0;
+    }
+    sBgmPlaying = false;
+    sBgmAudioDirty = false;
+    sBgmPlayPending = false;
+    sBgmLastSpecPacked = 0xFFFF;
 }
 
 void Practice_LevelSelect_Update(void) {
@@ -204,6 +220,7 @@ void Practice_LevelSelect_Update(void) {
     if (press->button & A_BUTTON) {
         PhaseEntry* phase = &sLevelList[sSelectedLevel].phases[sSelectedPhase];
         Practice_LaunchLevel(sLevelList[sSelectedLevel].levelId, phase->phase, phase->checkpointProgress);
+        return;
     }
 
     Practice_ServiceLevelSelectBgm();
@@ -282,6 +299,7 @@ void Practice_LevelSelect_Draw(void) {
 
 void Practice_LaunchLevel(LevelId levelId, s32 phase, f32 checkpointProgress) {
     sBgmPlaying = false;
+    sBgmPlayPending = false;
 
     gNextLevel = levelId;
     gNextLevelPhase = phase;
