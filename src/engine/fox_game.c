@@ -5,6 +5,16 @@
 #include "mods.h"
 #ifdef PRACTICE_ROM
 #include "practice.h"
+#define PRACTICE_AQ_GAME_TRACE(stage, state)   \
+    do {                                       \
+        if (gCurrentLevel == LEVEL_AQUAS) {    \
+            gPracticeAqTraceStage = (stage);   \
+            gPracticeAqTraceFrame = gGameFrameCount; \
+            gPracticeAqTraceState = (state);   \
+        }                                      \
+    } while (0)
+#else
+#define PRACTICE_AQ_GAME_TRACE(stage, state) ((void)0)
 #endif
 
 f32 gNextVsViewScale;
@@ -286,6 +296,7 @@ void Game_InitViewport(Gfx** dList, u8 camCount, u8 camIndex) {
 }
 
 void Game_Draw(s32 playerNum) {
+    PRACTICE_AQ_GAME_TRACE(900, gDrawMode);
     switch (gDrawMode) {
         case DRAW_NONE:
             break;
@@ -303,7 +314,9 @@ void Game_Draw(s32 playerNum) {
             break;
         case DRAW_PLAY:
             gPlayerNum = playerNum;
+            PRACTICE_AQ_GAME_TRACE(910, playerNum);
             Display_Update();
+            PRACTICE_AQ_GAME_TRACE(920, playerNum);
             break;
         case DRAW_UNK_MAP: // likely game over
             Background_DrawStarfield();
@@ -554,7 +567,9 @@ void Game_Update(void) {
                 break;
         }
 
+        PRACTICE_AQ_GAME_TRACE(890, gPlayState);
         Game_Draw(0);
+        PRACTICE_AQ_GAME_TRACE(930, gDrawMode);
 
         if (gCamCount == 2) {
             Game_InitViewport(&gMasterDisp, gCamCount, 1);
@@ -631,6 +646,7 @@ void Game_Update(void) {
         }
 
         Background_dummy_80040CDC();
+        PRACTICE_AQ_GAME_TRACE(940, gDrawMode);
         HUD_DrawStatusScreens();
         AllRange_DrawCountdown();
 
@@ -655,8 +671,11 @@ void Game_Update(void) {
         Spawner();
 #endif
 #ifdef PRACTICE_ROM
+        PRACTICE_AQ_GAME_TRACE(950, gPracticeScreen);
         Practice_Update();
+        PRACTICE_AQ_GAME_TRACE(960, gPracticeScreen);
         Practice_Draw();
+        PRACTICE_AQ_GAME_TRACE(970, gPracticeScreen);
 #endif
     }
 }

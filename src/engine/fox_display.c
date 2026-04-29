@@ -1,6 +1,16 @@
 #include "global.h"
 #ifdef PRACTICE_ROM
 #include "practice.h"
+#define PRACTICE_AQ_DISPLAY_TRACE(stage, state) \
+    do {                                        \
+        if (gCurrentLevel == LEVEL_AQUAS) {     \
+            gPracticeAqTraceStage = (stage);    \
+            gPracticeAqTraceFrame = gGameFrameCount; \
+            gPracticeAqTraceState = (state);    \
+        }                                       \
+    } while (0)
+#else
+#define PRACTICE_AQ_DISPLAY_TRACE(stage, state) ((void)0)
 #endif
 #include "assets/ast_arwing.h"
 #include "assets/ast_allies.h"
@@ -1689,6 +1699,7 @@ void Display_Update(void) {
     Player* player;
     Player* camPlayer = &gPlayer[gPlayerNum];
 
+    PRACTICE_AQ_DISPLAY_TRACE(1000, gPlayerNum);
     sDrawCockpit = false;
 
     // 511 hit count cap
@@ -1710,6 +1721,7 @@ void Display_Update(void) {
     Matrix_Scale(gGfxMatrix, 1.0f + gCamDistortion, 1.0f - gCamDistortion, 1.0f, MTXF_APPLY);
     Matrix_Push(&gGfxMatrix);
     Camera_SetupLights(camPlayer);
+    PRACTICE_AQ_DISPLAY_TRACE(1010, camPlayer->state);
     Lights_SetOneLight(&gMasterDisp, gLight1x, gLight1y, gLight1z, gLight1R, gLight1G, gLight1B, gAmbientR, gAmbientG,
                        gAmbientB);
 
@@ -1779,6 +1791,7 @@ void Display_Update(void) {
 
     Background_DrawBackdrop();
     Background_DrawSun();
+    PRACTICE_AQ_DISPLAY_TRACE(1020, camPlayer->state);
     Matrix_Push(&gGfxMatrix);
     Matrix_LookAt(gGfxMatrix, gPlayCamEye.x, gPlayCamEye.y, gPlayCamEye.z, gPlayCamAt.x, gPlayCamAt.y, gPlayCamAt.z,
                   playerCamUp.x, playerCamUp.y, playerCamUp.z, MTXF_APPLY);
@@ -1806,9 +1819,11 @@ void Display_Update(void) {
         playerPos.y = player->pos.y;
         playerPos.z = player->trueZpos;
         Display_SetSecondLight(&playerPos);
+        PRACTICE_AQ_DISPLAY_TRACE(1030 + i, player->state);
         Display_Player_Update(player, 0);
         Display_SetupPlayerSfxPos(player);
     }
+    PRACTICE_AQ_DISPLAY_TRACE(1039, gCamCount);
 
     if ((gGroundSurface == SURFACE_WATER) && (gPlayer[0].state != PLAYERSTATE_LEVEL_INTRO)) {
         Lights_SetOneLight(&gMasterDisp, gLight2x, -1 * gLight2y, gLight2z, gLight2R, gLight2G, gLight2B, gAmbientR,
@@ -1819,28 +1834,36 @@ void Display_Update(void) {
             playerPos.x = player->pos.x;
             playerPos.y = player->pos.y;
             playerPos.z = player->trueZpos;
+            PRACTICE_AQ_DISPLAY_TRACE(1040 + i, player->state);
             Display_Player_Update(player, 1);
         }
         Matrix_Pop(&gGfxMatrix);
     }
+    PRACTICE_AQ_DISPLAY_TRACE(1049, gGroundSurface);
 
     Lights_SetOneLight(&gMasterDisp, gLight1x, gLight1y, gLight1z, gLight1R, gLight1G, gLight1B, gAmbientR, gAmbientG,
                        gAmbientB);
+    PRACTICE_AQ_DISPLAY_TRACE(1050, gGroundSurface);
     Object_Draw(1);
+    PRACTICE_AQ_DISPLAY_TRACE(1060, gGroundSurface);
     TexturedLine_Draw();
 #ifdef PRACTICE_ROM
     Practice_Hitbox_Draw();
 #endif
     gReflectY = 1;
+    PRACTICE_AQ_DISPLAY_TRACE(1070, gReflectY);
     PlayerShot_DrawAll();
+    PRACTICE_AQ_DISPLAY_TRACE(1080, gReflectY);
 
     if ((gGroundSurface == SURFACE_WATER) && (gPlayer[0].state != PLAYERSTATE_LEVEL_INTRO)) {
         Matrix_Push(&gGfxMatrix);
         Matrix_Scale(gGfxMatrix, 1.0f, -1.0f, 1.0f, MTXF_APPLY);
         gReflectY = -1;
+        PRACTICE_AQ_DISPLAY_TRACE(1090, gReflectY);
         PlayerShot_DrawAll();
         Matrix_Pop(&gGfxMatrix);
     }
+    PRACTICE_AQ_DISPLAY_TRACE(1100, gReflectY);
 
     gReflectY = -1;
 
@@ -1857,13 +1880,18 @@ void Display_Update(void) {
     }
 
     if (gCurrentLevel == LEVEL_AQUAS) {
+        PRACTICE_AQ_DISPLAY_TRACE(1110, 0);
         Effect_Draw(0);
+        PRACTICE_AQ_DISPLAY_TRACE(1120, 0);
     }
 
     if ((gGroundSurface == SURFACE_WATER) || (gAqDrawMode != 0)) {
         gDrawAquasSurfaceWater = true;
+        PRACTICE_AQ_DISPLAY_TRACE(1130, gAqDrawMode);
         Effect_Draw(1);
+        PRACTICE_AQ_DISPLAY_TRACE(1140, gAqDrawMode);
         Background_DrawGround();
+        PRACTICE_AQ_DISPLAY_TRACE(1150, gAqDrawMode);
     }
 
     if ((gCurrentLevel != LEVEL_AQUAS) &&
@@ -1876,6 +1904,7 @@ void Display_Update(void) {
 
     for (i = 0, player = &gPlayer[0]; i < gCamCount; i++, player++) {
         if (sPlayersVisible[i]) {
+            PRACTICE_AQ_DISPLAY_TRACE(1160 + i, player->state);
             Display_PlayerShadow_Update(player);
             Display_PlayerFeatures(player);
             Display_ArwingWingTrail_Update(player);
@@ -1883,7 +1912,9 @@ void Display_Update(void) {
     }
 
     if ((gCurrentLevel == LEVEL_AQUAS) && (gPlayer[0].state == PLAYERSTATE_ACTIVE)) {
+        PRACTICE_AQ_DISPLAY_TRACE(1170, gPlayer[0].state);
         Aquas_BlueMarineReticle_Draw();
+        PRACTICE_AQ_DISPLAY_TRACE(1180, gPlayer[0].state);
     }
 
     if (((gCurrentLevel == LEVEL_CORNERIA) || (gCurrentLevel == LEVEL_VENOM_ANDROSS)) &&
@@ -1892,9 +1923,12 @@ void Display_Update(void) {
     }
 
     BonusText_DrawAll();
+    PRACTICE_AQ_DISPLAY_TRACE(1190, 0);
     Matrix_Pop(&gGfxMatrix);
     Display_ActorMarks();
+    PRACTICE_AQ_DISPLAY_TRACE(1200, 0);
     Display_LockOnIndicator();
+    PRACTICE_AQ_DISPLAY_TRACE(1210, 0);
 
     if (sDrawCockpit) {
         Display_CockpitGlass();
@@ -1918,6 +1952,7 @@ void Display_Update(void) {
     }
 
     Background_DrawLensFlare();
+    PRACTICE_AQ_DISPLAY_TRACE(1220, 0);
 
     if ((gCamCount != 1) && ((camPlayer->state == PLAYERSTATE_ACTIVE) || (camPlayer->state == PLAYERSTATE_U_TURN))) {
         HUD_Draw();
@@ -1927,4 +1962,5 @@ void Display_Update(void) {
     Display_DrawHelpAlert();
     sPlayersVisible[gPlayerNum] = false;
     Matrix_Pop(&gGfxMatrix);
+    PRACTICE_AQ_DISPLAY_TRACE(1230, gPlayerNum);
 }

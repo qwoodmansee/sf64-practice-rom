@@ -727,6 +727,8 @@ completion to the executor.
 - First breadcrumb report reached `AQ 160 S 3 F 69`, proving Blue Marine player
   update completed; expanded the breadcrumb into object, shot, camera, and
   level-update stages.
+- Second breadcrumb report reached `AQ 230 S 3 F 69`, proving `Play_Update()`
+  completed; expanded breadcrumbs into `Game_Draw()` and `Display_Update()`.
 - Local verification passed: static invariants, practice ROM build, host
   `lib-test`, and whitespace check.
 - BizHawk rows below are still pending on this machine because BizHawk is not

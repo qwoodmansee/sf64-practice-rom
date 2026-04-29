@@ -181,6 +181,19 @@ Report the final visible `AQ` values after the freeze. Stage map:
 | 7000+n | item update slot `n`; `S` is object id |
 | 8000+n | effect update slot `n`; `S` is object id |
 | 8998/8999 | effects done / textured lines done |
+| 890/900/910/920/930 | game draw entry / `Game_Draw` / `Display_Update` enter+done / post draw |
+| 940/950/960/970 | post HUD status / practice update enter+done / practice draw done |
+| 1000/1010/1020 | `Display_Update` start / lights / backdrop+sun done |
+| 1030+n/1039 | player draw slot `n` / player draw pass done |
+| 1040+n/1049 | reflected player draw slot `n` / reflected pass done |
+| 1050/1060 | `Object_Draw(1)` enter/done |
+| 1070/1080 | player-shot draw enter/done |
+| 1090/1100 | reflected player-shot draw enter/done |
+| 1110/1120 | Aquas `Effect_Draw(0)` enter/done |
+| 1130/1140/1150 | water `Effect_Draw(1)` enter/done / ground done |
+| 1160+n | visible player features slot `n` |
+| 1170/1180 | Blue Marine reticle enter/done |
+| 1190/1200/1210/1220/1230 | bonus text / actor marks / lock-on / lens flare / display done |
 
 ## Optional: stock 4 MB
 
