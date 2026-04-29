@@ -1,0 +1,25 @@
+include/sf64audio_external.h
+  1b3f90752ce3d0cf 20
+src/practice/practice_level.c
+  1b3f90752ce3d0cf 59-61
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "1cf18a2ed5e1fdb72036ee698735be4df996aaac",
+  "prompts": {
+    "1b3f90752ce3d0cf": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "ea3be6c9-8e45-48e8-9cc1-5ef085c26f08",
+        "model": "default"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 47,
+      "total_deletions": 48,
+      "accepted_lines": 4,
+      "overriden_lines": 0
+    }
+  }
+}
