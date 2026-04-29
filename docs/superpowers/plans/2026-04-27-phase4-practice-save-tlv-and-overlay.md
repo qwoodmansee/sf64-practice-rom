@@ -717,6 +717,8 @@ completion to the executor.
   solely because the frozen practice menu is open. The hotkey path still only
   runs outside the menu; radial save is intentionally allowed because
   `Play_Main()` is paused under `PMENU_OPEN_FROZEN`.
+- Added `check_radial_menu_save_allowed()` to the static invariants so this
+  radial-save gate cannot regress silently.
 - Local verification passed: static invariants, practice ROM build, host
   `lib-test`, and whitespace check.
 - BizHawk rows below are still pending on this machine because BizHawk is not

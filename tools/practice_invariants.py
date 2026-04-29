@@ -671,6 +671,27 @@ def check_phase4_engine_hooks():
         )
 
 
+def check_radial_menu_save_allowed():
+    """Radial-menu save runs while PMENU_OPEN_FROZEN, so CanSaveHere must not reject menus."""
+    src = read(PRACTICE_SAVE_C)
+    m = re.search(r"s32\s+Practice_CanSaveHere\s*\([^)]*\)\s*\{(.*?)^\}", src,
+                  re.DOTALL | re.MULTILINE)
+    if not m:
+        error(
+            f"{PRACTICE_SAVE_C}: Practice_CanSaveHere missing "
+            "(check_radial_menu_save_allowed)"
+        )
+        return
+
+    body = m.group(1)
+    if "gPracticeMenuState" in body or "PMENU_" in body:
+        error(
+            f"{PRACTICE_SAVE_C}: Practice_CanSaveHere must not reject solely on "
+            "gPracticeMenuState; radial save is intentionally allowed while "
+            "PMENU_OPEN_FROZEN (check_radial_menu_save_allowed)"
+        )
+
+
 def check_snapshot_gplayers_use_cam_count():
     """gPlayer is MEM_ARRAY_ALLOCATE(Player, gCamCount)-sized — do not iterate 0..3 blindly."""
     src = read(PRACTICE_SAVE_C)
@@ -973,6 +994,7 @@ def main():
     check_state_version_defined_once()
     check_max_state_size_budget()
     check_phase4_engine_hooks()
+    check_radial_menu_save_allowed()
     check_sys_memory_practice_bump_getter()
     check_snapshot_gplayers_use_cam_count()
     check_phase3_ram_detection()
