@@ -1,0 +1,31 @@
+tests/test_state_slot_picker_navigates.lua
+  0abdd9b08032bd0a 1-58
+src/practice/practice_menu.c
+  0abdd9b08032bd0a 323-357
+src/practice/practice_level.c
+  0abdd9b08032bd0a 300-323
+src/practice/practice_save.c
+  0abdd9b08032bd0a 1524-1534
+include/practice.h
+  0abdd9b08032bd0a 144-146,218-221
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "1ac4d727d77ea0d93a8891eeb5f21bf5d111c399",
+  "prompts": {
+    "0abdd9b08032bd0a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c88d3c2d-e5ed-4f97-9aac-df25ea0122a5",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 147,
+      "total_deletions": 21,
+      "accepted_lines": 136,
+      "overriden_lines": 0
+    }
+  }
+}
