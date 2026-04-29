@@ -67,9 +67,6 @@ extern s32 gPracticeDirectHits;
 extern s32 gPracticeIndirectCount;
 extern s32 gPracticeIndirectBonus;
 extern s32 gPracticeDespawns;
-extern s32 gPracticeAqTraceStage;
-extern s32 gPracticeAqTraceFrame;
-extern s32 gPracticeAqTraceState;
 extern f32 gPracticeCheckpointProgress;
 extern s32 gPracticeSlotTestStatus;
 extern s32 gPracticeSlotTestFirstLoadedValue;
@@ -159,7 +156,6 @@ void Practice_Hud_Reset(void);
 void Practice_Hud_ShowStatus(const char* text, u8 r, u8 g, u8 b);
 void Practice_Hud_Update(void);
 void Practice_Hud_Draw(void);
-void Practice_Hud_DrawAqTrace(void);
 
 /* practice_input_display.c */
 void Practice_InputDisplay_Draw(void);

@@ -748,6 +748,13 @@ completion to the executor.
 - Aquas still crashed after skipping `Practice_ApplyStartConditions()`. The next
   diagnostic ROM skips `Practice_Save_Init()` at boot so the Expansion Pak slot
   pool and slot-manager selftest are not touched before Aquas starts.
+- Restored the normal save init after diagnostics; otherwise menu save/load
+  reports `SAVE DIS` / `LOAD DIS` because no slots are initialized.
+- Removed the temporary Aquas `AQ` breadcrumb HUD, `[aq_hb]` heartbeat,
+  practice runtime bypass, and start-condition bypass. Those were useful during
+  isolation but must not remain in the normal branch after the scratch-in-Pak
+  fix, because they make Aquas follow a different practice path than other
+  levels.
 - Local verification passed: static invariants, practice ROM build, host
   `lib-test`, and whitespace check.
 - BizHawk rows below are still pending on this machine because BizHawk is not

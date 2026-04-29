@@ -119,20 +119,6 @@ void Practice_Hud_Update(void) {
     }
 }
 
-void Practice_Hud_DrawAqTrace(void) {
-    if (gCurrentLevel != LEVEL_AQUAS) {
-        return;
-    }
-
-    Practice_DrawBox(242, 26, 70, 26, 0, 0, 0, 170);
-    Practice_DrawTextColor(248, 30, "AQ", 80, 220, 255);
-    Practice_DrawNumber(268, 30, gPracticeAqTraceStage);
-    Practice_DrawTextColor(248, 40, "F", 120, 120, 120);
-    Practice_DrawNumber(260, 40, gPracticeAqTraceFrame);
-    Practice_DrawTextColor(286, 40, "S", 120, 120, 120);
-    Practice_DrawNumber(298, 40, gPracticeAqTraceState);
-}
-
 void Practice_Hud_Draw(void) {
     s32 y;
     s32 labelX;
@@ -147,11 +133,6 @@ void Practice_Hud_Draw(void) {
         Practice_DrawBox(118, 36, 84, 14, 0, 0, 0, 170);
         Practice_DrawTextColor(124, 39, sStatusText, sStatusR, sStatusG, sStatusB);
     }
-
-    gPracticeAqTraceStage = 981;
-    gPracticeAqTraceFrame = gGameFrameCount;
-    gPracticeAqTraceState = gPracticeConfig.showHudOverlay;
-    Practice_Hud_DrawAqTrace();
 
     if (!gPracticeConfig.showHudOverlay) {
         return;
@@ -169,11 +150,6 @@ void Practice_Hud_Draw(void) {
     if (lineCount == 0) {
         return;
     }
-
-    gPracticeAqTraceStage = 982;
-    gPracticeAqTraceFrame = gGameFrameCount;
-    gPracticeAqTraceState = lineCount;
-    Practice_Hud_DrawAqTrace();
 
     Practice_DrawBox(HUD_X, HUD_Y, 120, 4 + (lineCount * HUD_LINE_H), 0, 0, 0, 160);
 
@@ -269,10 +245,6 @@ void Practice_Hud_Draw(void) {
         y += HUD_LINE_H;
     }
 
-    gPracticeAqTraceStage = 989;
-    gPracticeAqTraceFrame = gGameFrameCount;
-    gPracticeAqTraceState = lineCount;
-    Practice_Hud_DrawAqTrace();
 }
 
 #endif

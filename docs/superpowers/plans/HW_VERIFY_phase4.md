@@ -170,8 +170,8 @@ and accessed through `Practice_Save_ScratchBase()`.
 ### Aquas crash trace
 
 2026-04-29: the first torpedo-slot guard fix did not stop the Aquas crash.
-The serial `[aq_tr]` build overwhelmed/desynced IS-Viewer, so the current
-diagnostic is an on-screen breadcrumb only. During Aquas, a small `AQ` box shows:
+The serial `[aq_tr]` build overwhelmed/desynced IS-Viewer, so the diagnostic
+was changed to an on-screen breadcrumb. During Aquas, a small `AQ` box showed:
 
 - top number: last completed stage
 - `F`: frame when that stage was written
@@ -223,6 +223,13 @@ Report the final visible `AQ` values after the freeze. Stage map:
 | 1160+n | visible player features slot `n` |
 | 1170/1180 | Blue Marine reticle enter/done |
 | 1190/1200/1210/1220/1230 | bonus text / actor marks / lock-on / lens flare / display done |
+
+This breadcrumb/bypass instrumentation was temporary. After the scratch-in-Pak
+fix was hardware-confirmed, remove all `AQ` breadcrumb HUD, `[aq_hb]` heartbeat,
+Aquas practice-runtime bypass, Aquas start-condition bypass, and
+`PRACTICE_DIAG_SKIP_SAVE_INIT` code before producing a normal test ROM. Leaving
+the bypasses active causes false regressions such as `SAVE DIS`/`LOAD DIS` or
+Aquas missing normal practice runtime behavior.
 
 ## Optional: stock 4 MB
 

@@ -60,6 +60,12 @@ Current safe pattern:
 - `src/practice/practice_save_slotpool.c` owns `sSaveScratchPak[MAX_STATE_SIZE]`.
 - `practice_save_slotpool.o(.bss)` is linked into `.practice_pool_pak` at
   `0x80400000`.
+
+Temporary Aquas diagnostics from the hardware isolation pass (`AQ` breadcrumb
+HUD, `[aq_hb]` heartbeat, Aquas practice runtime/start-condition bypasses, and
+`PRACTICE_DIAG_SKIP_SAVE_INIT`) must stay out of normal builds. They can mask
+the real practice code path, and the save-init bypass presents as `SAVE DIS` /
+`LOAD DIS`.
 - `Practice_Save_ScratchBase()` returns that storage.
 - `practice_save.c` casts it through `Practice_SaveScratch()` and keeps a
   `PracticeSnapshotFitsScratch` compile-time size check.

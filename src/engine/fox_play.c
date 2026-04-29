@@ -23,16 +23,6 @@
 #include "assets/ast_zoness.h"
 #ifdef PRACTICE_ROM
 #include "practice.h"
-#define PRACTICE_AQ_TRACE(stage, state)        \
-    do {                                       \
-        if (gCurrentLevel == LEVEL_AQUAS) {    \
-            gPracticeAqTraceStage = (stage);   \
-            gPracticeAqTraceFrame = gGameFrameCount; \
-            gPracticeAqTraceState = (state);   \
-        }                                      \
-    } while (0)
-#else
-#define PRACTICE_AQ_TRACE(stage, state) ((void)0)
 #endif
 
 UNK_TYPE D_800D2F50 = 0; // unused
@@ -485,8 +475,6 @@ void Play_Setup360_AND(void) {
 void Play_Setup(void) {
     s32 i;
 
-    PRACTICE_AQ_TRACE(20, gPlayState);
-
     gStarCount = 0;
     gLevelPhase = 0;
     gMissedZoSearchlight = false;
@@ -496,8 +484,6 @@ void Play_Setup(void) {
     gSavedPathProgress = 0.0f;
     gSavedHitCount = gCsFrameCount = gLevelStartStatusScreenTimer = gLevelClearScreenTimer = gRadioState = 0;
     gCsWasNotSkipped = true;
-
-    PRACTICE_AQ_TRACE(21, gCsWasNotSkipped);
 
     if (((gCurrentLevel == LEVEL_VENOM_2) && (gNextLevelPhase == 2)) || (gCurrentLevel == LEVEL_VENOM_ANDROSS)) {
         return;
@@ -521,7 +507,6 @@ Environment* sEnvironmentSetup[21] = {
 };
 
 void Play_InitEnvironment(void) {
-    PRACTICE_AQ_TRACE(30, gCsWasNotSkipped);
 
     if (gVersusMode) {
         switch (gVersusStage) {
@@ -548,8 +533,6 @@ void Play_InitEnvironment(void) {
     } else if (gCurrentLevel == LEVEL_AQUAS) {
         sEnvironment = SEGMENTED_TO_VIRTUAL(&aAqCsEnvSetup);
     }
-
-    PRACTICE_AQ_TRACE(31, gBgmSeqId);
 
     gBgmSeqId = sEnvironment->seqId;
     gLevelType = sEnvironment->type;
@@ -2585,12 +2568,10 @@ void Play_InitLevel(void) {
             break;
 
         case LEVEL_AQUAS:
-            PRACTICE_AQ_TRACE(40, gPlayState);
             gVIsPerFrame = 3;
             gSurfaceWaterYPos = 1600.0f;
             gAquasSurfaceAlpha = 128.0f;
             Aquas_InitLevel();
-            PRACTICE_AQ_TRACE(41, gVIsPerFrame);
             break;
 
         case LEVEL_TITANIA:
@@ -4808,9 +4789,7 @@ void Player_Setup(Player* playerx) {
     }
 
 #ifdef PRACTICE_ROM
-    if (gCurrentLevel != LEVEL_AQUAS) {
-        Practice_ApplyStartConditions();
-    }
+    Practice_ApplyStartConditions();
 #endif
 
     player->sfx.levelType = gLevelType;
@@ -5621,22 +5600,15 @@ void Player_UpdateOnRails(Player* player) {
             break;
 
         case FORM_BLUE_MARINE:
-            PRACTICE_AQ_TRACE(100, player->state);
             Aquas_BlueMarineBoost(player);
-            PRACTICE_AQ_TRACE(110, player->state);
             Aquas_BlueMarineBrake(player);
             Play_dummy_800B41E0(player);
             Aquas_BlueMarineMove(player);
-            PRACTICE_AQ_TRACE(120, player->state);
             Player_UpdatePath(player);
-            PRACTICE_AQ_TRACE(130, player->state);
             Aquas_BlueMarineShoot(player);
-            PRACTICE_AQ_TRACE(140, player->state);
             Player_CollisionCheck(player);
-            PRACTICE_AQ_TRACE(150, player->state);
             Player_FloorCheck(player);
             Player_LowHealthAlarm(player);
-            PRACTICE_AQ_TRACE(160, player->state);
 
             if ((player->shields <= 0) && (player->radioDamageTimer != 0)) {
                 Player_Down(player);
@@ -6946,20 +6918,13 @@ void Play_Update(void) {
         gPlayer[i].num = gPlayerNum = i;
         Player_Update(&gPlayer[i]);
     }
-
-    PRACTICE_AQ_TRACE(170, gPlayer[0].state);
     Object_Update();
-    PRACTICE_AQ_TRACE(180, gPlayer[0].state);
     PlayerShot_UpdateAll();
-    PRACTICE_AQ_TRACE(190, gPlayer[0].state);
     BonusText_Update();
-    PRACTICE_AQ_TRACE(195, gPlayer[0].state);
 
     for (i = 0; i < gCamCount; i++) {
         gPlayer[i].num = gPlayerNum = i;
-        PRACTICE_AQ_TRACE(200, gPlayer[i].state);
         Camera_Update(&gPlayer[i]);
-        PRACTICE_AQ_TRACE(210, gPlayer[i].state);
     }
 
     gCameraShakeY = 0.0f;
@@ -6973,9 +6938,7 @@ void Play_Update(void) {
         }
         gCameraShakeY = var_fv1 * SIN_DEG(gGameFrameCount * 70.0f);
     }
-    PRACTICE_AQ_TRACE(220, gPlayer[0].state);
     Play_UpdateLevel();
-    PRACTICE_AQ_TRACE(230, gPlayer[0].state);
 }
 
 u8 sVsItemSpawnIndex = -1;

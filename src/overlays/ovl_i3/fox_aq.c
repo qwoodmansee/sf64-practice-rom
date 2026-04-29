@@ -5,17 +5,6 @@
  */
 
 #include "global.h"
-#ifdef PRACTICE_ROM
-#include "practice.h"
-#define AQUAS_TRACE_STAGE(stage, state)        \
-    do {                                       \
-        gPracticeAqTraceStage = (stage);       \
-        gPracticeAqTraceFrame = gGameFrameCount; \
-        gPracticeAqTraceState = (state);       \
-    } while (0)
-#else
-#define AQUAS_TRACE_STAGE(stage, state) ((void)0)
-#endif
 #include "assets/ast_blue_marine.h"
 #include "assets/ast_aquas.h"
 #include "actordebris.h"
@@ -444,8 +433,6 @@ void Aquas_801A9728(AqSculpin* this, f32 radius, f32 scale, s32 spread) {
 void Aquas_InitLevel(void) {
     s32 i;
 
-    AQUAS_TRACE_STAGE(42, gCsWasNotSkipped);
-
     gTeamShields[TEAM_ID_FALCO] = gTeamShields[TEAM_ID_SLIPPY] = gTeamShields[TEAM_ID_PEPPY] = 255;
 
     for (i = 0; i < ARRAY_COUNT(D_i3_801C4190); i++) {
@@ -489,8 +476,6 @@ void Aquas_InitLevel(void) {
     D_i3_801C4190[5] = 0;
     D_i3_801C41B8[25] = gSurfaceWaterYPos;
     D_i3_801C41B8[26] = 128.0f;
-
-    AQUAS_TRACE_STAGE(43, D_i3_801C4190[5]);
 }
 
 void Aquas_801A99D4(Player* player) {
@@ -888,8 +873,6 @@ void Aquas_BlueMarineMove(Player* player) {
     f32 var_fv1_2;
     s32 pad;
 
-    AQUAS_TRACE_STAGE(115, player->state);
-
     Aquas_801AA4BC(player);
     Aquas_801A99D4(player);
     Aquas_JellyfishCurrent_Wave();
@@ -1090,8 +1073,6 @@ void Aquas_BlueMarineMove(Player* player) {
             }
         }
     }
-
-    AQUAS_TRACE_STAGE(119, player->state);
 }
 
 void Aquas_BlueMarineDown(Player* player) {
@@ -1269,8 +1250,6 @@ void Aquas_BlueMarineShoot(Player* player) {
     Vec3f sp5C;
     Actor* actor;
 
-    AQUAS_TRACE_STAGE(135, player->state);
-
     if ((D_i3_801C4190[5] != 0) && (gPlayerShots[D_i3_801C4190[5] - 1].obj.status == SHOT_FREE)) {
         D_i3_801C41B8[21] = D_i3_801C41B8[22] = D_i3_801C41B8[23] = 0.0f;
         D_i3_801C4190[5] = D_i3_801C4190[3] = 0;
@@ -1371,8 +1350,6 @@ void Aquas_BlueMarineShoot(Player* player) {
         }
         Math_SmoothStepToF(&gLight3Brightness, 0.2f, 1.0f, 0.04f, 0.001f);
     }
-
-    AQUAS_TRACE_STAGE(139, player->state);
 }
 
 void Aquas_Bubble_Setup(EffectBubble* this, f32 xPos, f32 yPos, f32 zPos, f32 scale2, s32 state) {

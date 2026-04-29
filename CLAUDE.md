@@ -91,6 +91,13 @@ Hardware lesson from 2026-04-29: `f165d0e` introduced a static
 the Pak-only slotpool object fixed Aquas and was hardware-confirmed before
 commit `4c2585b`.
 
+The Aquas `AQ` breadcrumb HUD, `[aq_hb]` heartbeat, practice-runtime bypass,
+start-condition bypass, and `PRACTICE_DIAG_SKIP_SAVE_INIT` were temporary
+diagnostics only. They must not be reintroduced into the normal branch unless
+the ROM is explicitly a one-off diagnostic build; the save-init bypass causes
+`SAVE DIS` / `LOAD DIS`, and Aquas-specific runtime bypasses hide real practice
+behavior.
+
 ## MIPS float safety
 
 On MIPS, converting a NaN or uninitialized float to integer (`(s32)value`)

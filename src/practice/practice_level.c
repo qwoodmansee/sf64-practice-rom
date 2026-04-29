@@ -298,12 +298,6 @@ void Practice_LevelSelect_Draw(void) {
 }
 
 void Practice_LaunchLevel(LevelId levelId, s32 phase, f32 checkpointProgress) {
-    if (levelId == LEVEL_AQUAS) {
-        gPracticeAqTraceStage = 10;
-        gPracticeAqTraceFrame = gGameFrameCount;
-        gPracticeAqTraceState = gPracticeScreen;
-    }
-
     sBgmPlaying = false;
     sBgmPlayPending = false;
 
@@ -342,12 +336,6 @@ void Practice_LaunchLevel(LevelId levelId, s32 phase, f32 checkpointProgress) {
     Practice_ClearCheckpoint();
     Practice_Hud_Reset();
     gPracticeScreen = PSCREEN_GAMEPLAY;
-
-    if (levelId == LEVEL_AQUAS) {
-        gPracticeAqTraceStage = 11;
-        gPracticeAqTraceFrame = gGameFrameCount;
-        gPracticeAqTraceState = gNextLevelPhase;
-    }
 }
 
 LevelId Practice_GetSelectedLevelId(void) {
