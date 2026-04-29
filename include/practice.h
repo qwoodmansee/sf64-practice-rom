@@ -199,6 +199,7 @@ void Practice_HeapAudit_Boot(void);
 void Practice_HeapAudit_PerFrame(void);
 
 uintptr_t Practice_Save_SlotPoolBase(void);
+void* Practice_Save_ScratchBase(void);
 
 #endif
 #endif

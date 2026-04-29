@@ -146,8 +146,14 @@ typedef struct PracticeSnapshot {
     PracticeScalarState scalars;
 } PracticeSnapshot;
 
-/* Too large for the game thread stack; slot_manager never nests save inside load. */
-static PracticeSnapshot gPracticeSaveScratch;
+typedef char PracticeSnapshotFitsScratch[(sizeof(PracticeSnapshot) <= MAX_STATE_SIZE) ? 1 : -1];
+
+/* Too large for the game thread stack. The backing store is in
+ * practice_save_slotpool.c so it stays above the stock 4 MB window. */
+static PracticeSnapshot* Practice_SaveScratch(void) {
+    (void)sizeof(PracticeSnapshotFitsScratch);
+    return (PracticeSnapshot*)Practice_Save_ScratchBase();
+}
 
 static uint32_t Practice_Save_Cb(void *buf, uint32_t buf_size);
 static int Practice_Load_Cb(const void *buf, uint32_t size);
@@ -360,7 +366,7 @@ static void Snapshot_FillFromGame(PracticeSnapshot *sn) {
 
 static uint32_t Practice_Save_Cb(void *buf, uint32_t buf_size) {
     serial_writer_t wr;
-    PracticeSnapshot *snap = &gPracticeSaveScratch;
+    PracticeSnapshot *snap = Practice_SaveScratch();
     u16 u16_lvl;
     s16 hdr_phase;
     u32 overlay_build_u32;
@@ -675,7 +681,7 @@ static void Snapshot_ApplyToGame(const PracticeSnapshot *sn) {
 
 static int Practice_Load_Cb(const void *buf, uint32_t size) {
     serial_reader_t r;
-    PracticeSnapshot *sn = &gPracticeSaveScratch;
+    PracticeSnapshot *sn = Practice_SaveScratch();
     uint16_t raw_tag;
     uint32_t len;
     const void *data;

@@ -144,6 +144,21 @@ For each saveable level:
 | SECTOR_Z | 5797472 | yes | 2026-04-29: level 18; bump_hwm=30848, gfx_peak=128256, audio_peak=716368, free_low=5797472. |
 | VENOM_2 | 5844288 | yes | 2026-04-29: level 19; bump_hwm=18848, gfx_peak=93440, audio_peak=716368, free_low=5844288. |
 
+## Aquas hardware regression checkpoints
+
+Purpose: isolate the Aquas freeze/crash separately from the earlier menu/audio
+regression that polluted fine-grained bisect.
+
+| Commit | Menu | Aquas | Notes |
+|--------|------|-------|-------|
+| `8e7875a` | pass | pass | Fine-grained bisect baseline. |
+| `183d69c` | pass | pass | Wave 2.2 boot/layout checkpoint; user verified no crash. |
+| `92b9517` | pass | pass | Pak pool isolated / stock-safe globals; user verified no crash. |
+| `280ecb5` | pass | pass | Snapshot player copy bound; user verified no crash. |
+| `f165d0e` | pass | fail | Snapshot static scratch / HW save trace; user verified Aquas crash. |
+| `f165d0e` + scratch-in-Pak fix | pass | pass | User verified Aquas no longer crashes. |
+| `1cf18a2` | pass | fail | Later known-bad checkpoint; Aquas crashes. |
+
 ### Aquas crash trace
 
 2026-04-29: the first torpedo-slot guard fix did not stop the Aquas crash.
