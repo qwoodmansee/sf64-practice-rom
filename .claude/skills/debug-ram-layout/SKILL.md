@@ -32,6 +32,11 @@ SF64 streams overlays and scene assets into a fixed RAM slot at runtime. Any pra
 ## Common Causes
 
 - Large BSS arrays in `src/practice/` (save-state pools).
+- Large "temporary" scratch buffers made file-static in normal practice BSS.
+  Hardware-confirmed example: `PracticeSnapshot gPracticeSaveScratch` in
+  `practice_save.c` caused Aquas to crash even without save/load. Keep save
+  scratch in `practice_save_slotpool.o(.bss)` so `.practice_pool_pak` parks it
+  at `0x80400000`.
 - Custom NOLOAD sections after `.main_bss` but before `.buffers`.
 - `bzero()` of a region overlapping a loaded overlay.
 - Forgetting `SEGMENT_VRAM_START(ovl_i1) = 0x8019ae40` is the load-window floor.

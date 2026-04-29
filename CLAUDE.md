@@ -68,6 +68,29 @@ Checking `gGameState == GSTATE_PLAY` alone is NOT sufficient.
 Checking `gPlayer[0].state == PLAYERSTATE_ACTIVE` alone is NOT sufficient
 (the pointer itself is NULL).
 
+## CRITICAL: Practice save scratch must not grow main BSS
+
+`PracticeSnapshot` is hundreds of KB. It must not be:
+
+- a function-local stack object (`PracticeSnapshot snap`) — N64 game-thread
+  stacks are too small and hardware can silently hang during snapshot fill/load.
+- a normal `practice_save.c` file-static object in `.main_bss` — this was
+  hardware-confirmed to make Aquas crash even when the user never saved/loaded.
+
+Current pattern:
+
+- `src/practice/practice_save_slotpool.c` owns `sSaveScratchPak[MAX_STATE_SIZE]`.
+- The linker parks `practice_save_slotpool.o(.bss)` in `.practice_pool_pak`
+  at `0x80400000`, above the stock 4 MB dynamic window.
+- `Practice_Save_ScratchBase()` exposes that storage to `practice_save.c`.
+- `PracticeSnapshotFitsScratch` in `practice_save.c` enforces that the scratch
+  struct fits inside `MAX_STATE_SIZE`.
+
+Hardware lesson from 2026-04-29: `f165d0e` introduced a static
+`gPracticeSaveScratch` in normal BSS and Aquas crashed. Moving that scratch into
+the Pak-only slotpool object fixed Aquas and was hardware-confirmed before
+commit `4c2585b`.
+
 ## MIPS float safety
 
 On MIPS, converting a NaN or uninitialized float to integer (`(s32)value`)

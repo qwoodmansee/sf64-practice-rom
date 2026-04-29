@@ -63,8 +63,8 @@ Lead confirms scope, dispatches sf64-coder with the 8-step checklist, verifies, 
 
 ## Project skills (`.claude/skills/`)
 
-- **`debug-ram-layout`** — linker overlap / dynamic load window vs practice BSS.
-- **`practice-hw-isv-trace`** — SC64 + IS-Viewer save/load bracketing (`PRACTICE_SAVE_TRACE=1`), `gPracticeScreen` vs engine state, static `PracticeSnapshot` scratch (no giant stack locals).
+- **`debug-ram-layout`** — linker overlap / dynamic load window vs practice BSS, including large scratch buffers that silently pressure Aquas.
+- **`practice-hw-isv-trace`** — SC64 + IS-Viewer save/load bracketing (`PRACTICE_SAVE_TRACE=1`), `gPracticeScreen` vs engine state, and `PracticeSnapshot` scratch placement (no stack locals, no normal `.main_bss`; use Pak-only storage).
 
 ## Design principles
 

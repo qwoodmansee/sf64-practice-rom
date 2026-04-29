@@ -159,6 +159,13 @@ regression that polluted fine-grained bisect.
 | `f165d0e` + scratch-in-Pak fix | pass | pass | User verified Aquas no longer crashes. |
 | `1cf18a2` | pass | fail | Later known-bad checkpoint; Aquas crashes. |
 
+Conclusion: keep `PracticeSnapshot` scratch storage out of normal `.main_bss`.
+Function-local snapshots blow the game-thread stack; normal file-static scratch
+in `practice_save.c` grows resident low memory enough to crash Aquas. The safe
+pattern is the committed `4c2585b` layout: `sSaveScratchPak[MAX_STATE_SIZE]` in
+`practice_save_slotpool.o`, linked into `.practice_pool_pak` at `0x80400000`,
+and accessed through `Practice_Save_ScratchBase()`.
+
 ### Aquas crash trace
 
 2026-04-29: the first torpedo-slot guard fix did not stop the Aquas crash.

@@ -1,6 +1,6 @@
 ---
 name: practice-hw-isv-trace
-description: Use when debugging Star Fox 64 Practice ROM on real hardware (SummerCart64 + IS-Viewer) — save/load crashes, silent hangs, no deployer "crash frame", or confirming the save hotkey path. Covers PRACTICE_SAVE_TRACE bracketing, interpreting [save_tr] lines, PSCREEN_GAMEPLAY vs engine state, and the large PracticeSnapshot stack rule.
+description: Use when debugging Star Fox 64 Practice ROM on real hardware (SummerCart64 + IS-Viewer) — save/load crashes, silent hangs, no deployer "crash frame", or confirming the save hotkey path. Covers PRACTICE_SAVE_TRACE bracketing, interpreting [save_tr] lines, PSCREEN_GAMEPLAY vs engine state, and the large PracticeSnapshot stack/BSS placement rule.
 ---
 
 ## When to use
@@ -43,9 +43,26 @@ Expected order on a successful save:
 
 `Practice_SaveStateSlot` only `osSyncPrintf`s on **refusal** paths. A clean save produces **no** `[save]` refuse lines — that is normal. Use `[save_tr]` or `gPracticeLastSaveResult` / HUD if you need confirmation without ISV spam.
 
-## Stack / BSS rule (critical)
+## Stack / BSS placement rule (critical)
 
-`PracticeSnapshot` is **hundreds of KB**. It must **not** live as a function-local `PracticeSnapshot snap` on the game thread — N64 stacks are tiny and you get a **silent** crash as soon as fill or `bcopy` touches the bulk of the struct. Use a **file-static** scratch (e.g. `gPracticeSaveScratch`) for both save and load callbacks; `slot_manager` does not nest save inside load.
+`PracticeSnapshot` is **hundreds of KB**. It must **not** live as a function-local
+`PracticeSnapshot snap` on the game thread — N64 stacks are tiny and hardware can
+silently hang as soon as fill or `bcopy` touches the bulk of the struct.
+
+It also must **not** live as a normal file-static in `practice_save.c` /
+`.main_bss`. Hardware testing on 2026-04-29 isolated the Aquas crash to commit
+`f165d0e`: `gPracticeSaveScratch` in normal BSS made Aquas crash even without
+using save/load. Moving the backing store into the Expansion Pak-only slotpool
+object fixed Aquas and was committed as `4c2585b`.
+
+Current safe pattern:
+
+- `src/practice/practice_save_slotpool.c` owns `sSaveScratchPak[MAX_STATE_SIZE]`.
+- `practice_save_slotpool.o(.bss)` is linked into `.practice_pool_pak` at
+  `0x80400000`.
+- `Practice_Save_ScratchBase()` returns that storage.
+- `practice_save.c` casts it through `Practice_SaveScratch()` and keeps a
+  `PracticeSnapshotFitsScratch` compile-time size check.
 
 ## Load path
 
