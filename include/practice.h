@@ -159,6 +159,7 @@ void Practice_Hud_Reset(void);
 void Practice_Hud_ShowStatus(const char* text, u8 r, u8 g, u8 b);
 void Practice_Hud_Update(void);
 void Practice_Hud_Draw(void);
+void Practice_Hud_DrawAqTrace(void);
 
 /* practice_input_display.c */
 void Practice_InputDisplay_Draw(void);

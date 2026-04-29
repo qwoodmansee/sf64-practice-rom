@@ -91,21 +91,78 @@ void Practice_Update(void) {
 }
 
 void Practice_Draw(void) {
+    if (gCurrentLevel == LEVEL_AQUAS) {
+        gPracticeAqTraceStage = 961;
+        gPracticeAqTraceFrame = gGameFrameCount;
+        gPracticeAqTraceState = gPracticeScreen;
+        Practice_Hud_DrawAqTrace();
+    }
+
     switch (gPracticeScreen) {
         case PSCREEN_LEVEL_SELECT:
+            if (gCurrentLevel == LEVEL_AQUAS) {
+                gPracticeAqTraceStage = 962;
+                gPracticeAqTraceFrame = gGameFrameCount;
+                gPracticeAqTraceState = gPracticeScreen;
+                Practice_Hud_DrawAqTrace();
+            }
             Practice_LevelSelect_Draw();
+            if (gCurrentLevel == LEVEL_AQUAS) {
+                gPracticeAqTraceStage = 963;
+                gPracticeAqTraceFrame = gGameFrameCount;
+                gPracticeAqTraceState = gPracticeScreen;
+                Practice_Hud_DrawAqTrace();
+            }
             break;
         case PSCREEN_GAMEPLAY:
             if (!Practice_FreeCam_IsActive() || Practice_FreeCam_OverlayVisible()) {
+                gPracticeAqTraceStage = 964;
+                gPracticeAqTraceFrame = gGameFrameCount;
+                gPracticeAqTraceState = gPracticeConfig.showInputDisplay;
+                Practice_Hud_DrawAqTrace();
                 Practice_Hud_Draw();
+                gPracticeAqTraceStage = 965;
+                gPracticeAqTraceFrame = gGameFrameCount;
+                gPracticeAqTraceState = gPracticeConfig.showInputDisplay;
+                Practice_Hud_DrawAqTrace();
                 if (gPracticeConfig.showInputDisplay) {
+                    gPracticeAqTraceStage = 966;
+                    gPracticeAqTraceFrame = gGameFrameCount;
+                    gPracticeAqTraceState = gPracticeConfig.showInputDisplay;
+                    Practice_Hud_DrawAqTrace();
                     Practice_InputDisplay_Draw();
+                    gPracticeAqTraceStage = 967;
+                    gPracticeAqTraceFrame = gGameFrameCount;
+                    gPracticeAqTraceState = gPracticeConfig.showInputDisplay;
+                    Practice_Hud_DrawAqTrace();
                 }
             }
             if (Practice_FreeCam_IsActive()) {
+                gPracticeAqTraceStage = 968;
+                gPracticeAqTraceFrame = gGameFrameCount;
+                gPracticeAqTraceState = Practice_FreeCam_OverlayVisible();
+                Practice_Hud_DrawAqTrace();
                 Practice_FreeCam_Draw();
+                gPracticeAqTraceStage = 969;
+                gPracticeAqTraceFrame = gGameFrameCount;
+                gPracticeAqTraceState = Practice_FreeCam_OverlayVisible();
+                Practice_Hud_DrawAqTrace();
             } else if (gPracticeMenuState != PMENU_CLOSED) {
+                gPracticeAqTraceStage = 971;
+                gPracticeAqTraceFrame = gGameFrameCount;
+                gPracticeAqTraceState = gPracticeMenuState;
+                Practice_Hud_DrawAqTrace();
                 Practice_Menu_Draw();
+                gPracticeAqTraceStage = 972;
+                gPracticeAqTraceFrame = gGameFrameCount;
+                gPracticeAqTraceState = gPracticeMenuState;
+                Practice_Hud_DrawAqTrace();
+            }
+            if (gCurrentLevel == LEVEL_AQUAS) {
+                gPracticeAqTraceStage = 979;
+                gPracticeAqTraceFrame = gGameFrameCount;
+                gPracticeAqTraceState = gPracticeScreen;
+                Practice_Hud_DrawAqTrace();
             }
             break;
     }

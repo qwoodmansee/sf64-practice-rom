@@ -183,6 +183,12 @@ Report the final visible `AQ` values after the freeze. Stage map:
 | 8998/8999 | effects done / textured lines done |
 | 890/900/910/920/930 | game draw entry / `Game_Draw` / `Display_Update` enter+done / post draw |
 | 940/950/960/970 | post HUD status / practice update enter+done / practice draw done |
+| 961/979 | practice draw enter/done |
+| 964/965 | practice HUD draw enter/done |
+| 966/967 | input display draw enter/done |
+| 968/969 | freecam draw enter/done |
+| 971/972 | practice menu draw enter/done |
+| 981/982/989 | HUD trace/status done / stats panel enter / stats panel done |
 | 1000/1010/1020 | `Display_Update` start / lights / backdrop+sun done |
 | 1030+n/1039 | player draw slot `n` / player draw pass done |
 | 1040+n/1049 | reflected player draw slot `n` / reflected pass done |

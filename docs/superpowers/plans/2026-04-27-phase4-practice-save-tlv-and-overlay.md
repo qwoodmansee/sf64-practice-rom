@@ -729,6 +729,9 @@ completion to the executor.
   level-update stages.
 - Second breadcrumb report reached `AQ 230 S 3 F 69`, proving `Play_Update()`
   completed; expanded breadcrumbs into `Game_Draw()` and `Display_Update()`.
+- Third breadcrumb report reached `AQ 960 S 1 F 150`, proving `Practice_Update()`
+  completed and the hang is inside `Practice_Draw()`; added substep breadcrumbs
+  for HUD/input/freecam/menu draw.
 - Local verification passed: static invariants, practice ROM build, host
   `lib-test`, and whitespace check.
 - BizHawk rows below are still pending on this machine because BizHawk is not
