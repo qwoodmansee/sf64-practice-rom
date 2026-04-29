@@ -738,6 +738,53 @@ def check_overlay_build_id_no_rom_read():
         )
 
 
+def check_overlay_build_id_eager_init():
+    """Phase 5: practice_overlay_prime_build_ids must exist and be called from
+    Practice_Init AFTER Practice_Save_Init. Cross-scene loads compare a saved
+    overlay's build id against the current ROM's overlay before the source
+    overlay is necessarily resident, so the cache must be populated at boot.
+    """
+    overlay_src = read(PRACTICE_OVERLAY_C)
+    if "void practice_overlay_prime_build_ids" not in overlay_src:
+        error(
+            f"{PRACTICE_OVERLAY_C}: practice_overlay_prime_build_ids missing "
+            "(check_overlay_build_id_eager_init)"
+        )
+
+    main_src = read(PRACTICE_MAIN_INIT)
+    init_match = re.search(
+        r"void\s+Practice_Init\s*\(\s*void\s*\)\s*\{(.*?)\n\}",
+        main_src, re.DOTALL,
+    )
+    if not init_match:
+        error(
+            f"{PRACTICE_MAIN_INIT}: Practice_Init body not found "
+            "(check_overlay_build_id_eager_init)"
+        )
+        return
+
+    body = init_match.group(1)
+    save_init_pos = body.find("Practice_Save_Init(")
+    prime_pos = body.find("practice_overlay_prime_build_ids(")
+    if save_init_pos < 0:
+        error(
+            f"{PRACTICE_MAIN_INIT}: Practice_Save_Init not called from Practice_Init "
+            "(check_overlay_build_id_eager_init)"
+        )
+        return
+    if prime_pos < 0:
+        error(
+            f"{PRACTICE_MAIN_INIT}: practice_overlay_prime_build_ids not called from "
+            "Practice_Init (check_overlay_build_id_eager_init)"
+        )
+        return
+    if prime_pos < save_init_pos:
+        error(
+            f"{PRACTICE_MAIN_INIT}: practice_overlay_prime_build_ids must be called "
+            "AFTER Practice_Save_Init (check_overlay_build_id_eager_init)"
+        )
+
+
 def check_phase3_ram_detection():
     """Phase 3: Practice_Save_Init must detect osMemSize and gate save/load.
 
@@ -1022,6 +1069,7 @@ def main():
     check_sys_memory_practice_bump_getter()
     check_snapshot_gplayers_use_cam_count()
     check_overlay_build_id_no_rom_read()
+    check_overlay_build_id_eager_init()
     check_phase3_ram_detection()
     check_practice_pool_placement()
     check_practice_pool_no_overlay_overlap()

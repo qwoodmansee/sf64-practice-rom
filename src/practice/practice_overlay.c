@@ -188,7 +188,6 @@ s32 practice_overlay_get_region(LevelId id, void** vram, u32* size) {
 
 u32 practice_overlay_build_id(LevelId id) {
     const LevelOverlayEntry* entry;
-    const LevelOverlayEntry* current;
     s32       dma_idx;
     u8        cache_bit;
     DmaEntry* dma;
@@ -207,16 +206,12 @@ u32 practice_overlay_build_id(LevelId id) {
         return sBuildIdCache[entry->ovl_index];
     }
 
-    /* Defensive: only hash when `id`'s overlay is the one currently loaded
-     * in the shared VRAM slot. Otherwise the bytes at `vRomAddress` belong
-     * to whichever overlay was loaded last and would produce a wrong hash.
-     * Phase 4 only calls build_id for saves, where `id == gCurrentLevel`,
-     * so this guard never triggers in normal use. Phase 5 will revisit
-     * when cross-scene loads need a build-id for a non-active overlay. */
-    current = find_entry(gCurrentLevel);
-    if (current == NULL || current->ovl_index != entry->ovl_index) {
-        return 0;
-    }
+    /* The hash is over linker-defined VRAM extents and gDmaTable's pRom
+     * addresses (all stack-local copies), never the bytes those addresses
+     * point to. So it's safe and stable to compute regardless of which
+     * overlay is currently resident in the shared VRAM slot. Phase 5
+     * cross-scene loads rely on this: a save in scene A and a load
+     * decision in scene B must compare the same hash for A's overlay. */
 
     dma_idx = dma_index_for_ovl(entry->ovl_index);
     if (dma_idx < 0) {
@@ -237,6 +232,25 @@ u32 practice_overlay_build_id(LevelId id) {
     sBuildIdCache[entry->ovl_index] = hash;
     sBuildIdValidBits |= cache_bit;
     return hash;
+}
+
+void practice_overlay_prime_build_ids(void) {
+    /* One representative LevelId per ovl_iN gets its build id computed and
+     * cached. Calling build_id for any other LevelId in the same overlay
+     * hits the cache afterward. Order matches sLevelOverlayMap. */
+    static const LevelId sPrimeRepresentatives[6] = {
+        LEVEL_CORNERIA,    /* ovl_i1 */
+        LEVEL_METEO,       /* ovl_i2 */
+        LEVEL_AREA_6,      /* ovl_i3 */
+        LEVEL_FORTUNA,     /* ovl_i4 */
+        LEVEL_MACBETH,     /* ovl_i5 */
+        LEVEL_SECTOR_Y,    /* ovl_i6 */
+    };
+    s32 i;
+
+    for (i = 0; i < 6; i++) {
+        (void)practice_overlay_build_id(sPrimeRepresentatives[i]);
+    }
 }
 
 void practice_overlay_request_load(LevelId id, s32 phase) {

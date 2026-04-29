@@ -1,5 +1,6 @@
 #include "practice.h"
 #include "iodev/iodev.h"
+#include "practice_overlay.h"
 
 #ifdef PRACTICE_ROM
 
@@ -50,6 +51,7 @@ void Practice_Init(void) {
 
     Practice_SlotTest_Run();
     Practice_Save_Init();
+    practice_overlay_prime_build_ids();
     Practice_HeapAudit_Boot();
 
 #ifdef IODEV_DIAG_FATFS
