@@ -1521,6 +1521,17 @@ s32 Practice_GetActiveSlot(void) {
     return gPracticeActiveSlot;
 }
 
+s32 Practice_GetRamSlotCount(void) {
+    return gPracticeRamSlotCount;
+}
+
+const PracticeSlotMeta* Practice_GetSlotMeta(s32 slot) {
+    if ((slot < 0) || (slot >= MAX_RAM_SLOTS_WITH_PAK)) {
+        return NULL;
+    }
+    return &gPracticeSlotMeta[slot];
+}
+
 void Practice_Save_Tick(void) {
     s32 rr;
     s32 elapsed;

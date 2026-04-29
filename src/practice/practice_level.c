@@ -297,6 +297,30 @@ void Practice_LevelSelect_Draw(void) {
     }
 }
 
+const char* Practice_LevelAbbrev(LevelId levelId) {
+    switch (levelId) {
+        case LEVEL_CORNERIA:      return "CO";
+        case LEVEL_METEO:         return "ME";
+        case LEVEL_SECTOR_X:      return "SX";
+        case LEVEL_AREA_6:        return "A6";
+        case LEVEL_SECTOR_Y:      return "SY";
+        case LEVEL_VENOM_1:       return "V1";
+        case LEVEL_SOLAR:         return "SO";
+        case LEVEL_ZONESS:        return "ZO";
+        case LEVEL_VENOM_ANDROSS: return "AN";
+        case LEVEL_MACBETH:       return "MA";
+        case LEVEL_TITANIA:       return "TI";
+        case LEVEL_AQUAS:         return "AQ";
+        case LEVEL_FORTUNA:       return "FO";
+        case LEVEL_KATINA:        return "KA";
+        case LEVEL_BOLSE:         return "BO";
+        case LEVEL_SECTOR_Z:      return "SZ";
+        case LEVEL_VENOM_2:       return "V2";
+        case LEVEL_TRAINING:      return "TR";
+        default:                  return "..";
+    }
+}
+
 u16 Practice_AudioSpecForLevel(LevelId levelId) {
     u8 sfx = SFX_LAYOUT_DEFAULT;
     u8 spec;

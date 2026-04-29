@@ -320,16 +320,41 @@ void Practice_Menu_Draw(void) {
     } else if (sMenuDepth > 0) {
         Practice_DrawTextColor(RADIAL_CENTER_X - 28, RADIAL_CENTER_Y - 5, "DISPLAY", 0, 255, 128);
     } else {
-        Practice_DrawTextColor(RADIAL_CENTER_X - 36, RADIAL_CENTER_Y - 14, "PRACTICE", 0, 255, 128);
-        Practice_DrawText(RADIAL_CENTER_X - 24, RADIAL_CENTER_Y + 0, "HITS:");
-        Practice_DrawNumber(RADIAL_CENTER_X + 16, RADIAL_CENTER_Y + 0, gHitCount);
-        Practice_DrawText(RADIAL_CENTER_X - 44, RADIAL_CENTER_Y + 14, "SLOT");
-        Practice_DrawNumber(RADIAL_CENTER_X + 8, RADIAL_CENTER_Y + 14, Practice_GetActiveSlot());
-        Practice_DrawTextColor(RADIAL_CENTER_X + 24, RADIAL_CENTER_Y + 14,
-            Practice_HasCheckpoint() ? "SAVED" : "EMPTY",
-            Practice_HasCheckpoint() ? 0 : 160,
-            Practice_HasCheckpoint() ? 255 : 160,
-            Practice_HasCheckpoint() ? 80 : 160);
+        s32 slotCount = Practice_GetRamSlotCount();
+        s32 active    = Practice_GetActiveSlot();
+        s32 row;
+        s32 baseY = RADIAL_CENTER_Y - 30;
+        s32 leftX = RADIAL_CENTER_X - 56;
+
+        Practice_DrawTextColor(RADIAL_CENTER_X - 36, baseY, "PRACTICE", 0, 255, 128);
+
+        if (slotCount <= 0) {
+            Practice_DrawTextColor(leftX, baseY + 18, "SAVE DISABLED", 200, 200, 200);
+            Practice_DrawTextColor(leftX, baseY + 30, "NEEDS PAK", 160, 160, 160);
+            Practice_DrawText(leftX, baseY + 50, "HITS:");
+            Practice_DrawNumber(leftX + 40, baseY + 50, gHitCount);
+        } else {
+            for (row = 0; row < slotCount && row < 4; row++) {
+                const PracticeSlotMeta* m  = Practice_GetSlotMeta(row);
+                bool            isActive   = (row == active);
+                s32             y          = baseY + 14 + row * 11;
+
+                if (isActive) {
+                    /* Filled chevron to the left of the row -- '>' is not in
+                     * the small-text glyph set, so we render a box. */
+                    Practice_DrawBox(leftX, y + 1, 4, 6, 255, 220, 80, 220);
+                }
+                Practice_DrawNumber(leftX + 10, y, row);
+                if (m != NULL && m->valid) {
+                    Practice_DrawText (leftX + 26,  y, Practice_LevelAbbrev(m->level));
+                    Practice_DrawText (leftX + 44,  y, "P");
+                    Practice_DrawNumber(leftX + 52, y, m->phase);
+                    Practice_DrawTextColor(leftX + 70, y, "SAVED", 0, 255, 80);
+                } else {
+                    Practice_DrawTextColor(leftX + 26, y, "EMPTY", 120, 120, 120);
+                }
+            }
+        }
     }
 
     if (sStartHoldTimer > 0) {

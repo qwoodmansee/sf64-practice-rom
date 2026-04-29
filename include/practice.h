@@ -141,6 +141,9 @@ s32 Practice_GetSelectedPhase(void);
  * level -> audio bank dispatch; used by Practice_LaunchLevel, by save
  * (TAG_AUDIO_SPEC_PACKED), and by cross-scene load apply. */
 u16 Practice_AudioSpecForLevel(LevelId levelId);
+/* Two-character abbreviation suitable for tight HUD layouts (e.g. the
+ * radial slot picker). Returns "??" for unknown LevelIds. */
+const char* Practice_LevelAbbrev(LevelId levelId);
 
 /* practice_state.c */
 bool Practice_StateMenuIsOpen(void);
@@ -211,6 +214,11 @@ typedef enum PracticeCrossLoadState {
     XLOAD_IDLE,
     XLOAD_AWAIT_SCENE_LOAD,
 } PracticeCrossLoadState;
+
+/* RAM slot count after Practice_Save_Init (0 on stock 4 MB). */
+s32  Practice_GetRamSlotCount(void);
+/* Read-only handle into the slot meta table. NULL on out-of-range slot. */
+const PracticeSlotMeta* Practice_GetSlotMeta(s32 slot);
 
 /* practice_heap_audit.c */
 void Practice_HeapAudit_Boot(void);
