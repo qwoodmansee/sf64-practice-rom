@@ -271,11 +271,8 @@ void practice_overlay_request_load(LevelId id, s32 phase) {
     gClearPlayerInfo = true;
     gPracticeCheckpointProgress = 0.0f;
 
-    /* Single-source audio dispatch. Practice_LaunchLevel uses the same call.
-     * Practice_AudioApplyForLevel skips the spec set when gAudioSpecId
-     * already matches, avoiding a redundant heap reset on cross-scene loads
-     * back to the same audio bank. */
-    Practice_AudioApplyForLevel(id);
+    /* Single-source audio dispatch. Practice_LaunchLevel uses the same call. */
+    Audio_SetAudioSpec(0, Practice_AudioSpecForLevel(id));
 
     gNextGameState = GSTATE_PLAY;
     gDrawMode = DRAW_NONE;

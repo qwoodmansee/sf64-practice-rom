@@ -141,12 +141,6 @@ s32 Practice_GetSelectedPhase(void);
  * level -> audio bank dispatch; used by Practice_LaunchLevel, by save
  * (TAG_AUDIO_SPEC_PACKED), and by cross-scene load apply. */
 u16 Practice_AudioSpecForLevel(LevelId levelId);
-/* Calls Audio_SetAudioSpec only when `levelId`'s packed spec differs from
- * the currently active gAudioSpecId. Audio_SetAudioSpec queues
- * SEQCMD_RESET_AUDIO_HEAP unconditionally; queuing a redundant reset (e.g.
- * radial RESTART on the same level) wedges the audio thread, dropping any
- * subsequent BGM cmd. This wrapper is the single safe entry point. */
-void Practice_AudioApplyForLevel(LevelId levelId);
 /* Two-character abbreviation suitable for tight HUD layouts (e.g. the
  * radial slot picker). Returns "??" for unknown LevelIds. */
 const char* Practice_LevelAbbrev(LevelId levelId);

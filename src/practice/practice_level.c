@@ -321,21 +321,6 @@ const char* Practice_LevelAbbrev(LevelId levelId) {
     }
 }
 
-/* sf64audio_external.h doesn't expose this -- live extern from sf64audio.h
- * which the audio thread updates whenever a spec change actually lands. */
-extern u8 gAudioSpecId;
-
-void Practice_AudioApplyForLevel(LevelId levelId) {
-    u16 packed = Practice_AudioSpecForLevel(levelId);
-    /* Spec lower byte == AudioSpec id; gAudioSpecId reflects the bank the
-     * audio thread has actually loaded. If they match, the requested spec
-     * is already active and another Audio_SetAudioSpec would queue a
-     * pointless heap reset (which can stack with one already in flight). */
-    if ((u8)(packed & 0xFFu) != gAudioSpecId) {
-        Audio_SetAudioSpec(0, packed);
-    }
-}
-
 u16 Practice_AudioSpecForLevel(LevelId levelId) {
     u8 sfx = SFX_LAYOUT_DEFAULT;
     u8 spec;
@@ -376,7 +361,7 @@ void Practice_LaunchLevel(LevelId levelId, s32 phase, f32 checkpointProgress) {
 
     // Map_LevelStart_AudioSpecSetup lives in the menu overlay and is only callable from
     // GSTATE_MAP. Replicate its logic here so audio banks load correctly on any restart.
-    Practice_AudioApplyForLevel(levelId);
+    Audio_SetAudioSpec(0, Practice_AudioSpecForLevel(levelId));
 
     gNextGameState = GSTATE_PLAY;
     gDrawMode = DRAW_NONE;
