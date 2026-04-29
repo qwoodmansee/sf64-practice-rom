@@ -1,0 +1,29 @@
+src/practice/practice_level.c
+  0abdd9b08032bd0a 300-328,340
+include/practice.h
+  0abdd9b08032bd0a 139-143
+tools/practice_invariants.py
+  0abdd9b08032bd0a 741-784,1117
+src/practice/practice_save.c
+  0abdd9b08032bd0a 131,162-164,290,366,613-619,730
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "42da4743192898416e4ddcf4b6720896be187dfa",
+  "prompts": {
+    "0abdd9b08032bd0a": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c88d3c2d-e5ed-4f97-9aac-df25ea0122a5",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 95,
+      "total_deletions": 94,
+      "accepted_lines": 94,
+      "overriden_lines": 0
+    }
+  }
+}
