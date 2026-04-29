@@ -14,7 +14,7 @@
 #include "serial.h"
 
 #ifndef PRACTICE_SAVE_SELFTEST
-#define PRACTICE_SAVE_SELFTEST 0
+#define PRACTICE_SAVE_SELFTEST 1
 #endif
 
 #ifndef PRACTICE_SAVE_TRACE
@@ -1204,10 +1204,63 @@ static int Practice_Load_Cb(const void *buf, uint32_t size) {
 }
 
 #if PRACTICE_SAVE_SELFTEST
-static void Practice_Save_InvalidSlotProbe(void) {
+static u8 sSelftestStorage[SLOT_MANAGER_HEADER_SIZE + 16];
+static s32 sSelftestLoadedValue;
+
+static uint32_t Practice_Save_SelftestSaveCb(void *buf, uint32_t buf_size) {
+    u32 value;
+
+    if (buf_size < sizeof(value)) {
+        return buf_size + 1U;
+    }
+
+    value = 0x53545631U; /* STV1 */
+    bcopy(&value, buf, sizeof(value));
+    return sizeof(value);
+}
+
+static int Practice_Save_SelftestLoadCb(const void *buf, uint32_t size) {
+    u32 value;
+
+    if (size != sizeof(value)) {
+        return -1;
+    }
+
+    bcopy((void *)buf, &value, sizeof(value));
+    sSelftestLoadedValue = (s32)value;
+    return 0;
+}
+
+static void Practice_Save_CorruptSlotProbe(void) {
     s32 r;
 
-    /* slot_manager rejects out-of-range slot without invoking save/load callbacks */
+    /* Exercise slot_manager's header validation without touching live game state.
+     * Practice_Save_Init reinitializes the real slot manager immediately after this probe. */
+    bzero(sSelftestStorage, sizeof(sSelftestStorage));
+    sSelftestLoadedValue = 0;
+
+    slot_manager_init(STATE_VERSION, LIB_VERSION, Practice_Save_SelftestSaveCb, Practice_Save_SelftestLoadCb, 1);
+    r = slot_manager_set_ram_storage(sSelftestStorage, sizeof(sSelftestStorage), sizeof(sSelftestStorage));
+    if (r != SLOT_MANAGER_OK) {
+        osSyncPrintf("[practice_save] WARN corrupt-slot probe storage: got %d\n", r);
+        return;
+    }
+
+    r = slot_manager_save_ram(0);
+    if (r != SLOT_MANAGER_OK) {
+        osSyncPrintf("[practice_save] WARN corrupt-slot probe save: got %d\n", r);
+        return;
+    }
+
+    sSelftestStorage[0] ^= 0xFF;
+    r = slot_manager_load_ram(0);
+    if (r != SLOT_MANAGER_ERR_MAGIC) {
+        osSyncPrintf("[practice_save] WARN corrupt-slot probe magic: got %d\n", r);
+    }
+    if (sSelftestLoadedValue != 0) {
+        osSyncPrintf("[practice_save] WARN corrupt-slot probe mutated state\n");
+    }
+
     r = slot_manager_load_ram(99);
     if (r != SLOT_MANAGER_ERR_INVALID_SLOT) {
         osSyncPrintf("[practice_save] WARN invalid-slot probe: got %d\n", r);
@@ -1233,9 +1286,6 @@ s32 Practice_CanSaveHere(void) {
         return 0;
     }
     if (gPlayState != PLAY_UPDATE) {
-        return 0;
-    }
-    if (gPracticeMenuState != PMENU_CLOSED) {
         return 0;
     }
     if (!practice_overlay_is_saveable(gCurrentLevel)) {
@@ -1287,6 +1337,10 @@ void Practice_Save_Init(void) {
 
     gPracticeSaveDisabled = 0;
 
+#if PRACTICE_SAVE_SELFTEST
+    Practice_Save_CorruptSlotProbe();
+#endif
+
     slot_manager_init(STATE_VERSION, LIB_VERSION, Practice_Save_Cb, Practice_Load_Cb, gPracticeRamSlotCount);
 
     if (slot_manager_set_ram_storage(
@@ -1314,9 +1368,6 @@ void Practice_Save_Init(void) {
     gPracticeLastSaveResult = 0;
     gPracticeLastLoadResult = 0;
 
-#if PRACTICE_SAVE_SELFTEST
-    Practice_Save_InvalidSlotProbe();
-#endif
 }
 
 void Practice_SaveTrace_HotkeyIsv(void) {
@@ -1378,11 +1429,13 @@ void Practice_SaveStateSlot(s32 slot) {
 
     if (gPracticeSaveDisabled) {
         osSyncPrintf("[save] disabled: no Expansion Pak (stock 4MB)\n");
+        Practice_Hud_ShowStatus("SAVE DIS", 255, 120, 80);
         return;
     }
 
     if ((slot < 0) || (slot >= gPracticeRamSlotCount)) {
         osSyncPrintf("[save] refuse: bad slot=%d\n", slot);
+        Practice_Hud_ShowStatus("BAD SLOT", 255, 120, 80);
         return;
     }
 
@@ -1391,6 +1444,7 @@ void Practice_SaveStateSlot(s32 slot) {
         gPracticeLastSaveResult = SLOT_MANAGER_ERR_INVALID_SLOT;
         osSyncPrintf("[save] refuse: not saveable (level=%d play=%d menu=%d)\n", (s32)gCurrentLevel,
                      (s32)gPlayState, (s32)gPracticeMenuState);
+        Practice_Hud_ShowStatus("SAVE REF", 255, 120, 80);
         return;
     }
 
@@ -1403,6 +1457,11 @@ void Practice_SaveStateSlot(s32 slot) {
 #endif
     gPracticeLastSaveResult = rr;
     SyncValidBits();
+    if (rr == SLOT_MANAGER_OK) {
+        Practice_Hud_ShowStatus("SAVE OK", 80, 255, 120);
+    } else {
+        Practice_Hud_ShowStatus("SAVE FAIL", 255, 120, 80);
+    }
 }
 
 void Practice_SaveState(void) {
@@ -1421,6 +1480,7 @@ void Practice_LoadStateSlot(s32 slot) {
 
     if (gPracticeSaveDisabled) {
         osSyncPrintf("[load] disabled: no Expansion Pak (stock 4MB)\n");
+        Practice_Hud_ShowStatus("LOAD DIS", 255, 120, 80);
         return;
     }
 
@@ -1428,6 +1488,7 @@ void Practice_LoadStateSlot(s32 slot) {
 #if PRACTICE_SAVE_TRACE
         osSyncPrintf("[save_tr] LoadStateSlot refuse bad slot=%d\n", slot);
 #endif
+        Practice_Hud_ShowStatus("BAD SLOT", 255, 120, 80);
         return;
     }
     if (!slot_manager_ram_valid(slot)) {
@@ -1435,6 +1496,7 @@ void Practice_LoadStateSlot(s32 slot) {
 #if PRACTICE_SAVE_TRACE
         osSyncPrintf("[save_tr] LoadStateSlot refuse slot empty\n");
 #endif
+        Practice_Hud_ShowStatus("LOAD EMPTY", 255, 180, 80);
         return;
     }
 
@@ -1446,6 +1508,11 @@ void Practice_LoadStateSlot(s32 slot) {
     osSyncPrintf("[save_tr] slot_manager_load_ram ret=%d\n", rr);
 #endif
     gPracticeLastLoadResult = rr;
+    if (rr == SLOT_MANAGER_OK) {
+        Practice_Hud_ShowStatus("LOAD OK", 80, 255, 120);
+    } else {
+        Practice_Hud_ShowStatus("LOAD FAIL", 255, 120, 80);
+    }
 }
 
 void Practice_LoadState(void) {

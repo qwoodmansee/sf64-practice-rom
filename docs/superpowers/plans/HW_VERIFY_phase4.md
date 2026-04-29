@@ -17,8 +17,24 @@
 | Stock 4 MB | `gPracticeSaveDisabled=1`; no slot pool pointer passed; safe to boot and play. |
 | Expansion Pak | `osMemSize == 0x00800000`: 4 RAM slots, pool base from `[heap] boot pool=` (expect `80400000`). |
 | Checkpoint hotkeys | Wired only when `gPracticeScreen == PSCREEN_GAMEPLAY`. Launch levels with **practice level select → A** (`Practice_LaunchLevel`). Vanilla map → play leaves `PSCREEN_LEVEL_SELECT`; heap lines still show `PLAY_UPDATE` but **hotkey save will not run**. |
+| Radial menu save | Allowed while the frozen practice menu is open. `Play_Main()` is paused under `PMENU_OPEN_FROZEN`, so the snapshot point is stable. |
 | ISV “no line on save” | Successful save prints **nothing** unless `PRACTICE_SAVE_TRACE=1` (`[save_tr]` bracketing). |
+| On-screen save feedback | Gameplay HUD now shows short status toasts: `SAVE OK`, `SAVE REF`, `SAVE FAIL`, `LOAD OK`, `LOAD EMPTY`, `LOAD FAIL`, `SAVE DIS` / `LOAD DIS`. |
+| Slot indicator | Root practice radial shows active slot plus `SAVED` / `EMPTY`; L/R trigger while the practice menu is open cycles slots. |
+| Boot selftest | `PRACTICE_SAVE_SELFTEST=1` by default; Pak boot runs an isolated corrupt-slot probe and warns only if slot-manager bad-magic rejection regresses. Stock skips slot-manager init. |
 | Layout proof | `python3 tools/audit_ram_layout.py` — must exit 0 before adding new large BSS that could overlap overlays / load window. |
+
+## Local status — 2026-04-29
+
+- Phase: still **Phase 4**. The Pak-only slot-pool layout is the current design.
+- Implemented locally: corrupt-slot boot selftest, radial slot saved/empty label,
+  and gameplay save/load status toast.
+- Verified locally: `python3 tools/practice_invariants.py`, `make practice -j4`,
+  `make lib-test`, and `git diff --check`.
+- Not verified locally: BizHawk functional tests, because `BIZHAWK_PATH` is not
+  set and BizHawk is not on `PATH`.
+- Still hardware-gated: per-scene heap audit table and any final tightening of
+  `MAX_STATE_SIZE` / slot constants from real IS-Viewer telemetry.
 
 ## Purpose
 

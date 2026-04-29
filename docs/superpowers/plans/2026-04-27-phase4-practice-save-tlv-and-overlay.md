@@ -705,6 +705,23 @@ completion to the executor.
 
 ## 11. Verification matrix at end of phase
 
+### 2026-04-29 local progress
+
+- Still on Phase 4; Phase 5 cross-scene loading remains deferred.
+- Added boot-on `PRACTICE_SAVE_SELFTEST` corrupt-slot probe. It uses isolated
+  fake callbacks/storage, corrupts slot magic, and verifies load rejection
+  does not invoke the load callback before the real slot manager is initialized.
+- Added minimal Phase 4 UX: root radial slot indicator now shows `SAVED` /
+  `EMPTY`, and gameplay save/load attempts show short HUD status toasts.
+- Fixed radial-menu save refusal: `Practice_CanSaveHere()` no longer rejects
+  solely because the frozen practice menu is open. The hotkey path still only
+  runs outside the menu; radial save is intentionally allowed because
+  `Play_Main()` is paused under `PMENU_OPEN_FROZEN`.
+- Local verification passed: static invariants, practice ROM build, host
+  `lib-test`, and whitespace check.
+- BizHawk rows below are still pending on this machine because BizHawk is not
+  installed or `BIZHAWK_PATH` is unset.
+
 | Item | Command | Pass condition |
 |---|---|---|
 | Static invariants | `python3 tools/practice_invariants.py` | exit 0 |

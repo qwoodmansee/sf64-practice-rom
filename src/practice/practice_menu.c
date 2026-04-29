@@ -325,6 +325,11 @@ void Practice_Menu_Draw(void) {
         Practice_DrawNumber(RADIAL_CENTER_X + 16, RADIAL_CENTER_Y + 0, gHitCount);
         Practice_DrawText(RADIAL_CENTER_X - 44, RADIAL_CENTER_Y + 14, "SLOT");
         Practice_DrawNumber(RADIAL_CENTER_X + 8, RADIAL_CENTER_Y + 14, Practice_GetActiveSlot());
+        Practice_DrawTextColor(RADIAL_CENTER_X + 24, RADIAL_CENTER_Y + 14,
+            Practice_HasCheckpoint() ? "SAVED" : "EMPTY",
+            Practice_HasCheckpoint() ? 0 : 160,
+            Practice_HasCheckpoint() ? 255 : 160,
+            Practice_HasCheckpoint() ? 80 : 160);
     }
 
     if (sStartHoldTimer > 0) {

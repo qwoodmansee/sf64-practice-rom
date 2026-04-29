@@ -153,6 +153,7 @@ void Practice_Menu_Draw(void);
 
 /* practice_hud.c */
 void Practice_Hud_Reset(void);
+void Practice_Hud_ShowStatus(const char* text, u8 r, u8 g, u8 b);
 void Practice_Hud_Update(void);
 void Practice_Hud_Draw(void);
 

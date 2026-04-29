@@ -23,6 +23,11 @@ static s32 sLastInputPollFrame = -1;
 static s32 sCSImpactFrame = -1;
 static s32 sLastCSTimingOffset = 0;
 static bool sCSTimingValid = false;
+static const char* sStatusText = NULL;
+static s32 sStatusTimer = 0;
+static u8 sStatusR = 255;
+static u8 sStatusG = 255;
+static u8 sStatusB = 255;
 s32 gPracticeDirectHits = 0;
 s32 gPracticeIndirectCount = 0;
 s32 gPracticeIndirectBonus = 0;
@@ -46,9 +51,21 @@ void Practice_Hud_Reset(void) {
     gPracticeDespawns = 0;
 }
 
+void Practice_Hud_ShowStatus(const char* text, u8 r, u8 g, u8 b) {
+    sStatusText = text;
+    sStatusTimer = 90;
+    sStatusR = r;
+    sStatusG = g;
+    sStatusB = b;
+}
+
 void Practice_Hud_Update(void) {
     s32 frameDelta;
     Player* player;
+
+    if (sStatusTimer > 0) {
+        sStatusTimer--;
+    }
 
     if (!gPracticeConfig.showHudOverlay) {
         return;
@@ -108,10 +125,16 @@ void Practice_Hud_Draw(void) {
     s32 valueX;
     s32 lineCount = 0;
 
-    if (!gPracticeConfig.showHudOverlay) {
+    if ((gGameState != GSTATE_PLAY) || (gPlayState != PLAY_UPDATE)) {
         return;
     }
-    if ((gGameState != GSTATE_PLAY) || (gPlayState != PLAY_UPDATE)) {
+
+    if ((sStatusTimer > 0) && (sStatusText != NULL)) {
+        Practice_DrawBox(118, 36, 84, 14, 0, 0, 0, 170);
+        Practice_DrawTextColor(124, 39, sStatusText, sStatusR, sStatusG, sStatusB);
+    }
+
+    if (!gPracticeConfig.showHudOverlay) {
         return;
     }
 
