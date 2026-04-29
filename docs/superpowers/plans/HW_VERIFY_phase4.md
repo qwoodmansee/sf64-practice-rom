@@ -144,6 +144,22 @@ For each saveable level:
 | SECTOR_Z | 5797472 | yes | 2026-04-29: level 18; bump_hwm=30848, gfx_peak=128256, audio_peak=716368, free_low=5797472. |
 | VENOM_2 | 5844288 | yes | 2026-04-29: level 19; bump_hwm=18848, gfx_peak=93440, audio_peak=716368, free_low=5844288. |
 
+### Aquas crash trace
+
+2026-04-29: the first torpedo-slot guard fix did not stop the Aquas crash.
+Added `[aq_tr]` instrumentation for the next hardware run. Paste the Aquas
+trace tail starting at `[aq_tr] practice launch enter` through the crash. The
+highest-value lines are:
+
+- `practice launch`, `play setup`, `env`, `level setup`, `init`: confirms
+  launch/order, cutscene state, environment choice, and Aquas globals.
+- `apply practice`: confirms practice start conditions are not corrupting the
+  Blue Marine/player state.
+- `player step begin`, `after boost`, `move enter/exit`, `after path`,
+  `shoot enter/exit`, `after coll`: narrows the crash to one player update
+  stage. If the log stops between two adjacent stage lines, the missing next
+  line is the suspect call.
+
 ## Optional: stock 4 MB
 
 Confirm `memSz=4194304`, `disabled=1`, and no pool writes. Save hotkey should

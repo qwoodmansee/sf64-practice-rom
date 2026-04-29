@@ -109,6 +109,15 @@ void Practice_Draw(void) {
 }
 
 void Practice_ApplyStartConditions(void) {
+#ifdef PRACTICE_ROM
+    if (gCurrentLevel == LEVEL_AQUAS) {
+        osSyncPrintf("[aq_tr] practice apply enter f=%d skip=%d laser=%d bombs=%d lives=%d team=%d,%d,%d\n",
+                     gGameFrameCount, gPracticeConfig.skipCutscenes, gPracticeConfig.laserStrength,
+                     gPracticeConfig.bombCount, gPracticeConfig.lifeCount, gTeamShields[TEAM_ID_FALCO],
+                     gTeamShields[TEAM_ID_SLIPPY], gTeamShields[TEAM_ID_PEPPY]);
+    }
+#endif
+
     gLaserStrength[gPlayerNum] = gPracticeConfig.laserStrength;
     gBombCount[gPlayerNum] = gPracticeConfig.bombCount;
     gLifeCount[gPlayerNum] = gPracticeConfig.lifeCount;
@@ -150,6 +159,15 @@ void Practice_ApplyStartConditions(void) {
             default: break;
         }
     }
+
+#ifdef PRACTICE_ROM
+    if (gCurrentLevel == LEVEL_AQUAS) {
+        osSyncPrintf("[aq_tr] practice apply done f=%d bgm=%d laser=%d bombs=%d lives=%d wings=%d,%d team=%d,%d,%d\n",
+                     gGameFrameCount, gBgmSeqId, gLaserStrength[gPlayerNum], gBombCount[gPlayerNum],
+                     gLifeCount[gPlayerNum], gPlayer[0].arwing.leftWingState, gPlayer[0].arwing.rightWingState,
+                     gTeamShields[TEAM_ID_FALCO], gTeamShields[TEAM_ID_SLIPPY], gTeamShields[TEAM_ID_PEPPY]);
+    }
+#endif
 }
 
 #endif

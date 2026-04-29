@@ -298,6 +298,13 @@ void Practice_LevelSelect_Draw(void) {
 }
 
 void Practice_LaunchLevel(LevelId levelId, s32 phase, f32 checkpointProgress) {
+#ifdef PRACTICE_ROM
+    if (levelId == LEVEL_AQUAS) {
+        osSyncPrintf("[aq_tr] practice launch enter level=%d phase=%d chk=%d screen=%d gs=%d draw=%d\n", levelId,
+                     phase, (s32) (checkpointProgress * 1000.0f), gPracticeScreen, gGameState, gDrawMode);
+    }
+#endif
+
     sBgmPlaying = false;
     sBgmPlayPending = false;
 
@@ -336,6 +343,13 @@ void Practice_LaunchLevel(LevelId levelId, s32 phase, f32 checkpointProgress) {
     Practice_ClearCheckpoint();
     Practice_Hud_Reset();
     gPracticeScreen = PSCREEN_GAMEPLAY;
+
+#ifdef PRACTICE_ROM
+    if (levelId == LEVEL_AQUAS) {
+        osSyncPrintf("[aq_tr] practice launch done next=%d phase=%d gsNext=%d screen=%d clear=%d\n", gNextLevel,
+                     gNextLevelPhase, gNextGameState, gPracticeScreen, gClearPlayerInfo);
+    }
+#endif
 }
 
 LevelId Practice_GetSelectedLevelId(void) {

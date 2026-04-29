@@ -323,6 +323,7 @@ void Aquas_JellyfishCurrent_Wave(void) {
         linkArcDst[i].v.ob[0] = linkArcSrc[i].v.ob[0] + linkArcxMod[j];
         linkArcDst[i].v.ob[1] = linkArcSrc[i].v.ob[1] + linkArcYmod[j];
     }
+
 }
 
 void Aquas_801A92EC(AqJellyfish* this, f32 xUnk, f32 yUnk, f32 zUnk, s32 index, s32 mode) {
@@ -367,6 +368,7 @@ void Aquas_SpawnDebris(Vec3f* pos, Vec3f* rot, f32 xVel, f32 yVel, f32 zVel, s32
             break;
         }
     }
+
 }
 
 void Aquas_SpawnItem(Vec3f* pos, ObjectId objId) {
@@ -430,8 +432,35 @@ void Aquas_801A9728(AqSculpin* this, f32 radius, f32 scale, s32 spread) {
     }
 }
 
+#ifdef PRACTICE_ROM
+static bool Aquas_ShouldTraceFrame(void) {
+    return (gCurrentLevel == LEVEL_AQUAS) && ((gGameFrameCount < 240) || ((gGameFrameCount % 30) == 0));
+}
+
+static void Aquas_TracePlayer(const char* tag, Player* player) {
+    if (!Aquas_ShouldTraceFrame()) {
+        return;
+    }
+
+    osSyncPrintf("[aq_tr] %s f=%d st=%d cs=%d form=%d hp=%d pos=%d,%d,%d trueZ=%d path=%d,%d,%d "
+                 "speed=%d vel=%d,%d,%d shotTimer=%d slot=%d lock=%d target=%d,%d,%d\n",
+                 tag, gGameFrameCount, player->state, player->csState, player->form, player->shields,
+                 (s32) player->pos.x, (s32) player->pos.y, (s32) player->pos.z, (s32) player->trueZpos,
+                 (s32) gPathProgress, (s32) player->zPath, (s32) player->baseSpeed, (s32) player->vel.x,
+                 (s32) player->vel.y, (s32) player->vel.z, player->shotTimer, D_i3_801C4190[5],
+                 D_i3_801C4190[3], (s32) D_i3_801C41B8[6], (s32) D_i3_801C41B8[7],
+                 (s32) D_i3_801C41B8[8]);
+}
+#endif
+
 void Aquas_InitLevel(void) {
     s32 i;
+
+#ifdef PRACTICE_ROM
+    osSyncPrintf("[aq_tr] init enter f=%d level=%d phase=%d savedIdx=%d csSkip=%d water=%d alpha=%d\n",
+                 gGameFrameCount, gCurrentLevel, gLevelPhase, gSavedObjectLoadIndex, gCsWasNotSkipped,
+                 (s32) gSurfaceWaterYPos, (s32) gAquasSurfaceAlpha);
+#endif
 
     gTeamShields[TEAM_ID_FALCO] = gTeamShields[TEAM_ID_SLIPPY] = gTeamShields[TEAM_ID_PEPPY] = 255;
 
@@ -476,6 +505,14 @@ void Aquas_InitLevel(void) {
     D_i3_801C4190[5] = 0;
     D_i3_801C41B8[25] = gSurfaceWaterYPos;
     D_i3_801C41B8[26] = 128.0f;
+
+#ifdef PRACTICE_ROM
+    osSyncPrintf("[aq_tr] init done f=%d i0=%d i3=%d slot=%d b12=%d b13=%d b25=%d b26=%d team=%d,%d,%d\n",
+                 gGameFrameCount, D_i3_801C4190[0], D_i3_801C4190[3], D_i3_801C4190[5],
+                 (s32) D_i3_801C41B8[12], (s32) D_i3_801C41B8[13], (s32) D_i3_801C41B8[25],
+                 (s32) D_i3_801C41B8[26], gTeamShields[TEAM_ID_FALCO], gTeamShields[TEAM_ID_SLIPPY],
+                 gTeamShields[TEAM_ID_PEPPY]);
+#endif
 }
 
 void Aquas_801A99D4(Player* player) {
@@ -873,6 +910,10 @@ void Aquas_BlueMarineMove(Player* player) {
     f32 var_fv1_2;
     s32 pad;
 
+#ifdef PRACTICE_ROM
+    Aquas_TracePlayer("move enter", player);
+#endif
+
     Aquas_801AA4BC(player);
     Aquas_801A99D4(player);
     Aquas_JellyfishCurrent_Wave();
@@ -1073,6 +1114,10 @@ void Aquas_BlueMarineMove(Player* player) {
             }
         }
     }
+
+#ifdef PRACTICE_ROM
+    Aquas_TracePlayer("move exit", player);
+#endif
 }
 
 void Aquas_BlueMarineDown(Player* player) {
@@ -1250,6 +1295,10 @@ void Aquas_BlueMarineShoot(Player* player) {
     Vec3f sp5C;
     Actor* actor;
 
+#ifdef PRACTICE_ROM
+    Aquas_TracePlayer("shoot enter", player);
+#endif
+
     if ((D_i3_801C4190[5] != 0) && (gPlayerShots[D_i3_801C4190[5] - 1].obj.status == SHOT_FREE)) {
         D_i3_801C41B8[21] = D_i3_801C41B8[22] = D_i3_801C41B8[23] = 0.0f;
         D_i3_801C4190[5] = D_i3_801C4190[3] = 0;
@@ -1350,6 +1399,10 @@ void Aquas_BlueMarineShoot(Player* player) {
         }
         Math_SmoothStepToF(&gLight3Brightness, 0.2f, 1.0f, 0.04f, 0.001f);
     }
+
+#ifdef PRACTICE_ROM
+    Aquas_TracePlayer("shoot exit", player);
+#endif
 }
 
 void Aquas_Bubble_Setup(EffectBubble* this, f32 xPos, f32 yPos, f32 zPos, f32 scale2, s32 state) {
