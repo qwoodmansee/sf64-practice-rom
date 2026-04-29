@@ -1180,9 +1180,9 @@ void Practice_Save_Init(void) {
         return;
     }
 
-    osSyncPrintf("[practice_save] Expansion Pak: %d slots at %p (osMemSize=0x%08x)\n",
+    osSyncPrintf("[practice_save] Expansion Pak: %d slots at pool=0x%08x (osMemSize=0x%08x)\n",
                  gPracticeRamSlotCount,
-                 (void*)Practice_Save_SlotPoolBase(),
+                 (unsigned)(u32)(uintptr_t)Practice_Save_SlotPoolBase(),
                  (unsigned)osMemSize);
 
     gPracticeActiveSlot = 0;
