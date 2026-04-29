@@ -95,7 +95,7 @@ void Practice_Draw(void) {
         gPracticeAqTraceStage = 961;
         gPracticeAqTraceFrame = gGameFrameCount;
         gPracticeAqTraceState = gPracticeScreen;
-        Practice_Hud_DrawAqTrace();
+        return;
     }
 
     switch (gPracticeScreen) {

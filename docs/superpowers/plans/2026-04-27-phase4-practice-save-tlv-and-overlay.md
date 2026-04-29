@@ -730,8 +730,12 @@ completion to the executor.
 - Second breadcrumb report reached `AQ 230 S 3 F 69`, proving `Play_Update()`
   completed; expanded breadcrumbs into `Game_Draw()` and `Display_Update()`.
 - Third breadcrumb report reached `AQ 960 S 1 F 150`, proving `Practice_Update()`
-  completed and the hang is inside `Practice_Draw()`; added substep breadcrumbs
-  for HUD/input/freecam/menu draw.
+  completed; added substep breadcrumbs for HUD/input/freecam/menu draw.
+- Fourth breadcrumb report reached `AQ 979 S 1 F 105` and then stopped updating
+  while the game appeared to keep running. The next diagnostic ROM skips all
+  Aquas practice overlay drawing and prints a one-line `[aq_hb]` CPU heartbeat
+  every 60 frames so hardware can distinguish an overlay display-list fault
+  from a later graphics-task/display submission hang.
 - Local verification passed: static invariants, practice ROM build, host
   `lib-test`, and whitespace check.
 - BizHawk rows below are still pending on this machine because BizHawk is not

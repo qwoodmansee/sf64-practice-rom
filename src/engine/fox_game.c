@@ -676,6 +676,10 @@ void Game_Update(void) {
         PRACTICE_AQ_GAME_TRACE(960, gPracticeScreen);
         Practice_Draw();
         PRACTICE_AQ_GAME_TRACE(970, gPracticeScreen);
+        if ((gCurrentLevel == LEVEL_AQUAS) && ((gGameFrameCount % 60) == 0)) {
+            osSyncPrintf("[aq_hb] f=%d play=%d trace=%d s=%d\n", gGameFrameCount, gPlayState,
+                         gPracticeAqTraceStage, gPracticeAqTraceState);
+        }
 #endif
     }
 }
