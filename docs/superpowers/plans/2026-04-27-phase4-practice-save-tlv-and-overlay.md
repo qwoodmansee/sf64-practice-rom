@@ -724,6 +724,9 @@ completion to the executor.
   `-1` immediately after Aquas init when no torpedo existed.
 - Replaced noisy Aquas serial tracing with an on-screen `AQ` breadcrumb because
   the serial build overwhelmed/desynced IS-Viewer before the freeze.
+- First breadcrumb report reached `AQ 160 S 3 F 69`, proving Blue Marine player
+  update completed; expanded the breadcrumb into object, shot, camera, and
+  level-update stages.
 - Local verification passed: static invariants, practice ROM build, host
   `lib-test`, and whitespace check.
 - BizHawk rows below are still pending on this machine because BizHawk is not

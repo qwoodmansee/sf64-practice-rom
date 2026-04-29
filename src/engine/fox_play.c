@@ -6945,13 +6945,19 @@ void Play_Update(void) {
         Player_Update(&gPlayer[i]);
     }
 
+    PRACTICE_AQ_TRACE(170, gPlayer[0].state);
     Object_Update();
+    PRACTICE_AQ_TRACE(180, gPlayer[0].state);
     PlayerShot_UpdateAll();
+    PRACTICE_AQ_TRACE(190, gPlayer[0].state);
     BonusText_Update();
+    PRACTICE_AQ_TRACE(195, gPlayer[0].state);
 
     for (i = 0; i < gCamCount; i++) {
         gPlayer[i].num = gPlayerNum = i;
+        PRACTICE_AQ_TRACE(200, gPlayer[i].state);
         Camera_Update(&gPlayer[i]);
+        PRACTICE_AQ_TRACE(210, gPlayer[i].state);
     }
 
     gCameraShakeY = 0.0f;
@@ -6965,7 +6971,9 @@ void Play_Update(void) {
         }
         gCameraShakeY = var_fv1 * SIN_DEG(gGameFrameCount * 70.0f);
     }
+    PRACTICE_AQ_TRACE(220, gPlayer[0].state);
     Play_UpdateLevel();
+    PRACTICE_AQ_TRACE(230, gPlayer[0].state);
 }
 
 u8 sVsItemSpawnIndex = -1;

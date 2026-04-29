@@ -169,6 +169,18 @@ Report the final visible `AQ` values after the freeze. Stage map:
 | 120/130 | after move / after path update |
 | 135/139 | `Aquas_BlueMarineShoot` enter/done |
 | 140/150/160 | after shoot / after collision / after floor+alarm |
+| 170/180 | `Object_Update` enter/done |
+| 190/195 | player shots done / bonus text done |
+| 200/210 | camera update enter/done |
+| 220/230 | level update enter/done |
+| 290/291 | level object loader enter/done |
+| 3000+n | scenery update slot `n`; `S` is object id |
+| 4000+n | sprite update slot `n`; `S` is object id |
+| 5000+n | boss update slot `n`; `S` is object id |
+| 6000+n | actor update slot `n`; `S` is object id |
+| 7000+n | item update slot `n`; `S` is object id |
+| 8000+n | effect update slot `n`; `S` is object id |
+| 8998/8999 | effects done / textured lines done |
 
 ## Optional: stock 4 MB
 

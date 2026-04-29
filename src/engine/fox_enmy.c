@@ -21,6 +21,16 @@
 #include "actordebris.h"
 #ifdef PRACTICE_ROM
 #include "practice.h"
+#define PRACTICE_AQ_OBJECT_TRACE(stage, state) \
+    do {                                       \
+        if (gCurrentLevel == LEVEL_AQUAS) {    \
+            gPracticeAqTraceStage = (stage);   \
+            gPracticeAqTraceFrame = gGameFrameCount; \
+            gPracticeAqTraceState = (state);   \
+        }                                      \
+    } while (0)
+#else
+#define PRACTICE_AQ_OBJECT_TRACE(stage, state) ((void)0)
 #endif
 
 s32 gTeamChaseTimers[4];
@@ -3123,14 +3133,18 @@ void Object_Update(void) {
     }
     if (gLevelMode != LEVELMODE_ALL_RANGE) {
         if ((gLoadLevelObjects != 0) && (gPlayer[0].state != PLAYERSTATE_LEVEL_INTRO)) {
+            PRACTICE_AQ_OBJECT_TRACE(290, gObjectLoadIndex);
             Object_LoadLevelObjects();
+            PRACTICE_AQ_OBJECT_TRACE(291, gObjectLoadIndex);
         }
         for (i = 0, scenery = gScenery; i < ARRAY_COUNT(gScenery); i++, scenery++) {
             if (scenery->obj.status != OBJ_FREE) {
                 scenery->index = i;
+                PRACTICE_AQ_OBJECT_TRACE(3000 + i, scenery->obj.id);
                 Scenery_Update(scenery);
             }
         }
+        PRACTICE_AQ_OBJECT_TRACE(3999, 0);
     } else if (gVersusMode) {
         for (i = 0, scenery360 = gScenery360; i < 200; i++, scenery360++) {
             if ((scenery360->obj.status != OBJ_FREE) && (scenery360->obj.id == OBJ_SCENERY_VS_SPACE_JUNK_3)) {
@@ -3146,39 +3160,50 @@ void Object_Update(void) {
     for (i = 0, sprite = &gSprites[0]; i < ARRAY_COUNT(gSprites); i++, sprite++) {
         if (sprite->obj.status != OBJ_FREE) {
             sprite->index = i;
+            PRACTICE_AQ_OBJECT_TRACE(4000 + i, sprite->obj.id);
             Sprite_Update(sprite);
         }
     }
+    PRACTICE_AQ_OBJECT_TRACE(4999, 0);
 
     for (i = 0, boss = &gBosses[0]; i < ARRAY_COUNT(gBosses); i++, boss++) {
         if (boss->obj.status != OBJ_FREE) {
             boss->index = i;
+            PRACTICE_AQ_OBJECT_TRACE(5000 + i, boss->obj.id);
             Boss_Update(boss);
         }
     }
+    PRACTICE_AQ_OBJECT_TRACE(5999, 0);
 
     for (i = 0, actor = &gActors[0]; i < ARRAY_COUNT(gActors); i++, actor++) {
         if (actor->obj.status != OBJ_FREE) {
             actor->index = i;
+            PRACTICE_AQ_OBJECT_TRACE(6000 + i, actor->obj.id);
             Actor_Update(actor);
         }
     }
+    PRACTICE_AQ_OBJECT_TRACE(6999, 0);
 
     for (i = 0, item = &gItems[0]; i < ARRAY_COUNT(gItems); i++, item++) {
         if (item->obj.status != OBJ_FREE) {
             item->index = i;
+            PRACTICE_AQ_OBJECT_TRACE(7000 + i, item->obj.id);
             Item_Update(item);
         }
     }
+    PRACTICE_AQ_OBJECT_TRACE(7999, 0);
 
     for (i = 0, effect = &gEffects[0]; i < ARRAY_COUNT(gEffects); i++, effect++) {
         if (effect->obj.status != OBJ_FREE) {
             effect->index = i;
+            PRACTICE_AQ_OBJECT_TRACE(8000 + i, effect->obj.id);
             Effect_Update(effect);
         }
     }
+    PRACTICE_AQ_OBJECT_TRACE(8998, 0);
 
     TexturedLine_UpdateAll();
+    PRACTICE_AQ_OBJECT_TRACE(8999, 0);
 
     for (i = 0; i < ARRAY_COUNT(gTeamChaseTimers); i++) {
         if (gTeamChaseTimers[i] != 0) {
