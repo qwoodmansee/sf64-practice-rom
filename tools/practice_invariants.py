@@ -15,6 +15,7 @@ PRACTICE_SAVE_TAGS = os.path.join("src", "practice", "practice_save_tags.h")
 PRACTICE_SAVE_C = os.path.join("src", "practice", "practice_save.c")
 PRACTICE_SAVE_SLOTPOOL = os.path.join("src", "practice", "practice_save_slotpool.c")
 PRACTICE_SAVE_CONFIG = os.path.join("src", "practice", "practice_save_config.h")
+PRACTICE_OVERLAY_C = os.path.join("src", "practice", "practice_overlay.c")
 PRACTICE_MAIN_INIT = os.path.join("src", "practice", "practice_main.c")
 PRACTICE_LEVEL = os.path.join("src", "practice", "practice_level.c")
 FOX_GAME = "src/engine/fox_game.c"
@@ -714,6 +715,29 @@ def check_snapshot_gplayers_use_cam_count():
         )
 
 
+def check_overlay_build_id_no_rom_read():
+    """Hardware save path must not dereference ROM/physical DMA table addresses."""
+    src = read(PRACTICE_OVERLAY_C)
+    m = re.search(r"u32\s+practice_overlay_build_id\s*\([^)]*\)\s*\{(.*?)^}",
+                  src, re.DOTALL | re.MULTILINE)
+    if not m:
+        error(
+            f"{PRACTICE_OVERLAY_C}: practice_overlay_build_id missing "
+            "(check_overlay_build_id_no_rom_read)"
+        )
+        return
+
+    body = m.group(1)
+    scrubbed = re.sub(r"/\*.*?\*/", "", body, flags=re.DOTALL)
+    scrubbed = re.sub(r"//.*", "", scrubbed)
+    if re.search(r"(?:->|\.)\s*vRomAddress\b", scrubbed):
+        error(
+            f"{PRACTICE_OVERLAY_C}: practice_overlay_build_id must not read/hash "
+            "DmaEntry.vRomAddress on hardware; use metadata/RDRAM only "
+            "(check_overlay_build_id_no_rom_read)"
+        )
+
+
 def check_phase3_ram_detection():
     """Phase 3: Practice_Save_Init must detect osMemSize and gate save/load.
 
@@ -997,6 +1021,7 @@ def main():
     check_radial_menu_save_allowed()
     check_sys_memory_practice_bump_getter()
     check_snapshot_gplayers_use_cam_count()
+    check_overlay_build_id_no_rom_read()
     check_phase3_ram_detection()
     check_practice_pool_placement()
     check_practice_pool_no_overlay_overlap()

@@ -22,9 +22,10 @@
  *   `ovl_iN_VRAM_END - ovl_iN_VRAM`; per-overlay *ROM bytes* live at
  *   `gDmaTable[idx].vRomAddress` for `pRom.end - pRom.start` bytes.
  *
- * - The build-id hash is a CRC32-IEEE over those bytes, computed lazily and
- *   cached per-overlay. Bytes are unique per overlay and stable across the
- *   whole boot, so the cached value is reusable for the rest of the session.
+ * - The build-id hash is a CRC32-IEEE over small overlay metadata, computed
+ *   lazily and cached per-overlay. Do not hash `DmaEntry.vRomAddress` at
+ *   runtime: on hardware that address names ROM/physical storage, not normal
+ *   cached RDRAM, and reading it during a save can fault.
  *
  * - `get_region` just returns the linker-defined VRAM range for the ovl_iN
  *   that owns `id`. Callers must understand that range is volatile (changes
@@ -191,8 +192,10 @@ u32 practice_overlay_build_id(LevelId id) {
     s32       dma_idx;
     u8        cache_bit;
     DmaEntry* dma;
-    u32       size;
+    u32       metadata[5];
     u32       hash;
+    void*     vram;
+    u32       vram_size;
 
     entry = find_entry(id);
     if (entry == NULL) {
@@ -221,8 +224,15 @@ u32 practice_overlay_build_id(LevelId id) {
     }
 
     dma = &gDmaTable[dma_idx];
-    size = (u32)((uintptr_t)dma->pRom.end - (uintptr_t)dma->pRom.start);
-    hash = crc32(dma->vRomAddress, size);
+    vram = NULL;
+    vram_size = 0;
+    practice_overlay_get_region(id, &vram, &vram_size);
+    metadata[0] = (u32)entry->ovl_index;
+    metadata[1] = (u32)(uintptr_t)dma->pRom.start;
+    metadata[2] = (u32)(uintptr_t)dma->pRom.end;
+    metadata[3] = (u32)(uintptr_t)vram;
+    metadata[4] = vram_size;
+    hash = crc32(metadata, sizeof(metadata));
 
     sBuildIdCache[entry->ovl_index] = hash;
     sBuildIdValidBits |= cache_bit;

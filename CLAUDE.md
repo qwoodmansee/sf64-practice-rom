@@ -98,6 +98,11 @@ the ROM is explicitly a one-off diagnostic build; the save-init bypass causes
 `SAVE DIS` / `LOAD DIS`, and Aquas-specific runtime bypasses hide real practice
 behavior.
 
+`practice_overlay_build_id()` must not read `DmaEntry.vRomAddress` on hardware.
+Those DMA-table addresses name ROM/physical storage, not normal RDRAM, and a
+save callback can fault if it tries to CRC those bytes. Use small overlay
+metadata or already-loaded RDRAM only.
+
 ## MIPS float safety
 
 On MIPS, converting a NaN or uninitialized float to integer (`(s32)value`)

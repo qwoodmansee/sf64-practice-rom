@@ -23,6 +23,7 @@
 | On-screen save feedback | Gameplay HUD now shows short status toasts: `SAVE OK`, `SAVE REF`, `SAVE FAIL`, `LOAD OK`, `LOAD EMPTY`, `LOAD FAIL`, `SAVE DIS` / `LOAD DIS`. |
 | Slot indicator | Root practice radial shows active slot plus `SAVED` / `EMPTY`; L/R trigger while the practice menu is open cycles slots. |
 | Boot selftest | `PRACTICE_SAVE_SELFTEST=1` by default; Pak boot runs an isolated corrupt-slot probe and warns only if slot-manager bad-magic rejection regresses. Stock skips slot-manager init. |
+| Overlay build ID | Must not CRC `DmaEntry.vRomAddress` in the hardware save path; use metadata/already-loaded RDRAM only. |
 | Layout proof | `python3 tools/audit_ram_layout.py` — must exit 0 before adding new large BSS that could overlap overlays / load window. |
 
 ## Local status — 2026-04-29

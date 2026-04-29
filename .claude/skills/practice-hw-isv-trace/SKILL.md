@@ -66,6 +66,10 @@ HUD, `[aq_hb]` heartbeat, Aquas practice runtime/start-condition bypasses, and
 `PRACTICE_DIAG_SKIP_SAVE_INIT`) must stay out of normal builds. They can mask
 the real practice code path, and the save-init bypass presents as `SAVE DIS` /
 `LOAD DIS`.
+
+Do not CRC or dereference `DmaEntry.vRomAddress` from the save callback. On
+hardware it is not normal RDRAM and can crash on save; build IDs should use
+metadata or already-loaded RDRAM only.
 - `Practice_Save_ScratchBase()` returns that storage.
 - `practice_save.c` casts it through `Practice_SaveScratch()` and keeps a
   `PracticeSnapshotFitsScratch` compile-time size check.
