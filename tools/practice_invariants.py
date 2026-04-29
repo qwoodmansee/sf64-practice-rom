@@ -738,6 +738,50 @@ def check_overlay_build_id_no_rom_read():
         )
 
 
+def check_audio_spec_for_level_single_source():
+    """Phase 5: Practice_AudioSpecForLevel is the single source of truth for
+    LevelId -> packed (sfxLayout << 8) | spec dispatch. Defined exactly once
+    in practice_level.c, used by Practice_LaunchLevel (same file) and by
+    practice_save.c. The literal AUDIO_SET_SPEC table must NOT appear in
+    practice_save.c (where the previous static helper lived) so the table
+    cannot drift between save-side and launch-side.
+    """
+    level_src = read(PRACTICE_LEVEL)
+    if "u16 Practice_AudioSpecForLevel(" not in level_src:
+        error(
+            f"{PRACTICE_LEVEL}: Practice_AudioSpecForLevel definition missing "
+            "(check_audio_spec_for_level_single_source)"
+        )
+    if "Practice_AudioSpecForLevel(levelId)" not in level_src and \
+       "Practice_AudioSpecForLevel(gCurrentLevel)" not in level_src:
+        error(
+            f"{PRACTICE_LEVEL}: Practice_LaunchLevel must call "
+            "Practice_AudioSpecForLevel (check_audio_spec_for_level_single_source)"
+        )
+
+    save_src = read(PRACTICE_SAVE_C)
+    # Save side must call the helper, not maintain its own table.
+    if "Practice_AudioSpecForLevel(" not in save_src:
+        error(
+            f"{PRACTICE_SAVE_C}: must call Practice_AudioSpecForLevel for the "
+            "audio spec TLV (check_audio_spec_for_level_single_source)"
+        )
+    # The old static helper name must not return.
+    if re.search(r"\bPractice_AudioSpecPacked\b", save_src):
+        error(
+            f"{PRACTICE_SAVE_C}: leftover Practice_AudioSpecPacked reference; "
+            "use Practice_AudioSpecForLevel "
+            "(check_audio_spec_for_level_single_source)"
+        )
+    # AUDIO_SET_SPEC table must not be reintroduced in practice_save.c.
+    if re.search(r"\bAUDIO_SET_SPEC\s*\(", save_src):
+        error(
+            f"{PRACTICE_SAVE_C}: AUDIO_SET_SPEC must not appear here; route "
+            "through Practice_AudioSpecForLevel "
+            "(check_audio_spec_for_level_single_source)"
+        )
+
+
 def check_overlay_build_id_eager_init():
     """Phase 5: practice_overlay_prime_build_ids must exist and be called from
     Practice_Init AFTER Practice_Save_Init. Cross-scene loads compare a saved
@@ -1070,6 +1114,7 @@ def main():
     check_snapshot_gplayers_use_cam_count()
     check_overlay_build_id_no_rom_read()
     check_overlay_build_id_eager_init()
+    check_audio_spec_for_level_single_source()
     check_phase3_ram_detection()
     check_practice_pool_placement()
     check_practice_pool_no_overlay_overlap()

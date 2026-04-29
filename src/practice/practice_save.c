@@ -128,6 +128,7 @@ typedef struct PracticeScalarState {
     s32 prevEventActorIndex;
 
     u16 bgmSeqId;
+    u16 audioSpecPacked;
 } PracticeScalarState;
 
 typedef struct PracticeSnapshot {
@@ -158,75 +159,9 @@ static PracticeSnapshot* Practice_SaveScratch(void) {
 static uint32_t Practice_Save_Cb(void *buf, uint32_t buf_size);
 static int Practice_Load_Cb(const void *buf, uint32_t size);
 
-/*---------------------------------------------------------------------*/
-/* Mirrors Practice_LaunchLevel - packed u16 equivalent to AUDIO_SET_SPEC. */
-/*---------------------------------------------------------------------*/
-
-static u16 Practice_AudioSpecPacked(LevelId lid) {
-    u8 sfx;
-    u8 spec;
-
-    sfx = SFX_LAYOUT_DEFAULT;
-    switch (lid) {
-        case LEVEL_CORNERIA:
-            spec = AUDIOSPEC_CO;
-            break;
-        case LEVEL_METEO:
-            spec = AUDIOSPEC_ME;
-            break;
-        case LEVEL_TITANIA:
-            spec = AUDIOSPEC_TI;
-            break;
-        case LEVEL_AQUAS:
-            spec = AUDIOSPEC_AQ;
-            break;
-        case LEVEL_BOLSE:
-            spec = AUDIOSPEC_BO;
-            break;
-        case LEVEL_KATINA:
-            spec = AUDIOSPEC_KA;
-            break;
-        case LEVEL_AREA_6:
-            spec = AUDIOSPEC_A6;
-            break;
-        case LEVEL_SECTOR_Z:
-            spec = AUDIOSPEC_SZ;
-            break;
-        case LEVEL_FORTUNA:
-            spec = AUDIOSPEC_FO;
-            break;
-        case LEVEL_SECTOR_X:
-            spec = AUDIOSPEC_SX;
-            break;
-        case LEVEL_MACBETH:
-            spec = AUDIOSPEC_MA;
-            break;
-        case LEVEL_ZONESS:
-            spec = AUDIOSPEC_ZO;
-            break;
-        case LEVEL_SECTOR_Y:
-            spec = AUDIOSPEC_SY;
-            break;
-        case LEVEL_SOLAR:
-            sfx = SFX_LAYOUT_SO;
-            spec = AUDIOSPEC_SO;
-            break;
-        case LEVEL_TRAINING:
-            spec = AUDIOSPEC_TR;
-            break;
-        case LEVEL_VENOM_1:
-        case LEVEL_VENOM_2:
-            spec = AUDIOSPEC_VE;
-            break;
-        case LEVEL_VENOM_ANDROSS:
-            spec = AUDIOSPEC_AND;
-            break;
-        default:
-            spec = AUDIOSPEC_CO;
-            break;
-    }
-    return (u16)(((u16)sfx << 8) | (u16)spec);
-}
+/* Practice_AudioSpecForLevel lives in practice_level.c and is the single
+ * source of truth for level -> packed (sfxLayout << 8) | spec mapping.
+ * Used here for the save-side TLV field and for cross-scene load apply. */
 
 static void Snapshot_FillFromGame(PracticeSnapshot *sn) {
     s32 i;
@@ -352,6 +287,7 @@ static void Snapshot_FillFromGame(PracticeSnapshot *sn) {
     sn->scalars.prevEventActorIndex = gPrevEventActorIndex;
 
     sn->scalars.bgmSeqId = gBgmSeqId;
+    sn->scalars.audioSpecPacked = Practice_AudioSpecForLevel(gCurrentLevel);
 
     sn->valid = true;
     SAVE_TR_STAGE("fill done");
@@ -427,7 +363,7 @@ static uint32_t Practice_Save_Cb(void *buf, uint32_t buf_size) {
 
     audio_seq_pack = (u16)gBgmSeqId;
     PUT(buf_size, &wr, TAG_AUDIO_SEQ_ID, &audio_seq_pack, sizeof(u16));
-    audio_spec_packed = Practice_AudioSpecPacked(gCurrentLevel);
+    audio_spec_packed = snap->scalars.audioSpecPacked;
     PUT(buf_size, &wr, TAG_AUDIO_SPEC_PACKED, &audio_spec_packed, sizeof(u16));
     bank_voice_placeholder = 0;
     PUT(buf_size, &wr, TAG_AUDIO_BANK_VOICE, &bank_voice_placeholder, sizeof(u32));
@@ -674,7 +610,13 @@ static void Snapshot_ApplyToGame(const PracticeSnapshot *sn) {
 
     Audio_ClearVoice();
     SAVE_TR_STAGE("apply after Audio_ClearVoice");
-    /* Phase 5: apply TAG_AUDIO_SPEC_PACKED via Audio_SetAudioSpec (emit-only TLV in Phase 4). */
+    /* Reapply the saved audio spec so cross-scene loads land on the
+     * correct instrument bank, and so a same-scene save during a
+     * transitional moment still gets the bank we recorded. */
+    if (sn->scalars.audioSpecPacked != 0) {
+        Audio_SetAudioSpec(0, sn->scalars.audioSpecPacked);
+    }
+    SAVE_TR_STAGE("apply after Audio_SetAudioSpec");
     AUDIO_PLAY_BGM(sn->scalars.bgmSeqId);
     SAVE_TR_STAGE("apply after AUDIO_PLAY_BGM");
 }
@@ -782,10 +724,10 @@ static int Practice_Load_Cb(const void *buf, uint32_t size) {
                 break;
 
             case TAG_AUDIO_SPEC_PACKED:
-                /* Phase 4 emit-only - Phase 5: Audio_SetAudioSpec. */
                 if (len != sizeof(u16)) {
                     return -1;
                 }
+                sn->scalars.audioSpecPacked = *(const u16 *)data;
                 break;
 
             case TAG_AUDIO_BANK_VOICE:

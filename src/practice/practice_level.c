@@ -297,6 +297,35 @@ void Practice_LevelSelect_Draw(void) {
     }
 }
 
+u16 Practice_AudioSpecForLevel(LevelId levelId) {
+    u8 sfx = SFX_LAYOUT_DEFAULT;
+    u8 spec;
+
+    switch (levelId) {
+        case LEVEL_CORNERIA:      spec = AUDIOSPEC_CO;  break;
+        case LEVEL_METEO:         spec = AUDIOSPEC_ME;  break;
+        case LEVEL_TITANIA:       spec = AUDIOSPEC_TI;  break;
+        case LEVEL_AQUAS:         spec = AUDIOSPEC_AQ;  break;
+        case LEVEL_BOLSE:         spec = AUDIOSPEC_BO;  break;
+        case LEVEL_KATINA:        spec = AUDIOSPEC_KA;  break;
+        case LEVEL_AREA_6:        spec = AUDIOSPEC_A6;  break;
+        case LEVEL_SECTOR_Z:      spec = AUDIOSPEC_SZ;  break;
+        case LEVEL_FORTUNA:       spec = AUDIOSPEC_FO;  break;
+        case LEVEL_SECTOR_X:      spec = AUDIOSPEC_SX;  break;
+        case LEVEL_MACBETH:       spec = AUDIOSPEC_MA;  break;
+        case LEVEL_ZONESS:        spec = AUDIOSPEC_ZO;  break;
+        case LEVEL_SECTOR_Y:      spec = AUDIOSPEC_SY;  break;
+        case LEVEL_SOLAR:         sfx = SFX_LAYOUT_SO;
+                                  spec = AUDIOSPEC_SO;  break;
+        case LEVEL_TRAINING:      spec = AUDIOSPEC_TR;  break;
+        case LEVEL_VENOM_1:
+        case LEVEL_VENOM_2:       spec = AUDIOSPEC_VE;  break;
+        case LEVEL_VENOM_ANDROSS: spec = AUDIOSPEC_AND; break;
+        default:                  spec = AUDIOSPEC_CO;  break;
+    }
+    return (u16)(((u16)sfx << 8) | (u16)spec);
+}
+
 void Practice_LaunchLevel(LevelId levelId, s32 phase, f32 checkpointProgress) {
     sBgmPlaying = false;
     sBgmPlayPending = false;
@@ -308,27 +337,7 @@ void Practice_LaunchLevel(LevelId levelId, s32 phase, f32 checkpointProgress) {
 
     // Map_LevelStart_AudioSpecSetup lives in the menu overlay and is only callable from
     // GSTATE_MAP. Replicate its logic here so audio banks load correctly on any restart.
-    switch (levelId) {
-        case LEVEL_CORNERIA:      AUDIO_SET_SPEC(SFX_LAYOUT_DEFAULT, AUDIOSPEC_CO);  break;
-        case LEVEL_METEO:         AUDIO_SET_SPEC(SFX_LAYOUT_DEFAULT, AUDIOSPEC_ME);  break;
-        case LEVEL_TITANIA:       AUDIO_SET_SPEC(SFX_LAYOUT_DEFAULT, AUDIOSPEC_TI);  break;
-        case LEVEL_AQUAS:         AUDIO_SET_SPEC(SFX_LAYOUT_DEFAULT, AUDIOSPEC_AQ);  break;
-        case LEVEL_BOLSE:         AUDIO_SET_SPEC(SFX_LAYOUT_DEFAULT, AUDIOSPEC_BO);  break;
-        case LEVEL_KATINA:        AUDIO_SET_SPEC(SFX_LAYOUT_DEFAULT, AUDIOSPEC_KA);  break;
-        case LEVEL_AREA_6:        AUDIO_SET_SPEC(SFX_LAYOUT_DEFAULT, AUDIOSPEC_A6);  break;
-        case LEVEL_SECTOR_Z:      AUDIO_SET_SPEC(SFX_LAYOUT_DEFAULT, AUDIOSPEC_SZ);  break;
-        case LEVEL_FORTUNA:       AUDIO_SET_SPEC(SFX_LAYOUT_DEFAULT, AUDIOSPEC_FO);  break;
-        case LEVEL_SECTOR_X:      AUDIO_SET_SPEC(SFX_LAYOUT_DEFAULT, AUDIOSPEC_SX);  break;
-        case LEVEL_MACBETH:       AUDIO_SET_SPEC(SFX_LAYOUT_DEFAULT, AUDIOSPEC_MA);  break;
-        case LEVEL_ZONESS:        AUDIO_SET_SPEC(SFX_LAYOUT_DEFAULT, AUDIOSPEC_ZO);  break;
-        case LEVEL_SECTOR_Y:      AUDIO_SET_SPEC(SFX_LAYOUT_DEFAULT, AUDIOSPEC_SY);  break;
-        case LEVEL_SOLAR:         AUDIO_SET_SPEC(SFX_LAYOUT_SO,      AUDIOSPEC_SO);  break;
-        case LEVEL_TRAINING:      AUDIO_SET_SPEC(SFX_LAYOUT_DEFAULT, AUDIOSPEC_TR);  break;
-        case LEVEL_VENOM_1:
-        case LEVEL_VENOM_2:       AUDIO_SET_SPEC(SFX_LAYOUT_DEFAULT, AUDIOSPEC_VE);  break;
-        case LEVEL_VENOM_ANDROSS: AUDIO_SET_SPEC(SFX_LAYOUT_DEFAULT, AUDIOSPEC_AND); break;
-        default: break;
-    }
+    Audio_SetAudioSpec(0, Practice_AudioSpecForLevel(levelId));
 
     gNextGameState = GSTATE_PLAY;
     gDrawMode = DRAW_NONE;

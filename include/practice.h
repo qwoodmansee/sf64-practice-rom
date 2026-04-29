@@ -136,6 +136,11 @@ void Practice_LevelSelect_Draw(void);
 void Practice_LaunchLevel(LevelId levelId, s32 phase, f32 checkpointProgress);
 LevelId Practice_GetSelectedLevelId(void);
 s32 Practice_GetSelectedPhase(void);
+/* Packed (sfxLayout << 8) | spec for `levelId`, exactly the value
+ * AUDIO_SET_SPEC computes for a given level. Single source of truth for
+ * level -> audio bank dispatch; used by Practice_LaunchLevel, by save
+ * (TAG_AUDIO_SPEC_PACKED), and by cross-scene load apply. */
+u16 Practice_AudioSpecForLevel(LevelId levelId);
 
 /* practice_state.c */
 bool Practice_StateMenuIsOpen(void);
