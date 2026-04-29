@@ -142,9 +142,10 @@ void Practice_HeapAudit_Boot(void) {
 
     osSyncPrintf("[heap] boot memSz=%u bss~%u free~%u\n",
         osMemSize, span, (osMemSize > span) ? (osMemSize - span) : 0U);
-    osSyncPrintf("[heap] boot bump=%u pool=%08x poolsz=%u\n",
+    osSyncPrintf("[heap] boot bump=%u pool=%08x poolsz=%u slotcnt=%d disabled=%d\n",
         (u32)Practice_MemoryGetBumpUsed(), (u32)Practice_Save_SlotPoolBase(),
-        (u32)(RAM_SLOT_COUNT * MAX_STATE_SIZE));
+        (u32)(MAX_RAM_SLOTS_WITH_PAK * MAX_STATE_SIZE),
+        (int)gPracticeRamSlotCount, (int)gPracticeSaveDisabled);
     osSyncPrintf("[heap] ovl i1=%d i2=%d i3=%d\n",
         gPracticeOverlaySizes[0], gPracticeOverlaySizes[1], gPracticeOverlaySizes[2]);
     osSyncPrintf("[heap] ovl i4=%d i5=%d i6=%d\n",

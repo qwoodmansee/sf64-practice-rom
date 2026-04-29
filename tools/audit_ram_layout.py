@@ -165,6 +165,12 @@ def parse_map(path: str) -> list[Region]:
             )
         )
 
+    # Phase 3: Expansion Pak pool address. Sections at this VMA are above the
+    # 4 MB stock limit and are never part of the overlay load window. They are
+    # reported separately with kind "pak_pool" so the layout report shows them
+    # without triggering the overlap check against stock overlay slots.
+    PAK_POOL_VMA = 0x80400000
+
     # Custom practice-named sections: any section name starting with
     # ".practice" or whose name contains "practice_pool". These are the
     # ones the patch_linker_script tool injects.
@@ -174,6 +180,13 @@ def parse_map(path: str) -> list[Region]:
         if name.startswith(".buffers") or name.startswith(".audio") or name.startswith(".ast_") or name.startswith(".ovl_"):
             continue
         if name.startswith(".main") or name == ".dma_table" or name == ".makerom" or name == ".makerom_bss":
+            continue
+        # Phase 3: .practice_pool_pak at 0x80400000 is above the 4 MB stock
+        # ceiling. It doesn't compete with the overlay window; report it
+        # separately as a Pak-only pool (no overlap check against ovl_*).
+        if s >= PAK_POOL_VMA:
+            regions.append(Region(name, s, e, "pak_pool",
+                                  note="Expansion Pak only (above 4 MB)"))
             continue
         # Only flag sections that compete for RDRAM with the overlay window
         # (i.e. sit below the .buffers wall). Sections at low addresses
@@ -218,7 +231,11 @@ def find_overlaps(
     regions: list[Region],
 ) -> list[tuple[Region, Region, int]]:
     """Return overlaps between practice regions and overlays, plus
-    practice-vs-dynamic-load-window overlaps as synthetic Region pairs."""
+    practice-vs-dynamic-load-window overlaps as synthetic Region pairs.
+
+    pak_pool regions (0x80400000+) are excluded: they are above the 4 MB
+    stock ceiling and cannot overlap the overlay load window by design.
+    """
     practice = [r for r in regions if r.kind == "practice"]
     overlays = [r for r in regions if r.kind == "overlay"]
 
@@ -255,7 +272,11 @@ def find_overlaps(
 def find_gaps(regions: list[Region]) -> list[tuple[int, int, str, str]]:
     """Return free-RAM gaps between consecutive non-overlapping static
     regions. Overlays all share a base address so we only walk the
-    static/practice/wall regions for gap analysis."""
+    static/practice/wall regions for gap analysis.
+
+    pak_pool regions (0x80400000+) are not in the stock address space and
+    are excluded from gap analysis (they have their own contiguous range).
+    """
     fixed = sorted(
         (r for r in regions if r.kind in ("static", "practice", "wall")),
         key=lambda r: r.start,
@@ -309,6 +330,18 @@ def render_report(map_path: str, regions: list[Region]) -> str:
             f"{fmt_addr(wall.start)}  "
             f"({_human_size(wall.start - ovl_min_start)} free for overlay+asset DMA)"
         )
+
+    # Show Pak pool regions separately (above 4 MB, not part of stock map).
+    pak_regions = [r for r in regions if r.kind == "pak_pool"]
+    if pak_regions:
+        out.append("")
+        out.append("EXPANSION PAK POOL (above 4 MB stock ceiling, Pak-only):")
+        for r in pak_regions:
+            size_str = _human_size(r.size)
+            out.append(
+                f"  {r.name:<{name_w}}  {fmt_addr(r.start)} - {fmt_addr(r.end)}  "
+                f"(size {size_str:>10})  [{r.note}]"
+            )
 
     overlaps = find_overlaps(regions)
     out.append("")

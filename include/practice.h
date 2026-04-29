@@ -82,6 +82,12 @@ extern s32 gPracticeSlotValidBits;
 extern s32 gPracticeLastSaveResult;
 extern s32 gPracticeLastLoadResult;
 
+/* Phase 3 — RAM slot pool selection (set by Practice_Save_Init at boot).
+ * gPracticeRamSlotCount: 0 = stock 4 MB (save disabled), 4 = Expansion Pak.
+ * gPracticeSaveDisabled: non-zero when save/load is structurally impossible. */
+extern s32 gPracticeRamSlotCount;
+extern s32 gPracticeSaveDisabled;
+
 /* practice_heap_audit.c — Phase 4 §7 (IS-Viewer heap / memory pressure). */
 extern s32 gPracticeMaxMemAllocHWM;
 extern s32 gPracticeFreeRamLow;

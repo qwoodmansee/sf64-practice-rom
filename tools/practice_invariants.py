@@ -606,61 +606,146 @@ def check_phase4_engine_hooks():
         )
 
 
-def check_practice_pool_placement():
-    """practice_save.o BSS must be in .practice_pool (after .dma_table).
+def check_phase3_ram_detection():
+    """Phase 3: Practice_Save_Init must detect osMemSize and gate save/load.
 
-    When sSlotPool is large (>= ~0xec0 bytes from the start of practice_save BSS)
-    and lives in .main_bss, BSS zero-init at boot zeroes the .dma_table region,
-    corrupting all DMA loads. The fix: practice_save.o(.bss) is placed in a
-    dedicated .practice_pool section after .dma_table in the linker script.
+    On stock 4 MB (osMemSize != 0x800000): gPracticeSaveDisabled must be set
+    and slot_manager_init must NOT be called. On Expansion Pak (0x800000):
+    the Pak pool at 0x80400000 must be used.
+
+    This check ensures the osMemSize gate is present and the pool selection
+    uses the correct constants.
+    """
+    src = read(PRACTICE_SAVE_C)
+
+    # osMemSize check must be present.
+    if "osMemSize" not in src:
+        error(f"{PRACTICE_SAVE_C}: osMemSize check missing in Practice_Save_Init "
+              "(check_phase3_ram_detection)")
+
+    # 0x800000 is the Expansion Pak size sentinel.
+    if "0x800000" not in src:
+        error(f"{PRACTICE_SAVE_C}: Expansion Pak sentinel 0x800000 missing "
+              "(check_phase3_ram_detection)")
+
+    # gPracticeSaveDisabled must be set when stock.
+    if "gPracticeSaveDisabled" not in src:
+        error(f"{PRACTICE_SAVE_C}: gPracticeSaveDisabled not used in practice_save.c "
+              "(check_phase3_ram_detection)")
+
+    # gPracticeRamSlotCount must be set at boot.
+    if "gPracticeRamSlotCount" not in src:
+        error(f"{PRACTICE_SAVE_C}: gPracticeRamSlotCount not set in practice_save.c "
+              "(check_phase3_ram_detection)")
+
+    # sSlotPoolPak must be the pool variable (not the old sSlotPool).
+    if "sSlotPoolPak" not in src:
+        error(f"{PRACTICE_SAVE_C}: sSlotPoolPak pool variable missing "
+              "(check_phase3_ram_detection)")
+
+    # The old sSlotPool name must not appear (regression guard).
+    import re as _re
+    # Allow 'sSlotPoolPak' but not bare 'sSlotPool' without 'Pak' suffix.
+    if _re.search(r'\bsSlotPool\b(?!Pak)', src):
+        error(f"{PRACTICE_SAVE_C}: old bare sSlotPool variable still referenced; "
+              "rename to sSlotPoolPak (check_phase3_ram_detection)")
+
+    # Practice_SaveStateSlot must guard on gPracticeSaveDisabled.
+    save_fn_match = _re.search(
+        r"void\s+Practice_SaveStateSlot\s*\(.*?\)\s*\{(.*?)^void\s",
+        src, _re.DOTALL | _re.MULTILINE,
+    )
+    if save_fn_match and "gPracticeSaveDisabled" not in save_fn_match.group(1):
+        error(f"{PRACTICE_SAVE_C}: Practice_SaveStateSlot must check gPracticeSaveDisabled "
+              "(check_phase3_ram_detection)")
+
+    # Practice_LoadStateSlot must guard on gPracticeSaveDisabled.
+    load_fn_match = _re.search(
+        r"void\s+Practice_LoadStateSlot\s*\(.*?\)\s*\{(.*?)^void\s",
+        src, _re.DOTALL | _re.MULTILINE,
+    )
+    if load_fn_match and "gPracticeSaveDisabled" not in load_fn_match.group(1):
+        error(f"{PRACTICE_SAVE_C}: Practice_LoadStateSlot must check gPracticeSaveDisabled "
+              "(check_phase3_ram_detection)")
+
+
+def check_practice_pool_placement():
+    """Phase 3: practice_save.o BSS must be in .practice_pool_pak at 0x80400000.
+
+    The Expansion Pak pool lives above the 4 MB stock limit, so it never
+    conflicts with the overlay load window [0x8019ae40, 0x80281000). On stock
+    4 MB hardware save/load is disabled at runtime; the pool address is never
+    accessed. On Expansion Pak hardware the pool is valid and safe.
+
+    The old .practice_pool (placed after .dma_table, within the overlay window)
+    must NOT appear in a Phase-3-or-later linker script.
     """
     linker = "linker_scripts/us/rev1/starfox64.ld"
     if not os.path.isfile(linker):
         return
     ld = read(linker)
-    if ".practice_pool" not in ld:
+
+    # Must have the new Pak section.
+    if ".practice_pool_pak" not in ld:
         error(
-            f"{linker}: .practice_pool section missing; "
+            f"{linker}: .practice_pool_pak section missing; "
             "run tools/patch_linker_script.py (check_practice_pool_placement)"
         )
-    # practice_save.o(.bss) must NOT appear inside .main_bss (only in .practice_pool).
+
+    # Must be at 0x80400000 (above 4 MB stock ceiling).
+    if "0x80400000" not in ld or (".practice_pool_pak" in ld and "0x80400000" not in ld):
+        error(
+            f"{linker}: .practice_pool_pak must be explicitly placed at VMA 0x80400000 "
+            "(check_practice_pool_placement)"
+        )
+
+    # Old .practice_pool (stock window placement) must not coexist.
+    # Allow the comment referencing .practice_pool_pak to contain the substring
+    # '.practice_pool' as part of the name; only flag a standalone section header.
+    import re as _re
+    if _re.search(r"^\s*\.practice_pool\s+\(NOLOAD\)", ld, _re.MULTILINE):
+        error(
+            f"{linker}: old .practice_pool (NOLOAD) section still present; "
+            "it must be replaced with .practice_pool_pak 0x80400000 "
+            "(check_practice_pool_placement)"
+        )
+
+    # practice_save.o(.bss) must NOT appear inside .main_bss (only in .practice_pool_pak).
     main_bss_start = ld.find(".main_bss")
     main_bss_end = ld.find("main_VRAM_END", main_bss_start) if main_bss_start >= 0 else -1
-    practice_pool_start = ld.find(".practice_pool")
     if main_bss_start >= 0 and main_bss_end >= 0:
         main_bss_block = ld[main_bss_start:main_bss_end]
         if "practice_save.o(.bss)" in main_bss_block:
             error(
                 f"{linker}: practice_save.o(.bss) is inside .main_bss; "
-                "it must be moved to .practice_pool to avoid clobbering gDmaTable "
+                "it must be moved to .practice_pool_pak to avoid clobbering gDmaTable "
                 "(check_practice_pool_placement)"
             )
-    pool_section_start = ld.find(".practice_pool (NOLOAD)")
-    if pool_section_start >= 0:
-        pool_section_block = ld[pool_section_start:pool_section_start + 600]
+
+    # Do not use ld.find(".practice_pool_pak"): the substring appears first inside
+    # the /* ... .practice_pool_pak ... */ comment in .main_bss, before the real
+    # SECTION header line (.practice_pool_pak 0x80400000).
+    pool_section_anchor = ld.find(".practice_pool_pak 0x80400000")
+    if pool_section_anchor >= 0:
+        pool_section_block = ld[pool_section_anchor:pool_section_anchor + 600]
         if "practice_save.o(.bss)" not in pool_section_block:
             error(
-                f"{linker}: .practice_pool section does not contain practice_save.o(.bss) "
+                f"{linker}: .practice_pool_pak section does not contain practice_save.o(.bss) "
                 "(check_practice_pool_placement)"
             )
 
 
 def check_practice_pool_no_overlay_overlap():
-    """Warn if any practice-owned BSS section overlaps an overlay slot.
+    """Phase 3: practice BSS sections must not overlap the overlay load window.
 
-    SF64 streams overlays + scene assets into a fixed RAM slot starting at
-    SEGMENT_VRAM_START(ovl_i1). Any practice-defined NOLOAD section that lands
-    in that slot will be clobbered by overlay loads (or vice versa: a practice
-    bzero will wipe a live overlay's code/data).
+    With .practice_pool_pak placed at 0x80400000 (above 4 MB), the pool is
+    completely outside the overlay load window [0x8019ae40, 0x80281000) and
+    no overlap is expected. Any overlap is now a hard error (not a warning):
+    if it regresses, the save-state data would be silently clobbered by
+    overlay loads.
 
-    This is reported as a non-fatal warning rather than a hard error: the user
-    knows save state is structurally blocked on the Wave 6 audit, and gating
-    every commit on the layout fix would block unrelated work. Once a final
-    layout lands and removes the overlap, this warning will silently disappear.
-
-    Logic delegated to tools/audit_ram_layout.py so the report and the gate
-    stay in sync. Skips silently if the map file is missing (e.g. fresh checkout
-    without a build) — matches the pattern in check_practice_pool_placement.
+    Logic delegated to tools/audit_ram_layout.py. Skips silently if the map
+    file is missing (e.g. fresh checkout without a build).
     """
     map_path = "build/starfox64.us.rev1.map"
     if not os.path.isfile(map_path):
@@ -682,15 +767,14 @@ def check_practice_pool_no_overlay_overlap():
     if not overlaps:
         return
 
-    # Collapse to one warning per practice section: the per-overlay detail is
-    # in audit_ram_layout's full report; here we just want a one-line nudge.
+    # Collapse to one error per practice section.
     by_practice = {}
     for p, o, n in overlaps:
         by_practice.setdefault(p.name, []).append((o.name, n))
 
     for pname, hits in by_practice.items():
         worst_overlay, worst_size = max(hits, key=lambda t: t[1])
-        warning(
+        error(
             f"{pname} overlaps overlay/asset load region "
             f"(largest: {worst_overlay} by {audit_ram_layout._human_size(worst_size)}); "
             f"run `python3 tools/audit_ram_layout.py` for the full report "
@@ -803,6 +887,7 @@ def main():
     check_max_state_size_budget()
     check_phase4_engine_hooks()
     check_sys_memory_practice_bump_getter()
+    check_phase3_ram_detection()
     check_practice_pool_placement()
     check_practice_pool_no_overlay_overlap()
     check_practice_text_glyphs()

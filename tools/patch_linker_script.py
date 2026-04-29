@@ -67,16 +67,22 @@ LIB_FATFS_OBJS = [
 
 ANCHOR = "build/src/engine/fox_save.o"
 
-# Inserted after dma_table_VRAM_END so sSlotPool cannot clobber gDmaTable.
+# Phase 3: Expansion Pak slot pool at 0x80400000 (above 4 MB stock limit).
+# Inserted after dma_table_VRAM_END so practice_save.o(.bss) does not
+# clobber gDmaTable during BSS zero-init. The VMA 0x80400000 is only
+# reachable with an Expansion Pak; on stock 4 MB hardware save/load is
+# disabled at runtime and this memory is never accessed.
 PRACTICE_POOL_SECTION = """\
-    /* practice_save.o BSS lives here so it cannot clobber gDmaTable.
-     * sSlotPool (up to 512 KB) would overlap gDmaTable in .main_bss. */
-    .practice_pool (NOLOAD) : SUBALIGN(8)
+    /* Phase 3: Expansion Pak slot pool at 0x80400000 (above 4 MB stock).
+     * sSlotPoolPak (4 * 256 KB = 1 MB) lives here; unreachable on stock 4 MB.
+     * Linker extracts practice_save.o(.bss) into this VMA so it
+     * does not clobber gDmaTable (which follows dma_table_VRAM_END in stock). */
+    .practice_pool_pak 0x80400000 (NOLOAD) : SUBALIGN(8)
     {
-        practice_pool_BSS_START = .;
+        practice_pool_pak_BSS_START = .;
         build/src/practice/practice_save.o(.bss);
         . = ALIGN(., 8);
-        practice_pool_BSS_END = .;
+        practice_pool_pak_BSS_END = .;
     }
 """
 
@@ -215,10 +221,20 @@ def patch():
             content = _replace_after_anchor(content, anchor_line, injection)
         inject_count += 1
 
-    # Inject .practice_pool section after dma_table_VRAM_END if not present.
+    # Inject .practice_pool_pak section after dma_table_VRAM_END if not present.
     # Also remove practice_save.o(.bss) from .main_bss — it must live in
-    # .practice_pool to avoid clobbering gDmaTable during BSS zero-init.
-    if ".practice_pool" not in content:
+    # .practice_pool_pak at 0x80400000 to avoid clobbering gDmaTable during
+    # BSS zero-init. On stock 4 MB hardware the pool is never accessed.
+    if ".practice_pool_pak" not in content:
+        # Also remove the old .practice_pool section if it exists (migration).
+        if ".practice_pool" in content and ".practice_pool_pak" not in content:
+            # Replace the old section header with the new one via PRACTICE_POOL_SECTION.
+            old_pool_re_pat = (
+                r"    /\* practice_save\.o BSS lives here.*?\}\n?"
+            )
+            import re as _re
+            content = _re.sub(old_pool_re_pat, "", content, count=1, flags=_re.DOTALL)
+
         anchor_line = "    dma_table_VRAM_END = .;"
         needle = anchor_line + "\n"
         replacement = anchor_line + "\n\n" + PRACTICE_POOL_SECTION
@@ -226,11 +242,11 @@ def patch():
         if new_content == content:
             raise RuntimeError(
                 "Linker patcher: dma_table_VRAM_END anchor not found for "
-                ".practice_pool injection."
+                ".practice_pool_pak injection."
             )
         # Remove practice_save.o(.bss) from .main_bss and leave a comment.
         save_bss = "        build/src/practice/practice_save.o(.bss);\n"
-        save_comment = "        /* practice_save BSS is in .practice_pool (after .dma_table). */\n"
+        save_comment = "        /* practice_save BSS is in .practice_pool_pak (0x80400000, Pak only). */\n"
         if save_bss in new_content:
             new_content = new_content.replace(save_bss, save_comment, 1)
         content = new_content

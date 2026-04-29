@@ -17,11 +17,28 @@
 #define PRACTICE_SAVE_SELFTEST 0
 #endif
 
-/* Slot pool: placed via linker script in .practice_pool (after .dma_table)
- * to prevent BSS zero-init from clobbering gDmaTable. Explicitly zeroed
- * in Practice_Save_Init. */
-static u8 sSlotPool[RAM_SLOT_COUNT * MAX_STATE_SIZE]
+/* Phase 3 -- Expansion Pak slot pool at 0x80400000.
+ *
+ * The linker script places practice_save.o(.bss) in .practice_pool_pak
+ * at VMA 0x80400000, above the 4 MB stock limit. On stock 4 MB hardware
+ * this address is invalid and save/load is disabled at runtime
+ * (gPracticeSaveDisabled). On Expansion Pak hardware (osMemSize == 0x800000)
+ * the pool lives safely above the overlay load window and well below the
+ * 8 MB ceiling (0x80800000).
+ *
+ * BSS zero-init for this section is performed by the OS at cold boot.
+ * We do NOT call bzero() on it from practice code. */
+/* The linker script places practice_save.o(.bss) in .practice_pool_pak at
+ * VMA 0x80400000, so this array lands there automatically without needing a
+ * section attribute. The SUBALIGN(8) in the linker script ensures alignment. */
+static u8 sSlotPoolPak[MAX_RAM_SLOTS_WITH_PAK * MAX_STATE_SIZE]
     __attribute__((aligned(8)));
+
+/* Detected at boot from osMemSize. 0 = stock (save disabled), 4 = Pak. */
+s32 gPracticeRamSlotCount;
+
+/* Set when save/load is structurally impossible (stock 4 MB). */
+s32 gPracticeSaveDisabled;
 
 s32 gPracticeActiveSlot;
 s32 gPracticeSlotValidBits;
@@ -1120,19 +1137,52 @@ s32 Practice_CanSaveHere(void) {
 }
 
 void Practice_Save_Init(void) {
-    /* Do NOT bzero(sSlotPool, ...) here. The .practice_pool BSS region
-     * (0x8018c940-0x8020c950) overlaps the dynamic overlay/asset load region
-     * (starts at 0x8019ae50). By the time this runs, SCENE_TITLE has already
-     * loaded ovl_menu + ast_text into that range; bzero would wipe them, and
-     * Load_SceneFiles for SCENE_MAP would not reload (same overlay, cached
-     * sCurrentScene), leaving the level-select with garbage textures.
-     * BSS is zero at cold boot anyway. Saving a state will still clobber
-     * overlays - gated by the hardware audit (Wave 6) to fix the layout. */
-    slot_manager_init(STATE_VERSION, LIB_VERSION, Practice_Save_Cb, Practice_Load_Cb, RAM_SLOT_COUNT);
+    /* Phase 3 -- runtime slot pool selection based on Expansion Pak detection.
+     *
+     * osMemSize is set by the N64 OS during boot:
+     *   0x00400000 (4 MB)  -- stock RAM, no Expansion Pak
+     *   0x00800000 (8 MB)  -- Expansion Pak installed
+     *
+     * On stock 4 MB hardware:
+     *   - sSlotPoolPak lives at 0x80400000 which is above the addressable
+     *     memory; accessing it would cause a bus error / machine check.
+     *   - We set gPracticeSaveDisabled=1 and skip slot_manager_init entirely.
+     *
+     * On Expansion Pak:
+     *   - sSlotPoolPak at 0x80400000 is valid, above the overlay load window
+     *     (worst case high-water 0x8028a210 for Titania setup 5), and below
+     *     the 8 MB ceiling at 0x80800000.
+     *   - The 1 MB pool (4 slots x 256 KB) fits with ~3.5 MB headroom.
+     *
+     * We do NOT call bzero() on sSlotPoolPak here. The .practice_pool_pak
+     * NOLOAD section is zero at cold boot courtesy of the N64 OS BSS clear.
+     * A runtime bzero of Pak memory during title-screen init is harmless
+     * (overlays never load above 0x80281000 on stock; Pak users never run
+     * with the pool full at boot), but it is unnecessary work. */
 
-    if (slot_manager_set_ram_storage(sSlotPool, (uint32_t)sizeof(sSlotPool), MAX_STATE_SIZE) != SLOT_MANAGER_OK) {
+    gPracticeRamSlotCount = (osMemSize == 0x800000) ? MAX_RAM_SLOTS_WITH_PAK : MAX_RAM_SLOTS_NO_PAK;
+
+    if (gPracticeRamSlotCount == 0) {
+        /* Stock 4 MB: save/load not supported. */
+        gPracticeSaveDisabled = 1;
+        osSyncPrintf("[practice_save] stock 4MB RAM: save/load disabled (no Expansion Pak)\n");
+        gPracticeActiveSlot = 0;
+        gPracticeSlotValidBits = 0;
+        gPracticeLastSaveResult = 0;
+        gPracticeLastLoadResult = 0;
+        return;
+    }
+
+    gPracticeSaveDisabled = 0;
+
+    slot_manager_init(STATE_VERSION, LIB_VERSION, Practice_Save_Cb, Practice_Load_Cb, gPracticeRamSlotCount);
+
+    if (slot_manager_set_ram_storage(sSlotPoolPak, (uint32_t)sizeof(sSlotPoolPak), MAX_STATE_SIZE) != SLOT_MANAGER_OK) {
         osSyncPrintf("[practice_save] Practice_Save_Init slot_manager_set_ram_storage failed\n");
     }
+
+    osSyncPrintf("[practice_save] Expansion Pak: %d slots at %p (osMemSize=0x%08x)\n",
+                 gPracticeRamSlotCount, sSlotPoolPak, (unsigned)osMemSize);
 
     gPracticeActiveSlot = 0;
     gPracticeSlotValidBits = 0;
@@ -1147,13 +1197,19 @@ void Practice_Save_Init(void) {
 void Practice_ClearCheckpoint(void) {
     s32 i;
 
-    for (i = 0; i < RAM_SLOT_COUNT; i++) {
+    if (gPracticeSaveDisabled) {
+        return;
+    }
+    for (i = 0; i < gPracticeRamSlotCount; i++) {
         slot_manager_clear_ram(i);
     }
     gPracticeSlotValidBits = 0;
 }
 
 s32 Practice_HasCheckpoint(void) {
+    if (gPracticeSaveDisabled) {
+        return 0;
+    }
     return slot_manager_ram_valid(gPracticeActiveSlot) ? 1 : 0;
 }
 
@@ -1162,7 +1218,7 @@ static void SyncValidBits(void) {
     u32 bits;
 
     bits = 0;
-    for (i = 0; i < RAM_SLOT_COUNT; i++) {
+    for (i = 0; i < gPracticeRamSlotCount; i++) {
         if (slot_manager_ram_valid(i)) {
             bits |= (u32)((u32)1u << i);
         }
@@ -1175,7 +1231,12 @@ void Practice_SaveStateSlot(s32 slot) {
 
     gPracticeLastSaveResult = SLOT_MANAGER_ERR_INVALID_SLOT;
 
-    if ((slot < 0) || (slot >= RAM_SLOT_COUNT)) {
+    if (gPracticeSaveDisabled) {
+        osSyncPrintf("[save] disabled: no Expansion Pak (stock 4MB)\n");
+        return;
+    }
+
+    if ((slot < 0) || (slot >= gPracticeRamSlotCount)) {
         osSyncPrintf("[save] refuse: bad slot=%d\n", slot);
         return;
     }
@@ -1201,7 +1262,12 @@ void Practice_LoadStateSlot(s32 slot) {
 
     gPracticeLastLoadResult = SLOT_MANAGER_ERR_INVALID_SLOT;
 
-    if ((slot < 0) || (slot >= RAM_SLOT_COUNT)) {
+    if (gPracticeSaveDisabled) {
+        osSyncPrintf("[load] disabled: no Expansion Pak (stock 4MB)\n");
+        return;
+    }
+
+    if ((slot < 0) || (slot >= gPracticeRamSlotCount)) {
         return;
     }
     if (!slot_manager_ram_valid(slot)) {
@@ -1235,7 +1301,7 @@ void Practice_CycleSlot(s32 delta) {
 }
 
 uintptr_t Practice_Save_SlotPoolBase(void) {
-    return (uintptr_t)sSlotPool;
+    return (uintptr_t)sSlotPoolPak;
 }
 
 #endif /* PRACTICE_ROM */
