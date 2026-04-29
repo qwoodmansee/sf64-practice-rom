@@ -745,6 +745,9 @@ completion to the executor.
   ROM also skips `Practice_ApplyStartConditions()` for Aquas so player/team
   config writes and the practice BGM restart are removed from the level setup
   path.
+- Aquas still crashed after skipping `Practice_ApplyStartConditions()`. The next
+  diagnostic ROM skips `Practice_Save_Init()` at boot so the Expansion Pak slot
+  pool and slot-manager selftest are not touched before Aquas starts.
 - Local verification passed: static invariants, practice ROM build, host
   `lib-test`, and whitespace check.
 - BizHawk rows below are still pending on this machine because BizHawk is not

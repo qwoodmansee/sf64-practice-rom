@@ -3,6 +3,8 @@
 
 #ifdef PRACTICE_ROM
 
+#define PRACTICE_DIAG_SKIP_SAVE_INIT 1
+
 PracticeScreen gPracticeScreen;
 PracticeConfig gPracticeConfig;
 PracticeMenuState gPracticeMenuState;
@@ -52,7 +54,11 @@ void Practice_Init(void) {
     }
 
     Practice_SlotTest_Run();
+#if PRACTICE_DIAG_SKIP_SAVE_INIT
+    osSyncPrintf("[practice_save] diagnostic: save init skipped\n");
+#else
     Practice_Save_Init();
+#endif
     Practice_HeapAudit_Boot();
 
 #ifdef IODEV_DIAG_FATFS
