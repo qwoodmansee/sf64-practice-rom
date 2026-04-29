@@ -4808,7 +4808,9 @@ void Player_Setup(Player* playerx) {
     }
 
 #ifdef PRACTICE_ROM
-    Practice_ApplyStartConditions();
+    if (gCurrentLevel != LEVEL_AQUAS) {
+        Practice_ApplyStartConditions();
+    }
 #endif
 
     player->sfx.levelType = gLevelType;

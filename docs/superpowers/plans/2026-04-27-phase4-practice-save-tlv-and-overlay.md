@@ -741,6 +741,10 @@ completion to the executor.
   keeping the low-rate `[aq_hb]` heartbeat. If this build stops freezing, the
   fault is in per-frame practice update logic; if it still freezes, the fault is
   below the practice runtime path.
+- Aquas still crashed with the practice runtime bypassed. The next diagnostic
+  ROM also skips `Practice_ApplyStartConditions()` for Aquas so player/team
+  config writes and the practice BGM restart are removed from the level setup
+  path.
 - Local verification passed: static invariants, practice ROM build, host
   `lib-test`, and whitespace check.
 - BizHawk rows below are still pending on this machine because BizHawk is not
