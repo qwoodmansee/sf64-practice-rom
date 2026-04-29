@@ -8,7 +8,9 @@ Run AFTER the automated tests pass.
 Per `CLAUDE.md`'s `Debug printf over SC64 IS-Viewer 64` workflow:
 
 1. Terminal A: `sc64deployer debug --isv 0x03FF0000`
-2. Terminal B: `sc64dev` (alias for build + upload — see `~/.zshrc`)
+2. Terminal B: from the repo (any subdirectory), `./tools/sc64dev` — discovers
+   the Makefile with `practice:` and runs `make practice -j4` + upload. See
+   `./tools/sc64dev help` and `CLAUDE.md` (optional `SF64_REPO_ROOT` for odd cwd).
 3. Press the physical N64 reset button after upload.
 
 ## Test 1: Cart detection

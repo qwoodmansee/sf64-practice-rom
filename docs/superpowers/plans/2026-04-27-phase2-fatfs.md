@@ -1185,7 +1185,7 @@ Either path produces the same IS-Viewer output for the user to capture. Path B d
    make practice -j4 IODEV_DIAG=1
    ```
 
-2. Boot the ROM (`sc64dev` per project workflow).
+2. Boot the ROM (`./tools/sc64dev` from the repo; see `tools/sc64dev help`).
 
 3. Capture IS-Viewer output. After Phase 1b's tests, expect:
    ```

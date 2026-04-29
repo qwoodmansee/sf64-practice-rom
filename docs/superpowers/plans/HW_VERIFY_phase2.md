@@ -38,7 +38,7 @@ modes" below for triage hints.
 3. **Upload the ROM (Terminal B), then press the physical reset button on
    the N64:**
    ```bash
-   sc64dev   # or however your project workflow uploads
+   ./tools/sc64dev   # repo-root discovery; see ./tools/sc64dev help
    ```
 
 4. **Capture Terminal A output.** Expected on a healthy run:

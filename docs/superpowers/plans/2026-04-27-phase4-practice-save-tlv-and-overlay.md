@@ -7,6 +7,21 @@
 
 ## 0. Status & input artefacts
 
+### 0.0 Agent handoff — what shipped (successors read this)
+
+The narrative in §0.1–0.3 below is **historical** (Wave 2.x sequencing and the
+old low-RAM `.practice_pool` overlap). For **current** behaviour when extending
+save/load or debugging hardware:
+
+| Topic | Where / what |
+|-------|----------------|
+| RAM layout | Save **control globals** in `practice_save.c` `.main_bss`. **Slot TLV bytes** live in `practice_save_slotpool.c` (VMA `0x80400000`, Expansion Pak only). `Practice_Save_Init` gates on `osMemSize >= 0x00800000`. |
+| HW verify procedure | `docs/superpowers/plans/HW_VERIFY_phase4.md` — updated for Pak pool, `./tools/sc64dev`, optional save/load with trace. |
+| Silent save crashes | Never allocate `PracticeSnapshot` on the **game thread stack** — use static `gPracticeSaveScratch` in `practice_save.c`. |
+| ISV bracketing | `make practice PRACTICE_SAVE_TRACE=1` — `[save_tr]` stages; skill `.claude/skills/practice-hw-isv-trace/SKILL.md`. |
+| Hotkeys | `PSCREEN_GAMEPLAY` only — player must launch via **practice level select → A** (`Practice_LaunchLevel`). Heap can show `PLAY_UPDATE` while `gPracticeScreen` is still level-select if they used the vanilla map. |
+| Flash helper | `./tools/sc64dev` from any repo subdir or worktree (`SF64_REPO_ROOT` if discovery fails). |
+
 ### 0.1 Wave-by-wave landed status
 
 - Wave 1 (skeleton + scaffolding) — landed (`62ebae7`).
@@ -29,6 +44,11 @@
   renders wrong" workflow that points at the audit tool.
 
 ### 0.3 Layout decision — Phase 2 committed
+
+**Implementation today:** matches the **Expansion Pak** branch below via
+`practice_save_slotpool.c` + `Practice_Save_Init`; stock stays disabled. See
+**§0.0** for filenames and agent shortcuts — this subsection is the original
+audit rationale.
 
 **Finding:** Phase 1 audit shows stock 4 MB cannot accommodate a save-state pool above the dynamic load window. Titania setup 5 (worst case) reaches 0x8028a210, which is 37 KB above `buffers_VRAM` (0x80281000). Headroom = −53 KB.
 

@@ -49,7 +49,8 @@ before level select, or broken level launch is a regression to investigate.
 
 ## Optional SC64 sanity
 
-On SC64, confirm the normal boot log still appears:
+Flash with `./tools/sc64dev` from the repo (same as Phase 1a/2). On SC64,
+confirm the normal boot log still appears:
 
 ```text
 === PRACTICE ROM boot @ <date> <time> ===

@@ -914,7 +914,7 @@ Run AFTER the automated tests pass.
 Per `CLAUDE.md`'s `Debug printf over SC64 IS-Viewer 64` workflow:
 
 1. Terminal A: `sc64deployer debug --isv 0x03FF0000`
-2. Terminal B: `sc64dev` (alias for build + upload — see `~/.zshrc`)
+2. Terminal B: `./tools/sc64dev` from the repo (see `CLAUDE.md` / `tools/sc64dev help`)
 3. Press the physical N64 reset button after upload.
 
 ## Test 1: Cart detection

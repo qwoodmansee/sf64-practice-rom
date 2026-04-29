@@ -29,7 +29,7 @@ Output file: docs/superpowers/plans/HW_VERIFY_phase<N>.md
 Setup:
   Terminal A: sc64deployer debug --isv 0x03FF0000
               (wait for "Listening on...")
-  Terminal B: sc64dev   (builds + uploads)
+  Terminal B: ./tools/sc64dev   (build + upload; works from worktrees — see tools/sc64dev help)
               Then press physical N64 reset button
 
 Procedure:
