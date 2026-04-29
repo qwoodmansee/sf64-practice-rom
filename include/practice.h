@@ -194,6 +194,23 @@ void Practice_SaveStateSlot(s32 slot);
 void Practice_LoadStateSlot(s32 slot);
 s32  Practice_GetActiveSlot(void);
 void Practice_CycleSlot(s32 delta);
+/* Per-frame poll for the cross-scene load state machine. Cheap: bails
+ * immediately when no transition is pending. Called from Practice_Update. */
+void Practice_Save_Tick(void);
+
+/* Per-slot metadata captured at save time. */
+typedef struct PracticeSlotMeta {
+    bool    valid;
+    LevelId level;
+    s32     phase;
+    s32     frameStamp;
+} PracticeSlotMeta;
+
+/* Cross-scene load state machine state. */
+typedef enum PracticeCrossLoadState {
+    XLOAD_IDLE,
+    XLOAD_AWAIT_SCENE_LOAD,
+} PracticeCrossLoadState;
 
 /* practice_heap_audit.c */
 void Practice_HeapAudit_Boot(void);

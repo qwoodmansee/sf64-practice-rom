@@ -63,6 +63,7 @@ void Practice_Init(void) {
 
 void Practice_Update(void) {
     Practice_HeapAudit_PerFrame();
+    Practice_Save_Tick();
 
     switch (gPracticeScreen) {
         case PSCREEN_LEVEL_SELECT:

@@ -738,6 +738,54 @@ def check_overlay_build_id_no_rom_read():
         )
 
 
+def check_phase5_state_machine_lifecycle():
+    """Phase 5: cross-scene state machine in practice_save.c is wired and
+    polled. Three structural pieces:
+      1. practice_save.c declares the state machine fields and the Tick.
+      2. practice.h exposes Practice_Save_Tick as a public symbol.
+      3. practice_main.c calls Practice_Save_Tick from Practice_Update so
+         in-flight transitions actually advance.
+    """
+    save_src = read(PRACTICE_SAVE_C)
+    for needle in (
+        "gPracticeCrossLoadState",
+        "gPracticeCrossLoadSlot",
+        "gPracticeCrossLoadStartFrame",
+        "gPracticeSlotMeta",
+        "PRACTICE_XLOAD_TIMEOUT_FRAMES",
+        "void Practice_Save_Tick(",
+    ):
+        if needle not in save_src:
+            error(
+                f"{PRACTICE_SAVE_C}: missing `{needle}` "
+                "(check_phase5_state_machine_lifecycle)"
+            )
+
+    header = read(INCLUDE_PRACTICE)
+    if "void Practice_Save_Tick(void)" not in header:
+        error(
+            f"{INCLUDE_PRACTICE}: Practice_Save_Tick declaration missing "
+            "(check_phase5_state_machine_lifecycle)"
+        )
+
+    main_src = read(PRACTICE_MAIN_INIT)
+    update_match = re.search(
+        r"void\s+Practice_Update\s*\(\s*void\s*\)\s*\{(.*?)\n\}",
+        main_src, re.DOTALL,
+    )
+    if not update_match:
+        error(
+            f"{PRACTICE_MAIN_INIT}: Practice_Update body not found "
+            "(check_phase5_state_machine_lifecycle)"
+        )
+        return
+    if "Practice_Save_Tick(" not in update_match.group(1):
+        error(
+            f"{PRACTICE_MAIN_INIT}: Practice_Update must call Practice_Save_Tick "
+            "(check_phase5_state_machine_lifecycle)"
+        )
+
+
 def check_audio_spec_for_level_single_source():
     """Phase 5: Practice_AudioSpecForLevel is the single source of truth for
     LevelId -> packed (sfxLayout << 8) | spec dispatch. Defined exactly once
@@ -1115,6 +1163,7 @@ def main():
     check_overlay_build_id_no_rom_read()
     check_overlay_build_id_eager_init()
     check_audio_spec_for_level_single_source()
+    check_phase5_state_machine_lifecycle()
     check_phase3_ram_detection()
     check_practice_pool_placement()
     check_practice_pool_no_overlay_overlap()

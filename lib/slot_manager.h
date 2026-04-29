@@ -28,6 +28,10 @@ typedef enum {
     SLOT_MANAGER_ERR_CORRUPT = -7,
     SLOT_MANAGER_ERR_CALLBACK = -8,
     SLOT_MANAGER_ERR_UNSUPPORTED = -9,
+    /* Caller-driven: the slot manager itself never returns this. Used by
+     * cross-scene practice_save load when the destination scene fails to
+     * reach PLAY_UPDATE within the load deadline. */
+    SLOT_MANAGER_ERR_TIMEOUT = -10,
 } slot_manager_result_t;
 
 typedef uint32_t (*save_state_fn)(void *buf, uint32_t buf_size);

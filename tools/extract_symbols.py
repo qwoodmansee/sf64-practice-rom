@@ -54,6 +54,15 @@ SYMBOLS = [
     "gPracticeLastSaveResult",
     "gPracticeLastLoadResult",
     "gPracticeSaveDisabled",
+    # Phase 5 — cross-scene state machine + frame counter for the timeout test.
+    "gPracticeCrossLoadState",
+    "gPracticeCrossLoadSlot",
+    "gPracticeCrossLoadStartFrame",
+    "gPracticeSlotMeta",
+    "gGameFrameCount",
+    "gNextLevel",
+    "gNextLevelPhase",
+    "gNextGameState",
     # Phase 4 — overlay segment ranges. These are linker-defined symbols
     # in starfox64.ld; the existing regex matches them when present and the
     # WARNING branch handles absence gracefully (some builds may not export

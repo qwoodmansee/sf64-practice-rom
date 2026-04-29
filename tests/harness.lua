@@ -23,12 +23,20 @@ function H.read_u8(addr)
     return mainmemory.read_u8(addr)
 end
 
+function H.read_u16(addr)
+    return mainmemory.read_u16_be(addr)
+end
+
 function H.read_float(addr)
     return mainmemory.readfloat(addr, true) -- big-endian
 end
 
 function H.write_s32(addr, val)
     mainmemory.write_s32_be(addr, val)
+end
+
+function H.write_u16(addr, val)
+    mainmemory.write_u16_be(addr, val)
 end
 
 function H.write_u8(addr, val)

@@ -42,6 +42,24 @@ s32 gPracticeSlotValidBits;
 s32 gPracticeLastSaveResult;
 s32 gPracticeLastLoadResult;
 
+/* Per-slot metadata captured at save time. Used by the cross-scene state
+ * machine (to know which scene a slot is for without parsing the TLV body)
+ * and by the slot picker UI (to display level / phase / "saved at" info).
+ * RAM-only for Phase 5; SD persistence in Phase 7 will write its own
+ * mirror into the on-disk header. Exposed (not static) so BizHawk tests
+ * can probe per-slot meta and corrupt level for the timeout test. */
+PracticeSlotMeta gPracticeSlotMeta[MAX_RAM_SLOTS_WITH_PAK];
+
+/* Cross-scene load state machine. IDLE = no transition pending. Exposed for
+ * test inspection via the linker map. */
+PracticeCrossLoadState gPracticeCrossLoadState;
+s32                    gPracticeCrossLoadSlot;
+s32                    gPracticeCrossLoadStartFrame;
+
+/* 6 s @ 60 fps. Long enough for any scene's setup we've measured, short
+ * enough to bail before the user thinks the practice ROM hung. */
+#define PRACTICE_XLOAD_TIMEOUT_FRAMES 360
+
 typedef struct PracticeScalarState {
     f32 pathProgress;
     f32 savedPathProgress;
@@ -1272,6 +1290,11 @@ void Practice_Save_Init(void) {
     gPracticeRamSlotCount =
         (osMemSize >= 0x00800000U) ? MAX_RAM_SLOTS_WITH_PAK : MAX_RAM_SLOTS_NO_PAK;
 
+    bzero(gPracticeSlotMeta, sizeof(gPracticeSlotMeta));
+    gPracticeCrossLoadState = XLOAD_IDLE;
+    gPracticeCrossLoadSlot = 0;
+    gPracticeCrossLoadStartFrame = 0;
+
     if (gPracticeRamSlotCount == 0) {
         /* Stock 4 MB: save/load not supported. */
         gPracticeSaveDisabled = 1;
@@ -1338,6 +1361,7 @@ void Practice_ClearCheckpoint(void) {
     if (gPracticeSaveDisabled) {
         return;
     }
+    bzero(gPracticeSlotMeta, sizeof(gPracticeSlotMeta));
     for (i = 0; i < gPracticeRamSlotCount; i++) {
         slot_manager_clear_ram(i);
     }
@@ -1406,6 +1430,10 @@ void Practice_SaveStateSlot(s32 slot) {
     gPracticeLastSaveResult = rr;
     SyncValidBits();
     if (rr == SLOT_MANAGER_OK) {
+        gPracticeSlotMeta[slot].valid = true;
+        gPracticeSlotMeta[slot].level = gCurrentLevel;
+        gPracticeSlotMeta[slot].phase = (s32)gLevelPhase;
+        gPracticeSlotMeta[slot].frameStamp = gGameFrameCount;
         Practice_Hud_ShowStatus("SAVE OK", 80, 255, 120);
     } else {
         Practice_Hud_ShowStatus("SAVE FAIL", 255, 120, 80);
@@ -1448,6 +1476,28 @@ void Practice_LoadStateSlot(s32 slot) {
         return;
     }
 
+    /* Cross-scene branch: if the slot was saved in a different scene/phase,
+     * kick the engine transition and let Practice_Save_Tick run the
+     * snapshot apply once the destination scene reaches PLAY_UPDATE.
+     * gPracticeSlotMeta is populated whenever a slot is successfully saved this
+     * boot; missing meta (e.g. a hypothetical reboot-survived slot) falls
+     * back to same-scene apply, which is the previous behaviour. */
+    if (gPracticeSlotMeta[slot].valid &&
+        ((gPracticeSlotMeta[slot].level != (LevelId)gCurrentLevel) ||
+         (gPracticeSlotMeta[slot].phase != (s32)gLevelPhase))) {
+        gPracticeCrossLoadSlot = slot;
+        gPracticeCrossLoadStartFrame = gGameFrameCount;
+        gPracticeCrossLoadState = XLOAD_AWAIT_SCENE_LOAD;
+        gPracticeLastLoadResult = 0;
+#if PRACTICE_SAVE_TRACE
+        osSyncPrintf("[save_tr] LoadStateSlot xscene kick slot=%d -> level=%d phase=%d\n",
+                     slot, (s32)gPracticeSlotMeta[slot].level, gPracticeSlotMeta[slot].phase);
+#endif
+        practice_overlay_request_load(gPracticeSlotMeta[slot].level, gPracticeSlotMeta[slot].phase);
+        Practice_Hud_ShowStatus("XSCENE WAIT", 220, 220, 80);
+        return;
+    }
+
 #if PRACTICE_SAVE_TRACE
     osSyncPrintf("[save_tr] call slot_manager_load_ram(%d)\n", slot);
 #endif
@@ -1469,6 +1519,54 @@ void Practice_LoadState(void) {
 
 s32 Practice_GetActiveSlot(void) {
     return gPracticeActiveSlot;
+}
+
+void Practice_Save_Tick(void) {
+    s32 rr;
+    s32 elapsed;
+
+    if (gPracticeCrossLoadState != XLOAD_AWAIT_SCENE_LOAD) {
+        return;
+    }
+
+    if (gPracticeSaveDisabled) {
+        gPracticeCrossLoadState = XLOAD_IDLE;
+        return;
+    }
+
+    /* Apply once the destination scene is fully running. Same gates as
+     * Practice_CanSaveHere: we want the engine in a state where the
+     * snapshot can clobber gPlayer/gActors/etc. without races. */
+    if ((gGameState == GSTATE_PLAY) &&
+        (gPlayState == PLAY_UPDATE) &&
+        (gPlayer != NULL) &&
+        (gPracticeSlotMeta[gPracticeCrossLoadSlot].valid) &&
+        ((LevelId)gCurrentLevel == gPracticeSlotMeta[gPracticeCrossLoadSlot].level)) {
+#if PRACTICE_SAVE_TRACE
+        osSyncPrintf("[save_tr] xscene apply slot=%d level=%d\n",
+                     gPracticeCrossLoadSlot, (s32)gCurrentLevel);
+#endif
+        rr = slot_manager_load_ram(gPracticeCrossLoadSlot);
+        gPracticeLastLoadResult = rr;
+        gPracticeCrossLoadState = XLOAD_IDLE;
+        if (rr == SLOT_MANAGER_OK) {
+            Practice_Hud_ShowStatus("XSCENE OK", 80, 255, 120);
+        } else {
+            Practice_Hud_ShowStatus("XSCENE FAIL", 255, 120, 80);
+        }
+        return;
+    }
+
+    elapsed = gGameFrameCount - gPracticeCrossLoadStartFrame;
+    if (elapsed > PRACTICE_XLOAD_TIMEOUT_FRAMES) {
+        gPracticeLastLoadResult = SLOT_MANAGER_ERR_TIMEOUT;
+        gPracticeCrossLoadState = XLOAD_IDLE;
+        Practice_Hud_ShowStatus("LOAD T/O", 255, 120, 80);
+#if PRACTICE_SAVE_TRACE
+        osSyncPrintf("[save_tr] xscene TIMEOUT slot=%d elapsed=%d\n",
+                     gPracticeCrossLoadSlot, elapsed);
+#endif
+    }
 }
 
 void Practice_CycleSlot(s32 delta) {
