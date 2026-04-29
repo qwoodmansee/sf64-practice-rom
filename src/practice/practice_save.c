@@ -211,9 +211,22 @@ static u16 Practice_AudioSpecPacked(LevelId lid) {
 
 static void Snapshot_FillFromGame(PracticeSnapshot *sn) {
     s32 i;
+    s32 nplayer;
 
-    for (i = 0; i < 4; i++) {
+    /* gPlayer points to MEM_ARRAY_ALLOCATE(Player, gCamCount): only [0 .. gCamCount-1] are valid.
+     * Normal levels use gCamCount == 1; versus uses 4. Copying past the allocation UB/crashes. */
+    nplayer = gCamCount;
+    if (nplayer > 4) {
+        nplayer = 4;
+    }
+    if (nplayer < 0) {
+        nplayer = 0;
+    }
+    for (i = 0; i < nplayer; i++) {
         sn->playerData[i] = gPlayer[i];
+    }
+    for (; i < 4; i++) {
+        bzero(&sn->playerData[i], sizeof(Player));
     }
     bcopy(gActors, sn->actors, sizeof(sn->actors));
     bcopy(gBosses, sn->bosses, sizeof(sn->bosses));
@@ -476,8 +489,16 @@ static uint32_t Practice_Save_Cb(void *buf, uint32_t buf_size) {
 
 static void Snapshot_ApplyToGame(const PracticeSnapshot *sn) {
     s32 i;
+    s32 nplayer;
 
-    for (i = 0; i < 4; i++) {
+    nplayer = gCamCount;
+    if (nplayer > 4) {
+        nplayer = 4;
+    }
+    if (nplayer < 0) {
+        nplayer = 0;
+    }
+    for (i = 0; i < nplayer; i++) {
         gPlayer[i] = sn->playerData[i];
     }
     bcopy(sn->actors, gActors, sizeof(sn->actors));

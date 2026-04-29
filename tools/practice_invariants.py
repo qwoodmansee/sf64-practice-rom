@@ -607,6 +607,28 @@ def check_phase4_engine_hooks():
         )
 
 
+def check_snapshot_gplayers_use_cam_count():
+    """gPlayer is MEM_ARRAY_ALLOCATE(Player, gCamCount)-sized — do not iterate 0..3 blindly."""
+    src = read(PRACTICE_SAVE_C)
+
+    fi = src.find("static void Snapshot_FillFromGame")
+    aj = src.find("static void Snapshot_ApplyToGame")
+    if fi < 0 or aj < 0:
+        error(
+            f"{PRACTICE_SAVE_C}: Snapshot_FillFromGame/Snapshot_ApplyToGame missing "
+            "(check_snapshot_gplayers_use_cam_count)"
+        )
+        return
+
+    fill_block = src[fi : fi + 900]
+    apply_block = src[aj : aj + 500]
+    if "gCamCount" not in fill_block or "gCamCount" not in apply_block:
+        error(
+            f"{PRACTICE_SAVE_C}: Snapshot_Fill/Apply must use gCamCount when copying Player[] "
+            "(check_snapshot_gplayers_use_cam_count)"
+        )
+
+
 def check_phase3_ram_detection():
     """Phase 3: Practice_Save_Init must detect osMemSize and gate save/load.
 
@@ -887,6 +909,7 @@ def main():
     check_max_state_size_budget()
     check_phase4_engine_hooks()
     check_sys_memory_practice_bump_getter()
+    check_snapshot_gplayers_use_cam_count()
     check_phase3_ram_detection()
     check_practice_pool_placement()
     check_practice_pool_no_overlay_overlap()
