@@ -56,6 +56,11 @@ PracticeCrossLoadState gPracticeCrossLoadState;
 s32                    gPracticeCrossLoadSlot;
 s32                    gPracticeCrossLoadStartFrame;
 
+/* Deferred BGM apply: snapshot apply queues here, Practice_Save_Tick fires
+ * the actual AUDIO_PLAY_BGM once Audio_HandleReset() returns AUDIORESET_READY. */
+bool gPracticeBgmPending;
+u16  gPracticeBgmPendingSeqId;
+
 /* 6 s @ 60 fps. Long enough for any scene's setup we've measured, short
  * enough to bail before the user thinks the practice ROM hung. */
 #define PRACTICE_XLOAD_TIMEOUT_FRAMES 360
@@ -628,15 +633,16 @@ static void Snapshot_ApplyToGame(const PracticeSnapshot *sn) {
 
     Audio_ClearVoice();
     SAVE_TR_STAGE("apply after Audio_ClearVoice");
-    /* Reapply the saved audio spec so cross-scene loads land on the
-     * correct instrument bank, and so a same-scene save during a
-     * transitional moment still gets the bank we recorded. */
-    if (sn->scalars.audioSpecPacked != 0) {
-        Audio_SetAudioSpec(0, sn->scalars.audioSpecPacked);
-    }
-    SAVE_TR_STAGE("apply after Audio_SetAudioSpec");
-    AUDIO_PLAY_BGM(sn->scalars.bgmSeqId);
-    SAVE_TR_STAGE("apply after AUDIO_PLAY_BGM");
+    /* Defer audio reapply until the audio thread is ready. Cross-scene
+     * loads already had Audio_SetAudioSpec fired by request_load, and
+     * Audio_SetAudioSpec queues SEQCMD_RESET_AUDIO_HEAP. Calling another
+     * spec or queuing AUDIO_PLAY_BGM while sAudioResetStatus !=
+     * AUDIORESET_READY wedges Audio_ProcessSeqCmds and drops both cmds.
+     * Practice_Save_Tick polls Audio_HandleReset and plays the BGM
+     * when ready -- one frame late at worst, but always heard. */
+    gPracticeBgmPendingSeqId = sn->scalars.bgmSeqId;
+    gPracticeBgmPending = true;
+    SAVE_TR_STAGE("apply queued AUDIO_PLAY_BGM");
 }
 
 static int Practice_Load_Cb(const void *buf, uint32_t size) {
@@ -1294,6 +1300,8 @@ void Practice_Save_Init(void) {
     gPracticeCrossLoadState = XLOAD_IDLE;
     gPracticeCrossLoadSlot = 0;
     gPracticeCrossLoadStartFrame = 0;
+    gPracticeBgmPending = false;
+    gPracticeBgmPendingSeqId = 0;
 
     if (gPracticeRamSlotCount == 0) {
         /* Stock 4 MB: save/load not supported. */
@@ -1535,6 +1543,14 @@ const PracticeSlotMeta* Practice_GetSlotMeta(s32 slot) {
 void Practice_Save_Tick(void) {
     s32 rr;
     s32 elapsed;
+
+    /* Drain any deferred BGM from a recently completed load apply. Done
+     * outside the cross-load state check because same-scene loads also
+     * queue here -- see Snapshot_ApplyToGame's audio reapply note. */
+    if (gPracticeBgmPending && Audio_HandleReset() == 0) {
+        AUDIO_PLAY_BGM(gPracticeBgmPendingSeqId);
+        gPracticeBgmPending = false;
+    }
 
     if (gPracticeCrossLoadState != XLOAD_AWAIT_SCENE_LOAD) {
         return;
