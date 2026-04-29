@@ -366,7 +366,9 @@ void Practice_LaunchLevel(LevelId levelId, s32 phase, f32 checkpointProgress) {
     gNextGameState = GSTATE_PLAY;
     gDrawMode = DRAW_NONE;
 
-    Practice_ClearCheckpoint();
+    /* Saved slots must survive level relaunches so cross-scene load can drive
+     * a transition through Practice_LaunchLevel without wiping the source
+     * scene's slot. Slots are explicitly cleared via the picker (Phase 5+). */
     Practice_Hud_Reset();
     gPracticeScreen = PSCREEN_GAMEPLAY;
 }
