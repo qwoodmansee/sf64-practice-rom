@@ -6,6 +6,9 @@
 PracticeScreen gPracticeScreen;
 PracticeConfig gPracticeConfig;
 PracticeMenuState gPracticeMenuState;
+s32 gPracticeAqTraceStage;
+s32 gPracticeAqTraceFrame;
+s32 gPracticeAqTraceState;
 
 void Practice_Init(void) {
     gPracticeScreen = PSCREEN_LEVEL_SELECT;
@@ -109,14 +112,11 @@ void Practice_Draw(void) {
 }
 
 void Practice_ApplyStartConditions(void) {
-#ifdef PRACTICE_ROM
     if (gCurrentLevel == LEVEL_AQUAS) {
-        osSyncPrintf("[aq_tr] practice apply enter f=%d skip=%d laser=%d bombs=%d lives=%d team=%d,%d,%d\n",
-                     gGameFrameCount, gPracticeConfig.skipCutscenes, gPracticeConfig.laserStrength,
-                     gPracticeConfig.bombCount, gPracticeConfig.lifeCount, gTeamShields[TEAM_ID_FALCO],
-                     gTeamShields[TEAM_ID_SLIPPY], gTeamShields[TEAM_ID_PEPPY]);
+        gPracticeAqTraceStage = 50;
+        gPracticeAqTraceFrame = gGameFrameCount;
+        gPracticeAqTraceState = gPlayer[0].state;
     }
-#endif
 
     gLaserStrength[gPlayerNum] = gPracticeConfig.laserStrength;
     gBombCount[gPlayerNum] = gPracticeConfig.bombCount;
@@ -160,14 +160,11 @@ void Practice_ApplyStartConditions(void) {
         }
     }
 
-#ifdef PRACTICE_ROM
     if (gCurrentLevel == LEVEL_AQUAS) {
-        osSyncPrintf("[aq_tr] practice apply done f=%d bgm=%d laser=%d bombs=%d lives=%d wings=%d,%d team=%d,%d,%d\n",
-                     gGameFrameCount, gBgmSeqId, gLaserStrength[gPlayerNum], gBombCount[gPlayerNum],
-                     gLifeCount[gPlayerNum], gPlayer[0].arwing.leftWingState, gPlayer[0].arwing.rightWingState,
-                     gTeamShields[TEAM_ID_FALCO], gTeamShields[TEAM_ID_SLIPPY], gTeamShields[TEAM_ID_PEPPY]);
+        gPracticeAqTraceStage = 51;
+        gPracticeAqTraceFrame = gGameFrameCount;
+        gPracticeAqTraceState = gPlayer[0].state;
     }
-#endif
 }
 
 #endif

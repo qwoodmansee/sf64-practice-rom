@@ -722,9 +722,8 @@ completion to the executor.
 - Patched Aquas Blue Marine torpedo bookkeeping to validate the active torpedo
   slot before reading `gPlayerShots[slot - 1]`; the old order could read slot
   `-1` immediately after Aquas init when no torpedo existed.
-- The torpedo-slot guard did not fix the hardware crash. Added temporary
-  `[aq_tr]` instrumentation around Aquas launch/init/practice apply and the
-  Blue Marine update stages so the next hardware trace can localize the fault.
+- Replaced noisy Aquas serial tracing with an on-screen `AQ` breadcrumb because
+  the serial build overwhelmed/desynced IS-Viewer before the freeze.
 - Local verification passed: static invariants, practice ROM build, host
   `lib-test`, and whitespace check.
 - BizHawk rows below are still pending on this machine because BizHawk is not

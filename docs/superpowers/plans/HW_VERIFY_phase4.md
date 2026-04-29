@@ -147,18 +147,28 @@ For each saveable level:
 ### Aquas crash trace
 
 2026-04-29: the first torpedo-slot guard fix did not stop the Aquas crash.
-Added `[aq_tr]` instrumentation for the next hardware run. Paste the Aquas
-trace tail starting at `[aq_tr] practice launch enter` through the crash. The
-highest-value lines are:
+The serial `[aq_tr]` build overwhelmed/desynced IS-Viewer, so the current
+diagnostic is an on-screen breadcrumb only. During Aquas, a small `AQ` box shows:
 
-- `practice launch`, `play setup`, `env`, `level setup`, `init`: confirms
-  launch/order, cutscene state, environment choice, and Aquas globals.
-- `apply practice`: confirms practice start conditions are not corrupting the
-  Blue Marine/player state.
-- `player step begin`, `after boost`, `move enter/exit`, `after path`,
-  `shoot enter/exit`, `after coll`: narrows the crash to one player update
-  stage. If the log stops between two adjacent stage lines, the missing next
-  line is the suspect call.
+- top number: last completed stage
+- `F`: frame when that stage was written
+- `S`: player/practice state captured with that stage
+
+Report the final visible `AQ` values after the freeze. Stage map:
+
+| Stage | Meaning |
+|---|---|
+| 10/11 | practice launch enter/done |
+| 20/21 | `Play_Setup` enter/reset |
+| 30/31 | environment enter/done |
+| 40/41 | Aquas level setup enter/done |
+| 42/43 | `Aquas_InitLevel` enter/done |
+| 50/51 | practice start conditions enter/done |
+| 100/110 | Blue Marine update begin / after boost |
+| 115/119 | `Aquas_BlueMarineMove` enter/done |
+| 120/130 | after move / after path update |
+| 135/139 | `Aquas_BlueMarineShoot` enter/done |
+| 140/150/160 | after shoot / after collision / after floor+alarm |
 
 ## Optional: stock 4 MB
 

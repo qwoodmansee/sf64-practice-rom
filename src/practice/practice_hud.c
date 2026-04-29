@@ -134,6 +134,16 @@ void Practice_Hud_Draw(void) {
         Practice_DrawTextColor(124, 39, sStatusText, sStatusR, sStatusG, sStatusB);
     }
 
+    if (gCurrentLevel == LEVEL_AQUAS) {
+        Practice_DrawBox(242, 26, 70, 26, 0, 0, 0, 170);
+        Practice_DrawTextColor(248, 30, "AQ", 80, 220, 255);
+        Practice_DrawNumber(268, 30, gPracticeAqTraceStage);
+        Practice_DrawTextColor(248, 40, "F", 120, 120, 120);
+        Practice_DrawNumber(260, 40, gPracticeAqTraceFrame);
+        Practice_DrawTextColor(286, 40, "S", 120, 120, 120);
+        Practice_DrawNumber(298, 40, gPracticeAqTraceState);
+    }
+
     if (!gPracticeConfig.showHudOverlay) {
         return;
     }

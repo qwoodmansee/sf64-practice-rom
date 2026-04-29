@@ -23,6 +23,16 @@
 #include "assets/ast_zoness.h"
 #ifdef PRACTICE_ROM
 #include "practice.h"
+#define PRACTICE_AQ_TRACE(stage, state)        \
+    do {                                       \
+        if (gCurrentLevel == LEVEL_AQUAS) {    \
+            gPracticeAqTraceStage = (stage);   \
+            gPracticeAqTraceFrame = gGameFrameCount; \
+            gPracticeAqTraceState = (state);   \
+        }                                      \
+    } while (0)
+#else
+#define PRACTICE_AQ_TRACE(stage, state) ((void)0)
 #endif
 
 UNK_TYPE D_800D2F50 = 0; // unused
@@ -475,12 +485,7 @@ void Play_Setup360_AND(void) {
 void Play_Setup(void) {
     s32 i;
 
-#ifdef PRACTICE_ROM
-    if (gCurrentLevel == LEVEL_AQUAS) {
-        osSyncPrintf("[aq_tr] play setup enter f=%d nextLevel=%d phase=%d gPlayState=%d savedIdx=%d\n",
-                     gGameFrameCount, gNextLevel, gNextLevelPhase, gPlayState, gSavedObjectLoadIndex);
-    }
-#endif
+    PRACTICE_AQ_TRACE(20, gPlayState);
 
     gStarCount = 0;
     gLevelPhase = 0;
@@ -492,12 +497,7 @@ void Play_Setup(void) {
     gSavedHitCount = gCsFrameCount = gLevelStartStatusScreenTimer = gLevelClearScreenTimer = gRadioState = 0;
     gCsWasNotSkipped = true;
 
-#ifdef PRACTICE_ROM
-    if (gCurrentLevel == LEVEL_AQUAS) {
-        osSyncPrintf("[aq_tr] play setup reset f=%d csWas=%d phase=%d savedIdx=%d\n", gGameFrameCount,
-                     gCsWasNotSkipped, gLevelPhase, gSavedObjectLoadIndex);
-    }
-#endif
+    PRACTICE_AQ_TRACE(21, gCsWasNotSkipped);
 
     if (((gCurrentLevel == LEVEL_VENOM_2) && (gNextLevelPhase == 2)) || (gCurrentLevel == LEVEL_VENOM_ANDROSS)) {
         return;
@@ -521,12 +521,7 @@ Environment* sEnvironmentSetup[21] = {
 };
 
 void Play_InitEnvironment(void) {
-#ifdef PRACTICE_ROM
-    if (gCurrentLevel == LEVEL_AQUAS) {
-        osSyncPrintf("[aq_tr] env enter f=%d csWas=%d setup=%d scene=%d\n", gGameFrameCount, gCsWasNotSkipped,
-                     gSceneSetup, gCurrentLevel);
-    }
-#endif
+    PRACTICE_AQ_TRACE(30, gCsWasNotSkipped);
 
     if (gVersusMode) {
         switch (gVersusStage) {
@@ -554,6 +549,8 @@ void Play_InitEnvironment(void) {
         sEnvironment = SEGMENTED_TO_VIRTUAL(&aAqCsEnvSetup);
     }
 
+    PRACTICE_AQ_TRACE(31, gBgmSeqId);
+
     gBgmSeqId = sEnvironment->seqId;
     gLevelType = sEnvironment->type;
     gGroundType = sEnvironment->unk04;
@@ -580,14 +577,6 @@ void Play_InitEnvironment(void) {
     gLight2colorStep = 40;
     D_ctx_80178544 = 40;
     gFovY = 45.0f;
-
-#ifdef PRACTICE_ROM
-    if (gCurrentLevel == LEVEL_AQUAS) {
-        osSyncPrintf("[aq_tr] env done f=%d csWas=%d env=%08x seq=%d type=%d bg=%d fog=%d,%d,%d\n",
-                     gGameFrameCount, gCsWasNotSkipped, (u32) (uintptr_t) sEnvironment, gBgmSeqId, gLevelType,
-                     gBgColor, gFogRed, gFogGreen, gFogBlue);
-    }
-#endif
 }
 
 void Play_GenerateStarfield(void) {
@@ -2596,19 +2585,12 @@ void Play_InitLevel(void) {
             break;
 
         case LEVEL_AQUAS:
-#ifdef PRACTICE_ROM
-            osSyncPrintf("[aq_tr] level setup aquas enter f=%d playState=%d csWas=%d water=%d alpha=%d\n",
-                         gGameFrameCount, gPlayState, gCsWasNotSkipped, (s32) gSurfaceWaterYPos,
-                         (s32) gAquasSurfaceAlpha);
-#endif
+            PRACTICE_AQ_TRACE(40, gPlayState);
             gVIsPerFrame = 3;
             gSurfaceWaterYPos = 1600.0f;
             gAquasSurfaceAlpha = 128.0f;
             Aquas_InitLevel();
-#ifdef PRACTICE_ROM
-            osSyncPrintf("[aq_tr] level setup aquas done f=%d vi=%d water=%d alpha=%d\n", gGameFrameCount,
-                         gVIsPerFrame, (s32) gSurfaceWaterYPos, (s32) gAquasSurfaceAlpha);
-#endif
+            PRACTICE_AQ_TRACE(41, gVIsPerFrame);
             break;
 
         case LEVEL_TITANIA:
@@ -4826,18 +4808,7 @@ void Player_Setup(Player* playerx) {
     }
 
 #ifdef PRACTICE_ROM
-    if (gCurrentLevel == LEVEL_AQUAS) {
-        osSyncPrintf("[aq_tr] apply practice pre f=%d st=%d cs=%d form=%d csWas=%d skip=%d pos=%d,%d,%d trueZ=%d\n",
-                     gGameFrameCount, player->state, player->csState, player->form, gCsWasNotSkipped,
-                     gPracticeConfig.skipCutscenes, (s32) player->pos.x, (s32) player->pos.y, (s32) player->pos.z,
-                     (s32) player->trueZpos);
-    }
     Practice_ApplyStartConditions();
-    if (gCurrentLevel == LEVEL_AQUAS) {
-        osSyncPrintf("[aq_tr] apply practice post f=%d st=%d cs=%d form=%d bgm=%d laser=%d bombs=%d lives=%d\n",
-                     gGameFrameCount, player->state, player->csState, player->form, gBgmSeqId,
-                     gLaserStrength[gPlayerNum], gBombCount[gPlayerNum], gLifeCount[gPlayerNum]);
-    }
 #endif
 
     player->sfx.levelType = gLevelType;
@@ -5648,60 +5619,22 @@ void Player_UpdateOnRails(Player* player) {
             break;
 
         case FORM_BLUE_MARINE:
-#ifdef PRACTICE_ROM
-            if ((gCurrentLevel == LEVEL_AQUAS) && ((gGameFrameCount < 240) || ((gGameFrameCount % 30) == 0))) {
-                osSyncPrintf("[aq_tr] player step begin f=%d st=%d cs=%d pos=%d,%d,%d trueZ=%d speed=%d shots=%d,%d,%d,%d\n",
-                             gGameFrameCount, player->state, player->csState, (s32) player->pos.x,
-                             (s32) player->pos.y, (s32) player->pos.z, (s32) player->trueZpos,
-                             (s32) player->baseSpeed, gPlayerShots[0].obj.status, gPlayerShots[1].obj.status,
-                             gPlayerShots[15].obj.status, gPlayerShots[15].timer);
-            }
-#endif
+            PRACTICE_AQ_TRACE(100, player->state);
             Aquas_BlueMarineBoost(player);
-#ifdef PRACTICE_ROM
-            if ((gCurrentLevel == LEVEL_AQUAS) && ((gGameFrameCount < 240) || ((gGameFrameCount % 30) == 0))) {
-                osSyncPrintf("[aq_tr] player after boost f=%d boost=%d meter=%d speed=%d vel=%d,%d,%d\n",
-                             gGameFrameCount, player->boostActive, (s32) player->boostMeter, (s32) player->baseSpeed,
-                             (s32) player->vel.x, (s32) player->vel.y, (s32) player->vel.z);
-            }
-#endif
+            PRACTICE_AQ_TRACE(110, player->state);
             Aquas_BlueMarineBrake(player);
             Play_dummy_800B41E0(player);
             Aquas_BlueMarineMove(player);
-#ifdef PRACTICE_ROM
-            if ((gCurrentLevel == LEVEL_AQUAS) && ((gGameFrameCount < 240) || ((gGameFrameCount % 30) == 0))) {
-                osSyncPrintf("[aq_tr] player after move f=%d pos=%d,%d,%d trueZ=%d vel=%d,%d,%d path=%d floor=%d height=%d\n",
-                             gGameFrameCount, (s32) player->pos.x, (s32) player->pos.y, (s32) player->pos.z,
-                             (s32) player->trueZpos, (s32) player->vel.x, (s32) player->vel.y, (s32) player->vel.z,
-                             (s32) gPathProgress, (s32) player->pathFloor, (s32) player->pathHeight);
-            }
-#endif
+            PRACTICE_AQ_TRACE(120, player->state);
             Player_UpdatePath(player);
-#ifdef PRACTICE_ROM
-            if ((gCurrentLevel == LEVEL_AQUAS) && ((gGameFrameCount < 240) || ((gGameFrameCount % 30) == 0))) {
-                osSyncPrintf("[aq_tr] player after path f=%d posZ=%d trueZ=%d zPath=%d path=%d objIdx=%d savedIdx=%d\n",
-                             gGameFrameCount, (s32) player->pos.z, (s32) player->trueZpos, (s32) player->zPath,
-                             (s32) gPathProgress, gObjectLoadIndex, gSavedObjectLoadIndex);
-            }
-#endif
+            PRACTICE_AQ_TRACE(130, player->state);
             Aquas_BlueMarineShoot(player);
-#ifdef PRACTICE_ROM
-            if ((gCurrentLevel == LEVEL_AQUAS) && ((gGameFrameCount < 240) || ((gGameFrameCount % 30) == 0))) {
-                osSyncPrintf("[aq_tr] player after shoot f=%d hp=%d shotTimer=%d light=%d rgb=%d,%d,%d bright=%d\n",
-                             gGameFrameCount, player->shields, player->shotTimer, gLight3Brightness != 0.0f,
-                             gLight3R, gLight3G, gLight3B, (s32) (gLight3Brightness * 100.0f));
-            }
-#endif
+            PRACTICE_AQ_TRACE(140, player->state);
             Player_CollisionCheck(player);
-#ifdef PRACTICE_ROM
-            if ((gCurrentLevel == LEVEL_AQUAS) && ((gGameFrameCount < 240) || ((gGameFrameCount % 30) == 0))) {
-                osSyncPrintf("[aq_tr] player after coll f=%d hp=%d dmg=%d hitTimer=%d flags=%x ground=%d\n",
-                             gGameFrameCount, player->shields, player->damage, player->hitTimer, player->flags_228,
-                             player->grounded);
-            }
-#endif
+            PRACTICE_AQ_TRACE(150, player->state);
             Player_FloorCheck(player);
             Player_LowHealthAlarm(player);
+            PRACTICE_AQ_TRACE(160, player->state);
 
             if ((player->shields <= 0) && (player->radioDamageTimer != 0)) {
                 Player_Down(player);
