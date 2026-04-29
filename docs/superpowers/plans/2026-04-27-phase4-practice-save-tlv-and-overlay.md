@@ -17,7 +17,7 @@ save/load or debugging hardware:
 |-------|----------------|
 | RAM layout | Save **control globals** in `practice_save.c` `.main_bss`. **Slot TLV bytes** live in `practice_save_slotpool.c` (VMA `0x80400000`, Expansion Pak only). `Practice_Save_Init` gates on `osMemSize >= 0x00800000`. |
 | HW verify procedure | `docs/superpowers/plans/HW_VERIFY_phase4.md` — updated for Pak pool, `./tools/sc64dev`, optional save/load with trace. |
-| Silent save crashes | Never allocate `PracticeSnapshot` on the **game thread stack** — use static `gPracticeSaveScratch` in `practice_save.c`. |
+| Silent save crashes | Never allocate `PracticeSnapshot` on the **game thread stack** or in normal `.main_bss`; use `Practice_Save_ScratchBase()` backed by `practice_save_slotpool.o` in `.practice_pool_pak` at `0x80400000`. |
 | ISV bracketing | `make practice PRACTICE_SAVE_TRACE=1` — `[save_tr]` stages; skill `.claude/skills/practice-hw-isv-trace/SKILL.md`. |
 | Hotkeys | `PSCREEN_GAMEPLAY` only — player must launch via **practice level select → A** (`Practice_LaunchLevel`). Heap can show `PLAY_UPDATE` while `gPracticeScreen` is still level-select if they used the vanilla map. |
 | Flash helper | `./tools/sc64dev` from any repo subdir or worktree (`SF64_REPO_ROOT` if discovery fails). |

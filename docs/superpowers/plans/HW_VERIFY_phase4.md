@@ -7,8 +7,9 @@
 > (`practice_save_slotpool.c`, VMA `0x80400000`). Stock 4 MB (`osMemSize ==
 > 0x400000`) disables save at boot. For silent crashes while saving, build with
 > `PRACTICE_SAVE_TRACE=1` and read `.claude/skills/practice-hw-isv-trace/SKILL.md`
-> (includes **stack rule**: never allocate `PracticeSnapshot` on the game thread
-> stack — use static scratch). Flash from any worktree: `./tools/sc64dev`.
+> (includes **scratch placement rule**: never allocate `PracticeSnapshot` on the
+> game thread stack or in normal `.main_bss`; use Pak-only scratch storage).
+> Flash from any worktree: `./tools/sc64dev`.
 
 ## Current state (read first)
 
