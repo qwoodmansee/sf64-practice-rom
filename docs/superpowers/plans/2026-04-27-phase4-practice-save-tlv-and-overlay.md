@@ -28,28 +28,24 @@
 - `.claude/skills/debug-ram-layout/SKILL.md` — agent-facing "boot looks fine but
   renders wrong" workflow that points at the audit tool.
 
-### 0.3 Open boot/runtime issues blocking Wave 4
+### 0.3 Layout decision — Phase 2 committed
 
-1. **`sSlotPool` BSS overlaps the dynamic overlay/asset load window.**
-   `.practice_pool` (`0x8018c930-0x8020c940`, 512 KB) overlaps `ovl_menu` at
-   `0x8019ae40-0x801e2a00` by ~287 KB and the wider `[ovl_i1_VRAM, buffers_VRAM)`
-   load window by ~466 KB. There is no 512 KB safe gap in stock 4 MB RAM. Wave 6
-   must pick the real layout (one of: 1-slot pool, Expansion Pak only,
-   runtime-allocated pool past the largest scene's load extent, smaller
-   `MAX_STATE_SIZE`).
-2. **Boot-time `bzero(sSlotPool, ...)` in `Practice_Save_Init` clobbered the
-   already-loaded `ovl_menu` + `ast_text` from `SCENE_TITLE`** (because of the
-   overlap above). `SCENE_MAP` reused `ovl_menu` so `Load_SceneFiles` saw
-   `sCurrentScene` matched and skipped the reload, leaving the level-select
-   rendering with garbage textures (invisible text). Fixed 2026-04-28 by
-   removing the bzero — BSS is zero at cold boot anyway. Boot path renders
-   correctly now.
-3. **Save state is structurally broken until #1 is solved.**
-   `slot_manager_save_ram` still writes 256 KB into the overlay region when a
-   slot is saved, which will clobber whichever overlay is currently resident.
-   Do not exercise the SAVE / LOAD bindings on hardware until Wave 6 picks a
-   layout. Optional gate: early-return from `Practice_SaveStateSlot` /
-   `Practice_LoadStateSlot` with an `osSyncPrintf` warning.
+**Finding:** Phase 1 audit shows stock 4 MB cannot accommodate a save-state pool above the dynamic load window. Titania setup 5 (worst case) reaches 0x8028a210, which is 37 KB above `buffers_VRAM` (0x80281000). Headroom = −53 KB.
+
+**Decision:**
+- **Stock 4 MB (osMemSize == 0x400000):** No same-scene save/load support in Phase 4.
+  - `MAX_RAM_SLOTS_NO_PAK = 0` (feature gated at boot time if stock detected)
+  - Optional: `Practice_SaveStateSlot` / `Practice_LoadStateSlot` early-return with
+    IS-Viewer `osSyncPrintf` warning when stock memory is detected
+- **Expansion Pak (osMemSize == 0x800000):** Place 4-slot pool above 0x80400000.
+  - `MAX_STATE_SIZE = 0x40000` (256 KB per slot, proven safe)
+  - `MAX_RAM_SLOTS_WITH_PAK = 4` (4 × 256 KB = 1 MB, easily fits above 0x80400000)
+- **Overlay snapshots:** Keep enabled (`PRACTICE_SAVE_OVERLAY_SNAPSHOT = 1`).
+  Titania overlay is ~120 KB, fits well within the 256 KB budget.
+
+**Previous issues (fixed in Wave 2.2–2.3):**
+- ✓ Boot-time `bzero(sSlotPool, ...)` removed; cold-boot BSS is zero.
+- ✓ `ovl_menu` + `ast_text` no longer clobbered; level-select renders correctly.
 
 ### 0.4 Wave 6 inputs
 
