@@ -633,26 +633,16 @@ static void Snapshot_ApplyToGame(const PracticeSnapshot *sn) {
 
     Audio_ClearVoice();
     SAVE_TR_STAGE("apply after Audio_ClearVoice");
-    /* Audio reapply policy:
-     *
-     * Same-scene load: engine's BGM is whatever it was before the load --
-     *   we explicitly re-fire AUDIO_PLAY_BGM (deferred via Practice_Save_Tick
-     *   so we don't race a still-quiescing reset).
-     *
-     * Cross-scene load: the engine's Play_Init / PLAYERSTATE_LEVEL_INTRO
-     *   path already calls AUDIO_PLAY_BGM for the destination level
-     *   (fox_play.c). Re-firing AUDIO_PLAY_BGM here stacks against the
-     *   engine's still-pending BGM cmd and wedges Audio_ProcessSeqCmds,
-     *   silencing the rest of the session. Skip it -- the engine plays
-     *   the right BGM for the destination, and gBgmSeqId is already
-     *   restored from the snapshot so any later code sees the saved id. */
-    if (gPracticeCrossLoadState != XLOAD_AWAIT_SCENE_LOAD) {
-        gPracticeBgmPendingSeqId = sn->scalars.bgmSeqId;
-        gPracticeBgmPending = true;
-        SAVE_TR_STAGE("apply queued AUDIO_PLAY_BGM (same-scene)");
-    } else {
-        SAVE_TR_STAGE("apply skipped AUDIO_PLAY_BGM (cross-scene)");
-    }
+    /* Defer audio reapply until the audio thread is ready. Cross-scene
+     * loads already had Audio_SetAudioSpec fired by request_load, and
+     * Audio_SetAudioSpec queues SEQCMD_RESET_AUDIO_HEAP. Calling another
+     * spec or queuing AUDIO_PLAY_BGM while sAudioResetStatus !=
+     * AUDIORESET_READY wedges Audio_ProcessSeqCmds and drops both cmds.
+     * Practice_Save_Tick polls Audio_HandleReset and plays the BGM
+     * when ready -- one frame late at worst, but always heard. */
+    gPracticeBgmPendingSeqId = sn->scalars.bgmSeqId;
+    gPracticeBgmPending = true;
+    SAVE_TR_STAGE("apply queued AUDIO_PLAY_BGM");
 }
 
 static int Practice_Load_Cb(const void *buf, uint32_t size) {
