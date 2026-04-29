@@ -5,6 +5,12 @@ local S = H.S
 
 H.test_name = "state_save_load_same_scene"
 
+if not H.checkpoint_save_enabled() then
+    print("SKIP: checkpoint save disabled (needs Expansion Pak / 8MB - gPracticeSaveDisabled)")
+    os.exit(0)
+end
+
+
 local ok = H.wait_until(function()
     return H.practice_screen() == S.const.PSCREEN_LEVEL_SELECT
 end, 300, "boot")

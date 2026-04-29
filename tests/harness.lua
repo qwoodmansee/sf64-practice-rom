@@ -185,6 +185,11 @@ function H.last_load_result()
     return H.read_s32(S.gPracticeLastLoadResult)
 end
 
+--- Checkpoint save/load is enabled only when Expansion Pak RAM is available (Practice_Save_Init).
+function H.checkpoint_save_enabled()
+    return H.read_s32(S.gPracticeSaveDisabled) == 0
+end
+
 function H.float_near(a, b, eps)
     eps = eps or 0.05
     if a == nil or b == nil then return false end

@@ -13,6 +13,7 @@ INCLUDE_PRACTICE = "include/practice.h"
 PATCH_SCRIPT = "tools/patch_linker_script.py"
 PRACTICE_SAVE_TAGS = os.path.join("src", "practice", "practice_save_tags.h")
 PRACTICE_SAVE_C = os.path.join("src", "practice", "practice_save.c")
+PRACTICE_SAVE_SLOTPOOL = os.path.join("src", "practice", "practice_save_slotpool.c")
 PRACTICE_SAVE_CONFIG = os.path.join("src", "practice", "practice_save_config.h")
 PRACTICE_MAIN_INIT = os.path.join("src", "practice", "practice_main.c")
 FOX_GAME = "src/engine/fox_game.c"
@@ -623,9 +624,9 @@ def check_phase3_ram_detection():
         error(f"{PRACTICE_SAVE_C}: osMemSize check missing in Practice_Save_Init "
               "(check_phase3_ram_detection)")
 
-    # 0x800000 is the Expansion Pak size sentinel.
-    if "0x800000" not in src:
-        error(f"{PRACTICE_SAVE_C}: Expansion Pak sentinel 0x800000 missing "
+    # Expansion Pak: accept >= threshold in Practice_Save_Init.
+    if "0x00800000" not in src and "0x800000" not in src:
+        error(f"{PRACTICE_SAVE_C}: Expansion Pak threshold 0x00800000/0x800000 missing "
               "(check_phase3_ram_detection)")
 
     # gPracticeSaveDisabled must be set when stock.
@@ -638,17 +639,19 @@ def check_phase3_ram_detection():
         error(f"{PRACTICE_SAVE_C}: gPracticeRamSlotCount not set in practice_save.c "
               "(check_phase3_ram_detection)")
 
-    # sSlotPoolPak must be the pool variable (not the old sSlotPool).
-    if "sSlotPoolPak" not in src:
-        error(f"{PRACTICE_SAVE_C}: sSlotPoolPak pool variable missing "
+    slot_src = read(PRACTICE_SAVE_SLOTPOOL)
+
+    # Megabyte blob lives in practice_save_slotpool.o (.practice_pool_pak only).
+    if "sSlotPoolPak" not in slot_src:
+        error(f"{PRACTICE_SAVE_SLOTPOOL}: sSlotPoolPak pool buffer missing "
               "(check_phase3_ram_detection)")
 
     # The old sSlotPool name must not appear (regression guard).
     import re as _re
-    # Allow 'sSlotPoolPak' but not bare 'sSlotPool' without 'Pak' suffix.
-    if _re.search(r'\bsSlotPool\b(?!Pak)', src):
-        error(f"{PRACTICE_SAVE_C}: old bare sSlotPool variable still referenced; "
-              "rename to sSlotPoolPak (check_phase3_ram_detection)")
+    combined = src + "\n" + slot_src
+    if _re.search(r"\bsSlotPool\b(?!Pak)", combined):
+        error("practice_save*: old bare sSlotPool variable still referenced; "
+              "use sSlotPoolPak in practice_save_slotpool.c (check_phase3_ram_detection)")
 
     # Practice_SaveStateSlot must guard on gPracticeSaveDisabled.
     save_fn_match = _re.search(
@@ -670,15 +673,11 @@ def check_phase3_ram_detection():
 
 
 def check_practice_pool_placement():
-    """Phase 3: practice_save.o BSS must be in .practice_pool_pak at 0x80400000.
+    """Phase 3: practice_save BSS stays in stock .main_bss; megabyte blob in .practice_pool_pak.
 
-    The Expansion Pak pool lives above the 4 MB stock limit, so it never
-    conflicts with the overlay load window [0x8019ae40, 0x80281000). On stock
-    4 MB hardware save/load is disabled at runtime; the pool address is never
-    accessed. On Expansion Pak hardware the pool is valid and safe.
-
-    The old .practice_pool (placed after .dma_table, within the overlay window)
-    must NOT appear in a Phase-3-or-later linker script.
+    practice_save_slotpool.o BSS is anchored at VMA 0x80400000 (Expansion Pak DRAM).
+    practice_save.o BSS (globals, slot_manager visibility) stays below the overlay window
+    so stock 4 MB never touches Expansion Pak registers for save-disabled state.
     """
     linker = "linker_scripts/us/rev1/starfox64.ld"
     if not os.path.isfile(linker):
@@ -700,8 +699,6 @@ def check_practice_pool_placement():
         )
 
     # Old .practice_pool (stock window placement) must not coexist.
-    # Allow the comment referencing .practice_pool_pak to contain the substring
-    # '.practice_pool' as part of the name; only flag a standalone section header.
     import re as _re
     if _re.search(r"^\s*\.practice_pool\s+\(NOLOAD\)", ld, _re.MULTILINE):
         error(
@@ -710,28 +707,31 @@ def check_practice_pool_placement():
             "(check_practice_pool_placement)"
         )
 
-    # practice_save.o(.bss) must NOT appear inside .main_bss (only in .practice_pool_pak).
+    # practice_save.o(.bss) must appear inside .main_bss (globals for stock-safe init).
     main_bss_start = ld.find(".main_bss")
     main_bss_end = ld.find("main_VRAM_END", main_bss_start) if main_bss_start >= 0 else -1
     if main_bss_start >= 0 and main_bss_end >= 0:
         main_bss_block = ld[main_bss_start:main_bss_end]
-        if "practice_save.o(.bss)" in main_bss_block:
+        if "build/src/practice/practice_save.o(.bss)" not in main_bss_block:
             error(
-                f"{linker}: practice_save.o(.bss) is inside .main_bss; "
-                "it must be moved to .practice_pool_pak to avoid clobbering gDmaTable "
+                f"{linker}: practice_save.o(.bss) must be inside .main_bss "
+                "(check_practice_pool_placement)"
+            )
+        if "build/src/practice/practice_save_slotpool.o(.bss)" in main_bss_block:
+            error(
+                f"{linker}: practice_save_slotpool.o(.bss) must NOT be inside .main_bss; "
+                "only in .practice_pool_pak "
                 "(check_practice_pool_placement)"
             )
 
-    # Do not use ld.find(".practice_pool_pak"): the substring appears first inside
-    # the /* ... .practice_pool_pak ... */ comment in .main_bss, before the real
-    # SECTION header line (.practice_pool_pak 0x80400000).
+    # Anchor pool section header (substring also appears inside .main_bss comments).
     pool_section_anchor = ld.find(".practice_pool_pak 0x80400000")
     if pool_section_anchor >= 0:
         pool_section_block = ld[pool_section_anchor:pool_section_anchor + 600]
-        if "practice_save.o(.bss)" not in pool_section_block:
+        if "practice_save_slotpool.o(.bss)" not in pool_section_block:
             error(
-                f"{linker}: .practice_pool_pak section does not contain practice_save.o(.bss) "
-                "(check_practice_pool_placement)"
+                f"{linker}: .practice_pool_pak section does not contain "
+                "practice_save_slotpool.o(.bss) (check_practice_pool_placement)"
             )
 
 
