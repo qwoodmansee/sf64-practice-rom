@@ -1,0 +1,31 @@
+src/practice/practice_heap_audit.c
+  aecede1708b77eac 143-145,147-150,184-187
+src/practice/practice_save.c
+  aecede1708b77eac 20-22,1123-1130
+src/practice/practice_input_display.c
+  aecede1708b77eac 61-69
+tools/patch_linker_script.py
+  aecede1708b77eac 70-82,218-238
+tools/practice_invariants.py
+  aecede1708b77eac 26,31-33,609-765,806-808,814-817,820-825
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "183d69c82c4e175c0471c82a0eec92af6d619cdd",
+  "prompts": {
+    "aecede1708b77eac": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "83eee62f-f79b-48bb-9585-53fad0ecc25d",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 2595,
+      "overriden_lines": 0
+    }
+  }
+}
