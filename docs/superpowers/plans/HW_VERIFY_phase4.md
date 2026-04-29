@@ -126,23 +126,23 @@ For each saveable level:
 
 | LevelId | Lowest `free~` | Pak? | Save/load notes |
 |---------|----------------|------|-------------------|
-| CORNERIA | | | |
-| METEO | | | |
+| CORNERIA | 5872832 | yes | 2026-04-29: entered level 0; bump_hwm=1248, gfx_peak=82496, audio_peak=716368, free_low=5872832. |
+| METEO | 5813472 | yes | 2026-04-29: entered level 1; bump_hwm=13248, gfx_peak=129856, audio_peak=716368, free_low=5813472. |
 | SECTOR_X | | | |
-| AREA_6 | | | |
+| AREA_6 | 5840480 | yes | 2026-04-29: level 3 tick60 sample; bump_hwm=18848, gfx_peak=102848, audio_peak=716368, free_low=5840480. |
 | SECTOR_Y | | | |
 | VENOM_1 | | | |
 | SOLAR | | | |
 | ZONESS | | | |
 | VENOM_ANDROSS | | | |
 | MACBETH | | | |
-| TITANIA | | | |
-| AQUAS | | | |
+| TITANIA | 5788384 | yes | 2026-04-29: level 12; bump_hwm=13248, gfx_peak=154944, audio_peak=716368, free_low=5788384. ISV emitted garbage bytes after several clean tick60 lines; watch for repeat/desync. |
+| AQUAS | 5878400 | yes | 2026-04-29 partial/crash: level 13 reached tick60 once; bump_hwm=1248, gfx_peak=76928, audio_peak=716368, free_low=5878400. Then crashed / ISV reported `Debug data write dropped due to timeout`; do not use as final pass. |
 | FORTUNA | | | |
 | KATINA | | | |
 | BOLSE | | | |
-| SECTOR_Z | | | |
-| VENOM_2 | | | |
+| SECTOR_Z | 5797472 | yes | 2026-04-29: level 18; bump_hwm=30848, gfx_peak=128256, audio_peak=716368, free_low=5797472. |
+| VENOM_2 | 5844288 | yes | 2026-04-29: level 19; bump_hwm=18848, gfx_peak=93440, audio_peak=716368, free_low=5844288. |
 
 ## Optional: stock 4 MB
 
