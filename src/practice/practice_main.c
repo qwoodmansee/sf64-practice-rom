@@ -91,13 +91,6 @@ void Practice_Update(void) {
 }
 
 void Practice_Draw(void) {
-    if (gCurrentLevel == LEVEL_AQUAS) {
-        gPracticeAqTraceStage = 961;
-        gPracticeAqTraceFrame = gGameFrameCount;
-        gPracticeAqTraceState = gPracticeScreen;
-        return;
-    }
-
     switch (gPracticeScreen) {
         case PSCREEN_LEVEL_SELECT:
             if (gCurrentLevel == LEVEL_AQUAS) {

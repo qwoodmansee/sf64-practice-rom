@@ -671,11 +671,12 @@ void Game_Update(void) {
         Spawner();
 #endif
 #ifdef PRACTICE_ROM
-        PRACTICE_AQ_GAME_TRACE(950, gPracticeScreen);
-        Practice_Update();
-        PRACTICE_AQ_GAME_TRACE(960, gPracticeScreen);
-        Practice_Draw();
-        PRACTICE_AQ_GAME_TRACE(970, gPracticeScreen);
+        if (gCurrentLevel != LEVEL_AQUAS) {
+            Practice_Update();
+            Practice_Draw();
+        } else {
+            PRACTICE_AQ_GAME_TRACE(975, gPracticeScreen);
+        }
         if ((gCurrentLevel == LEVEL_AQUAS) && ((gGameFrameCount % 60) == 0)) {
             osSyncPrintf("[aq_hb] f=%d play=%d trace=%d s=%d\n", gGameFrameCount, gPlayState,
                          gPracticeAqTraceStage, gPracticeAqTraceState);

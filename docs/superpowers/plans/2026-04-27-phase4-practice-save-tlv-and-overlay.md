@@ -736,6 +736,11 @@ completion to the executor.
   Aquas practice overlay drawing and prints a one-line `[aq_hb]` CPU heartbeat
   every 60 frames so hardware can distinguish an overlay display-list fault
   from a later graphics-task/display submission hang.
+- Aquas still froze with practice drawing skipped, so the next diagnostic ROM
+  skips both `Practice_Update()` and `Practice_Draw()` on Aquas frames while
+  keeping the low-rate `[aq_hb]` heartbeat. If this build stops freezing, the
+  fault is in per-frame practice update logic; if it still freezes, the fault is
+  below the practice runtime path.
 - Local verification passed: static invariants, practice ROM build, host
   `lib-test`, and whitespace check.
 - BizHawk rows below are still pending on this machine because BizHawk is not
