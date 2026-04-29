@@ -145,7 +145,13 @@ is in `src/mods/isviewer.c`, gated by `MODS_ISVIEWER` in `include/mods.h`.
 
 Workflow:
 1. Terminal A: `sc64deployer debug --isv 0x03FF0000` (wait for "Listening on...")
-2. Terminal B: `sc64dev` → `b` (build + upload)
+2. Terminal B: from **any directory inside this repo or a git worktree**, run
+   `./tools/sc64dev` (build + upload `build/starfox64.us.rev1.uncompressed.z64`).
+   The script finds the Makefile with `practice:` by walking up from your cwd
+   (or set `SF64_REPO_ROOT` to the repo). See `./tools/sc64dev help` for
+   `build` / `upload`-only and env vars (`SC64_DEPLOYER`, `SF64_MAKE_JOBS`, …).
+   You can still use a shell alias named `sc64dev` if you prefer; point it at
+   this script so worktrees do not need a hardcoded path.
 3. Press the **physical N64 reset button** (--reboot from upload doesn't always trigger it)
 4. Terminal A streams prints live
 

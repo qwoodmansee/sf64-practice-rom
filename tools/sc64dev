@@ -1,0 +1,130 @@
+#!/usr/bin/env bash
+# Star Fox 64 Practice ROM — build + flash to SummerCart64 (sc64deployer).
+#
+# Works from any directory inside a clone or git worktree: finds the repo root
+# by locating a Makefile with a "practice:" target (same layout as main repo).
+#
+# Usage:
+#   ./tools/sc64dev              # make practice -j4 + upload
+#   ./tools/sc64dev build        # make only
+#   ./tools/sc64dev upload       # upload only (ROM must exist)
+#   SF64_MAKE_JOBS=8 ./tools/sc64dev
+#   PRACTICE_SAVE_TRACE=1 ./tools/sc64dev   # extra make vars via environment
+#
+# Optional environment:
+#   SF64_REPO_ROOT     — repo root (skip auto-discovery)
+#   SF64_ROM           — path to .z64 to upload (default: build/starfox64.us.rev1.uncompressed.z64)
+#   SC64_DEPLOYER      — sc64deployer binary (default: sc64deployer on PATH)
+#   SF64_MAKE_JOBS     — parallel jobs (default: 4)
+#
+set -euo pipefail
+
+SC64_DEPLOYER="${SC64_DEPLOYER:-sc64deployer}"
+SF64_MAKE_JOBS="${SF64_MAKE_JOBS:-4}"
+DEFAULT_ROM_REL="build/starfox64.us.rev1.uncompressed.z64"
+
+find_practice_repo() {
+  local start="$1"
+  local d="$start"
+  while true; do
+    if [[ -f "${d}/Makefile" ]] && grep -q '^practice:' "${d}/Makefile" 2>/dev/null; then
+      echo "$d"
+      return 0
+    fi
+    local parent
+    parent="$(dirname "$d")"
+    if [[ "$parent" == "$d" ]]; then
+      return 1
+    fi
+    d="$parent"
+  done
+}
+
+resolve_repo_root() {
+  if [[ -n "${SF64_REPO_ROOT:-}" ]]; then
+    if [[ ! -f "${SF64_REPO_ROOT}/Makefile" ]]; then
+      echo "sc64dev: SF64_REPO_ROOT is set but ${SF64_REPO_ROOT}/Makefile is missing." >&2
+      exit 1
+    fi
+    echo "${SF64_REPO_ROOT}"
+    return 0
+  fi
+
+  local root=""
+  root="$(find_practice_repo "${PWD}" 2>/dev/null || true)"
+  if [[ -z "$root" ]]; then
+    local script_dir
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    root="$(find_practice_repo "${script_dir}" 2>/dev/null || true)"
+  fi
+  if [[ -z "$root" ]]; then
+    echo "sc64dev: could not find this project's Makefile (with a practice: target)." >&2
+    echo "  cd into the Star Fox 64 practice repo (or a worktree), or set:" >&2
+    echo "    export SF64_REPO_ROOT=/absolute/path/to/starfox64-practice-repo" >&2
+    exit 1
+  fi
+  echo "$root"
+}
+
+usage() {
+  cat <<'EOF'
+Star Fox 64 Practice ROM — sc64dev (build + SummerCart64 upload)
+
+  ./tools/sc64dev [command]
+
+  command:
+    (default)   make practice then upload uncompressed practice ROM
+    all         same as default
+    build       make practice only
+    upload      sc64deployer upload only (ROM must already exist)
+
+  Environment (optional):
+    SF64_REPO_ROOT     repo root if not auto-detected from cwd
+    SF64_ROM           .z64 path to upload (default: build/starfox64.us.rev1.uncompressed.z64)
+    SC64_DEPLOYER      deployer binary (default: sc64deployer on PATH)
+    SF64_MAKE_JOBS     make -j jobs (default: 4)
+
+  Extra make flags: pass via environment, e.g.
+    PRACTICE_SAVE_TRACE=1 ./tools/sc64dev build
+EOF
+  exit 0
+}
+
+cmd="${1:-all}"
+if [[ "$cmd" == "-h" || "$cmd" == "--help" || "$cmd" == help ]]; then
+  usage
+fi
+
+if [[ "$cmd" == build || "$cmd" == upload || "$cmd" == all ]]; then
+  :
+else
+  echo "sc64dev: unknown command '$cmd' (use: build | upload | all | help)" >&2
+  exit 1
+fi
+
+REPO="$(resolve_repo_root)"
+ROM="${SF64_ROM:-${REPO}/${DEFAULT_ROM_REL}}"
+
+echo "sc64dev: repo  = ${REPO}"
+echo "sc64dev: rom   = ${ROM}"
+
+if [[ "$cmd" == build || "$cmd" == all ]]; then
+  echo "sc64dev: make practice -j${SF64_MAKE_JOBS} ..."
+  (cd "$REPO" && make practice "-j${SF64_MAKE_JOBS}")
+fi
+
+if [[ "$cmd" == upload || "$cmd" == all ]]; then
+  if ! command -v "$SC64_DEPLOYER" >/dev/null 2>&1; then
+    echo "sc64dev: '$SC64_DEPLOYER' not found on PATH." >&2
+    echo "  Install SummerCart64 deployer or set SC64_DEPLOYER to the full path." >&2
+    exit 1
+  fi
+  echo "sc64dev: tool  = $(command -v "$SC64_DEPLOYER")"
+  if [[ ! -f "$ROM" ]]; then
+    echo "sc64dev: ROM not found: ${ROM}" >&2
+    exit 1
+  fi
+  echo "sc64dev: uploading ..."
+  "$SC64_DEPLOYER" upload "$ROM"
+  echo "sc64dev: done. Press physical N64 reset if IS-Viewer or boot state looks stale."
+fi

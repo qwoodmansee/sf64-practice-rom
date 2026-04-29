@@ -155,8 +155,12 @@ endif
 # Heap audit (IS-Viewer). Set PRACTICE_HEAP_AUDIT=0 to strip telemetry for release builds.
 PRACTICE_HEAP_AUDIT ?= 1
 
+# Save/load TLV + snapshot ISV trace ([save_tr]). Build with PRACTICE_SAVE_TRACE=1 for HW triage.
+PRACTICE_SAVE_TRACE ?= 0
+
 ifeq ($(PRACTICE_ROM),1)
-    BUILD_DEFINES   += -DPRACTICE_ROM=1 -DAVOID_UB -DPRACTICE_HEAP_AUDIT=$(PRACTICE_HEAP_AUDIT)
+    BUILD_DEFINES   += -DPRACTICE_ROM=1 -DAVOID_UB -DPRACTICE_HEAP_AUDIT=$(PRACTICE_HEAP_AUDIT) \
+                       -DPRACTICE_SAVE_TRACE=$(PRACTICE_SAVE_TRACE)
     COMPARE := 0
 endif
 

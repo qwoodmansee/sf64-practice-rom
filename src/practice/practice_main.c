@@ -75,8 +75,10 @@ void Practice_Update(void) {
                 if (Practice_InputTriggered(PACTION_OPEN_MENU)) {
                     Practice_Menu_OpenFrozen();
                 } else if (Practice_InputTriggered(PACTION_SAVE_POS)) {
+                    Practice_SaveTrace_HotkeyIsv();
                     Practice_SaveState();
                 } else if (Practice_InputTriggered(PACTION_RESTORE_POS)) {
+                    Practice_SaveTrace_LoadHotkeyIsv();
                     Practice_LoadState();
                 }
             }

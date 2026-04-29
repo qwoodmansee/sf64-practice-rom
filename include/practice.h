@@ -179,6 +179,9 @@ void Practice_ClearCheckpoint(void);
 /* Phase 4 — slot-manager-backed save state. Wave 2.2 implements; Wave 1
  * ships forward decls only with stub bodies in practice_save.c. */
 void Practice_Save_Init(void);
+/* ISV: logs [save_tr] when PRACTICE_SAVE_TRACE=1 (see Makefile). */
+void Practice_SaveTrace_HotkeyIsv(void);
+void Practice_SaveTrace_LoadHotkeyIsv(void);
 s32 Practice_CanSaveHere(void);
 void Practice_SaveStateSlot(s32 slot);
 void Practice_LoadStateSlot(s32 slot);

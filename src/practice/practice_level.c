@@ -56,6 +56,11 @@ static LevelEntry sLevelList[] = {
 
 #define LEVEL_COUNT (s32)(sizeof(sLevelList) / sizeof(sLevelList[0]))
 
+/* Audio_SetAudioSpec issues SEQCMD_RESET_AUDIO_HEAP. Spamming it (fast L/R on
+ * level select) can wedge the audio driver; coalesce applies and throttle
+ * heap resets across frames. */
+#define BGM_HEAP_RESET_MIN_FRAMES 3
+
 typedef struct {
     const char* name;
     u16 bgmId;
@@ -90,41 +95,70 @@ static s32 sSelectedLevel = 0;
 static s32 sSelectedPhase = 0;
 static s32 sBgmIndex = 0;
 static bool sBgmPlaying = false;
+static bool sBgmAudioDirty = false;
+static u16 sBgmLastSpecPacked = 0xFFFF;
+static s32 sBgmLastHeapResetFrame = -1000;
 
 f32 gPracticeCheckpointProgress = 0.0f;
 
-static void Practice_PlayCurrentBgm(void) {
-    AUDIO_SET_SPEC(sBgmList[sBgmIndex].sfxLayout, sBgmList[sBgmIndex].audioSpec);
-    AUDIO_PLAY_BGM(sBgmList[sBgmIndex].bgmId);
-    sBgmPlaying = true;
+static u16 Practice_BgmSpecPacked(const BgmEntry* e) {
+    return (u16)(((u16)e->sfxLayout << 8) | (u16)e->audioSpec);
+}
+
+static void Practice_ServiceLevelSelectBgm(void) {
+    const BgmEntry* e = &sBgmList[sBgmIndex];
+    u16 packed = Practice_BgmSpecPacked(e);
+
+    if (!sBgmPlaying) {
+        AUDIO_SET_SPEC(e->sfxLayout, e->audioSpec);
+        AUDIO_PLAY_BGM(e->bgmId);
+        sBgmLastSpecPacked = packed;
+        sBgmLastHeapResetFrame = gGameFrameCount;
+        sBgmPlaying = true;
+        sBgmAudioDirty = false;
+        return;
+    }
+
+    if (!sBgmAudioDirty) {
+        return;
+    }
+
+    if (packed != sBgmLastSpecPacked) {
+        if ((gGameFrameCount - sBgmLastHeapResetFrame) < BGM_HEAP_RESET_MIN_FRAMES) {
+            return;
+        }
+        AUDIO_SET_SPEC(e->sfxLayout, e->audioSpec);
+        sBgmLastSpecPacked = packed;
+        sBgmLastHeapResetFrame = gGameFrameCount;
+    }
+
+    AUDIO_PLAY_BGM(e->bgmId);
+    sBgmAudioDirty = false;
 }
 
 void Practice_LevelSelect_Update(void) {
     OSContPad* press = &gControllerPress[gMainController];
     s32 phaseCount;
 
-    if (!sBgmPlaying) {
-        Practice_PlayCurrentBgm();
-    }
-
     if (Practice_StateMenuIsOpen()) {
         Practice_StateMenu_Update();
+        Practice_ServiceLevelSelectBgm();
         return;
     }
 
+    /* Else-if: both shoulders on one edge only move one step (avoids double heap reset). */
     if (press->button & L_TRIG) {
         sBgmIndex--;
         if (sBgmIndex < 0) {
             sBgmIndex = BGM_COUNT - 1;
         }
-        Practice_PlayCurrentBgm();
-    }
-    if (press->button & R_TRIG) {
+        sBgmAudioDirty = true;
+    } else if (press->button & R_TRIG) {
         sBgmIndex++;
         if (sBgmIndex >= BGM_COUNT) {
             sBgmIndex = 0;
         }
-        Practice_PlayCurrentBgm();
+        sBgmAudioDirty = true;
     }
 
     if (press->button & U_JPAD) {
@@ -171,6 +205,8 @@ void Practice_LevelSelect_Update(void) {
         PhaseEntry* phase = &sLevelList[sSelectedLevel].phases[sSelectedPhase];
         Practice_LaunchLevel(sLevelList[sSelectedLevel].levelId, phase->phase, phase->checkpointProgress);
     }
+
+    Practice_ServiceLevelSelectBgm();
 }
 
 void Practice_LevelSelect_Draw(void) {

@@ -17,6 +17,16 @@
 #define PRACTICE_SAVE_SELFTEST 0
 #endif
 
+#ifndef PRACTICE_SAVE_TRACE
+#define PRACTICE_SAVE_TRACE 0
+#endif
+
+#if PRACTICE_SAVE_TRACE
+#define SAVE_TR_STAGE(msg) osSyncPrintf("[save_tr] %s\n", (msg))
+#else
+#define SAVE_TR_STAGE(msg) ((void)0)
+#endif
+
 /* RAM slot pool megabyte buffer lives in practice_save_slotpool.c (VMA 0x80400000).
  * This file keeps globals in .main_bss so stock 4 MB never reads/writes Expansion
  * Pak DRAM for gPracticeSaveDisabled / slot_manager state. */
@@ -136,6 +146,9 @@ typedef struct PracticeSnapshot {
     PracticeScalarState scalars;
 } PracticeSnapshot;
 
+/* Too large for the game thread stack; slot_manager never nests save inside load. */
+static PracticeSnapshot gPracticeSaveScratch;
+
 static uint32_t Practice_Save_Cb(void *buf, uint32_t buf_size);
 static int Practice_Load_Cb(const void *buf, uint32_t size);
 
@@ -213,6 +226,7 @@ static void Snapshot_FillFromGame(PracticeSnapshot *sn) {
     s32 i;
     s32 nplayer;
 
+    SAVE_TR_STAGE("fill begin");
     /* gPlayer points to MEM_ARRAY_ALLOCATE(Player, gCamCount): only [0 .. gCamCount-1] are valid.
      * Normal levels use gCamCount == 1; versus uses 4. Copying past the allocation UB/crashes. */
     nplayer = gCamCount;
@@ -228,6 +242,7 @@ static void Snapshot_FillFromGame(PracticeSnapshot *sn) {
     for (; i < 4; i++) {
         bzero(&sn->playerData[i], sizeof(Player));
     }
+    SAVE_TR_STAGE("fill after players");
     bcopy(gActors, sn->actors, sizeof(sn->actors));
     bcopy(gBosses, sn->bosses, sizeof(sn->bosses));
     bcopy(gScenery, sn->scenery, sizeof(sn->scenery));
@@ -238,6 +253,7 @@ static void Snapshot_FillFromGame(PracticeSnapshot *sn) {
     bcopy(gTexturedLines, sn->texturedLines, sizeof(sn->texturedLines));
     bcopy(gRadarMarks, sn->radarMarks, sizeof(sn->radarMarks));
     bcopy(gBonusText, sn->bonusText, sizeof(sn->bonusText));
+    SAVE_TR_STAGE("fill after world arrays");
 
     sn->scalars.pathProgress = gPathProgress;
     sn->scalars.savedPathProgress = gSavedPathProgress;
@@ -257,6 +273,7 @@ static void Snapshot_FillFromGame(PracticeSnapshot *sn) {
     sn->scalars.levelMode = gLevelMode;
     sn->scalars.levelPhase = gLevelPhase;
     sn->scalars.loadLevelObjects = gLoadLevelObjects;
+    SAVE_TR_STAGE("fill after path/env scalars");
 
     bcopy(gLaserStrength, sn->scalars.laserStrength, sizeof(sn->scalars.laserStrength));
     bcopy(gBombCount, sn->scalars.bombCount, sizeof(sn->scalars.bombCount));
@@ -265,6 +282,7 @@ static void Snapshot_FillFromGame(PracticeSnapshot *sn) {
     bcopy(gShieldTimer, sn->scalars.shieldTimer, sizeof(sn->scalars.shieldTimer));
     bcopy(gHasShield, sn->scalars.hasShield, sizeof(sn->scalars.hasShield));
     bcopy(gPlayerForms, sn->scalars.playerForms, sizeof(sn->scalars.playerForms));
+    SAVE_TR_STAGE("fill after loadout arrays");
 
     sn->scalars.hitCount = gHitCount;
     sn->scalars.displayedHitCount = gDisplayedHitCount;
@@ -277,6 +295,7 @@ static void Snapshot_FillFromGame(PracticeSnapshot *sn) {
     bcopy(gRightWingHealth, sn->scalars.rightWingHealth, sizeof(sn->scalars.rightWingHealth));
     bcopy(gLeftWingHealth, sn->scalars.leftWingHealth, sizeof(sn->scalars.leftWingHealth));
     sn->scalars.formationLeaderIndex = gFormationLeaderIndex;
+    SAVE_TR_STAGE("fill after team/wings");
 
     sn->scalars.playCamEye = gPlayCamEye;
     sn->scalars.playCamAt = gPlayCamAt;
@@ -292,6 +311,7 @@ static void Snapshot_FillFromGame(PracticeSnapshot *sn) {
     sn->scalars.fovY = gFovY;
     sn->scalars.projectNear = gProjectNear;
     sn->scalars.projectFar = gProjectFar;
+    SAVE_TR_STAGE("fill after cam/proj");
 
     sn->scalars.gameFrameCount = gGameFrameCount;
     sn->scalars.csFrameCount = gCsFrameCount;
@@ -306,6 +326,7 @@ static void Snapshot_FillFromGame(PracticeSnapshot *sn) {
     bcopy(gAllRangeCountdown, sn->scalars.allRangeCountdown, sizeof(sn->scalars.allRangeCountdown));
     sn->scalars.showAllRangeCountdown = gShowAllRangeCountdown;
     sn->scalars.bossFrameCount = gBossFrameCount;
+    SAVE_TR_STAGE("fill after boss/allrange");
 
     sn->scalars.showHud = gShowHud;
     bcopy(gShowReticles, sn->scalars.showReticles, sizeof(sn->scalars.showReticles));
@@ -315,6 +336,7 @@ static void Snapshot_FillFromGame(PracticeSnapshot *sn) {
     sn->scalars.fillScreenBlue = gFillScreenBlue;
     sn->scalars.fillScreenAlphaTarget = gFillScreenAlphaTarget;
     sn->scalars.fillScreenAlphaStep = gFillScreenAlphaStep;
+    SAVE_TR_STAGE("fill after hud/fill");
 
     sn->scalars.radioState = gRadioState;
     sn->scalars.radioStateTimer = gRadioStateTimer;
@@ -326,6 +348,7 @@ static void Snapshot_FillFromGame(PracticeSnapshot *sn) {
     sn->scalars.bgmSeqId = gBgmSeqId;
 
     sn->valid = true;
+    SAVE_TR_STAGE("fill done");
 }
 
 #define PUT(szlim, w, tag, ptr, nbytes)                                                                     \
@@ -337,7 +360,7 @@ static void Snapshot_FillFromGame(PracticeSnapshot *sn) {
 
 static uint32_t Practice_Save_Cb(void *buf, uint32_t buf_size) {
     serial_writer_t wr;
-    PracticeSnapshot snap;
+    PracticeSnapshot *snap = &gPracticeSaveScratch;
     u16 u16_lvl;
     s16 hdr_phase;
     u32 overlay_build_u32;
@@ -348,20 +371,29 @@ static uint32_t Practice_Save_Cb(void *buf, uint32_t buf_size) {
     u16 audio_spec_packed;
     u32 bank_voice_placeholder;
     u32 seg_flat[16];
+    uint32_t wr_sz;
 
     bzero(seg_flat, sizeof(seg_flat));
 
-    Snapshot_FillFromGame(&snap);
+#if PRACTICE_SAVE_TRACE
+    osSyncPrintf("[save_tr] cb enter buf=%08x cap=%u gpl=%08x cam=%d\n", (u32)(uintptr_t)buf,
+                 (unsigned)buf_size, (u32)(uintptr_t)gPlayer, (s32)gCamCount);
+#endif
+    Snapshot_FillFromGame(snap);
+    SAVE_TR_STAGE("cb after Snapshot_FillFromGame");
 
     serial_writer_init(&wr, buf, buf_size);
+    SAVE_TR_STAGE("cb serial_writer_init ok");
 
     u16_lvl = (u16)gCurrentLevel;
     hdr_phase = (s16)gLevelPhase;
     PUT(buf_size, &wr, TAG_LEVEL_ID, &u16_lvl, sizeof(u16_lvl));
     PUT(buf_size, &wr, TAG_LEVEL_PHASE, &hdr_phase, sizeof(hdr_phase));
+    SAVE_TR_STAGE("cb after hdr lvl+phase");
 
     overlay_build_u32 = practice_overlay_build_id(gCurrentLevel);
     PUT(buf_size, &wr, TAG_OVERLAY_BUILD_ID, &overlay_build_u32, sizeof(u32));
+    SAVE_TR_STAGE("cb after TAG_OVERLAY_BUILD_ID");
 
     ovl_sz = 0;
     ovl_vptr = NULL;
@@ -378,9 +410,14 @@ static uint32_t Practice_Save_Cb(void *buf, uint32_t buf_size) {
     } else {
         PUT(buf_size, &wr, TAG_OVERLAY_BYTES, NULL, 0);
     }
+#if PRACTICE_SAVE_TRACE
+    osSyncPrintf("[save_tr] cb after TAG_OVERLAY_BYTES ovl_sz=%u vram=%08x\n", (unsigned)ovl_sz,
+                 (unsigned)overlay_vram_u32);
+#endif
 
     bcopy(gSegments, seg_flat, sizeof(gSegments));
     PUT(buf_size, &wr, TAG_SEGMENTS, seg_flat, sizeof(gSegments));
+    SAVE_TR_STAGE("cb after TAG_SEGMENTS");
 
     audio_seq_pack = (u16)gBgmSeqId;
     PUT(buf_size, &wr, TAG_AUDIO_SEQ_ID, &audio_seq_pack, sizeof(u16));
@@ -388,20 +425,26 @@ static uint32_t Practice_Save_Cb(void *buf, uint32_t buf_size) {
     PUT(buf_size, &wr, TAG_AUDIO_SPEC_PACKED, &audio_spec_packed, sizeof(u16));
     bank_voice_placeholder = 0;
     PUT(buf_size, &wr, TAG_AUDIO_BANK_VOICE, &bank_voice_placeholder, sizeof(u32));
+    SAVE_TR_STAGE("cb after audio tags");
 
-    PUT(buf_size, &wr, TAG_PLAYER_ARRAY, snap.playerData, sizeof(snap.playerData));
-    PUT(buf_size, &wr, TAG_ACTORS, snap.actors, sizeof(snap.actors));
-    PUT(buf_size, &wr, TAG_BOSSES, snap.bosses, sizeof(snap.bosses));
-    PUT(buf_size, &wr, TAG_SCENERY, snap.scenery, sizeof(snap.scenery));
-    PUT(buf_size, &wr, TAG_SPRITES, snap.sprites, sizeof(snap.sprites));
-    PUT(buf_size, &wr, TAG_EFFECTS, snap.effects, sizeof(snap.effects));
-    PUT(buf_size, &wr, TAG_ITEMS, snap.items, sizeof(snap.items));
-    PUT(buf_size, &wr, TAG_PLAYER_SHOTS, snap.playerShots, sizeof(snap.playerShots));
-    PUT(buf_size, &wr, TAG_TEXTURED_LINES, snap.texturedLines, sizeof(snap.texturedLines));
-    PUT(buf_size, &wr, TAG_RADAR_MARKS, snap.radarMarks, sizeof(snap.radarMarks));
-    PUT(buf_size, &wr, TAG_BONUS_TEXT, snap.bonusText, sizeof(snap.bonusText));
+    PUT(buf_size, &wr, TAG_PLAYER_ARRAY, snap->playerData, sizeof(snap->playerData));
+    SAVE_TR_STAGE("cb after TAG_PLAYER_ARRAY");
+    PUT(buf_size, &wr, TAG_ACTORS, snap->actors, sizeof(snap->actors));
+    SAVE_TR_STAGE("cb after TAG_ACTORS");
+    PUT(buf_size, &wr, TAG_BOSSES, snap->bosses, sizeof(snap->bosses));
+    PUT(buf_size, &wr, TAG_SCENERY, snap->scenery, sizeof(snap->scenery));
+    PUT(buf_size, &wr, TAG_SPRITES, snap->sprites, sizeof(snap->sprites));
+    SAVE_TR_STAGE("cb after TAG_BOSSES_SCENERY_SPRITES");
+    PUT(buf_size, &wr, TAG_EFFECTS, snap->effects, sizeof(snap->effects));
+    PUT(buf_size, &wr, TAG_ITEMS, snap->items, sizeof(snap->items));
+    PUT(buf_size, &wr, TAG_PLAYER_SHOTS, snap->playerShots, sizeof(snap->playerShots));
+    SAVE_TR_STAGE("cb after TAG_EFFECTS_ITEMS_SHOTS");
+    PUT(buf_size, &wr, TAG_TEXTURED_LINES, snap->texturedLines, sizeof(snap->texturedLines));
+    PUT(buf_size, &wr, TAG_RADAR_MARKS, snap->radarMarks, sizeof(snap->radarMarks));
+    PUT(buf_size, &wr, TAG_BONUS_TEXT, snap->bonusText, sizeof(snap->bonusText));
+    SAVE_TR_STAGE("cb after TAG_LINES_RADAR_BONUS");
 
-#define PUT_SCALAR(szlim, w, tg, fld) PUT((szlim), (w), (tg), &(snap.scalars.fld), sizeof(snap.scalars.fld))
+#define PUT_SCALAR(szlim, w, tg, fld) PUT((szlim), (w), (tg), &(snap->scalars.fld), sizeof(snap->scalars.fld))
 
     PUT_SCALAR(buf_size, &wr, TAG_PATH_PROGRESS, pathProgress);
     PUT_SCALAR(buf_size, &wr, TAG_SAVED_PATH_PROGRESS, savedPathProgress);
@@ -421,24 +464,27 @@ static uint32_t Practice_Save_Cb(void *buf, uint32_t buf_size) {
     PUT_SCALAR(buf_size, &wr, TAG_LEVEL_MODE, levelMode);
     PUT_SCALAR(buf_size, &wr, TAG_SCALAR_LEVEL_PHASE, levelPhase);
     PUT_SCALAR(buf_size, &wr, TAG_LOAD_LEVEL_OBJECTS, loadLevelObjects);
-    PUT(buf_size, &wr, TAG_LASER_STRENGTH, snap.scalars.laserStrength, sizeof(snap.scalars.laserStrength));
-    PUT(buf_size, &wr, TAG_BOMB_COUNT, snap.scalars.bombCount, sizeof(snap.scalars.bombCount));
-    PUT(buf_size, &wr, TAG_LIFE_COUNT, snap.scalars.lifeCount, sizeof(snap.scalars.lifeCount));
-    PUT(buf_size, &wr, TAG_CHARGE_TIMERS, snap.scalars.chargeTimers, sizeof(snap.scalars.chargeTimers));
-    PUT(buf_size, &wr, TAG_SHIELD_TIMER, snap.scalars.shieldTimer, sizeof(snap.scalars.shieldTimer));
-    PUT(buf_size, &wr, TAG_HAS_SHIELD, snap.scalars.hasShield, sizeof(snap.scalars.hasShield));
-    PUT(buf_size, &wr, TAG_PLAYER_FORMS, snap.scalars.playerForms, sizeof(snap.scalars.playerForms));
+    SAVE_TR_STAGE("cb after scalar path..loadobjs");
+    PUT(buf_size, &wr, TAG_LASER_STRENGTH, snap->scalars.laserStrength, sizeof(snap->scalars.laserStrength));
+    PUT(buf_size, &wr, TAG_BOMB_COUNT, snap->scalars.bombCount, sizeof(snap->scalars.bombCount));
+    PUT(buf_size, &wr, TAG_LIFE_COUNT, snap->scalars.lifeCount, sizeof(snap->scalars.lifeCount));
+    PUT(buf_size, &wr, TAG_CHARGE_TIMERS, snap->scalars.chargeTimers, sizeof(snap->scalars.chargeTimers));
+    PUT(buf_size, &wr, TAG_SHIELD_TIMER, snap->scalars.shieldTimer, sizeof(snap->scalars.shieldTimer));
+    PUT(buf_size, &wr, TAG_HAS_SHIELD, snap->scalars.hasShield, sizeof(snap->scalars.hasShield));
+    PUT(buf_size, &wr, TAG_PLAYER_FORMS, snap->scalars.playerForms, sizeof(snap->scalars.playerForms));
     PUT_SCALAR(buf_size, &wr, TAG_HIT_COUNT, hitCount);
     PUT_SCALAR(buf_size, &wr, TAG_DISPLAYED_HIT_COUNT, displayedHitCount);
     PUT_SCALAR(buf_size, &wr, TAG_RING_PASS_COUNT, ringPassCount);
-    PUT(buf_size, &wr, TAG_TEAM_SHIELDS, snap.scalars.teamShields, sizeof(snap.scalars.teamShields));
-    PUT(buf_size, &wr, TAG_TEAM_DAMAGE, snap.scalars.teamDamage, sizeof(snap.scalars.teamDamage));
-    PUT(buf_size, &wr, TAG_STAR_WOLF_TEAM_ALIVE, snap.scalars.starWolfTeamAlive, sizeof(snap.scalars.starWolfTeamAlive));
-    PUT(buf_size, &wr, TAG_SAVED_STAR_WOLF_TEAM_ALIVE, snap.scalars.savedStarWolfTeamAlive,
-        sizeof(snap.scalars.savedStarWolfTeamAlive));
-    PUT(buf_size, &wr, TAG_RIGHT_WING_HEALTH, snap.scalars.rightWingHealth, sizeof(snap.scalars.rightWingHealth));
-    PUT(buf_size, &wr, TAG_LEFT_WING_HEALTH, snap.scalars.leftWingHealth, sizeof(snap.scalars.leftWingHealth));
+    SAVE_TR_STAGE("cb after scalar combat/hit");
+    PUT(buf_size, &wr, TAG_TEAM_SHIELDS, snap->scalars.teamShields, sizeof(snap->scalars.teamShields));
+    PUT(buf_size, &wr, TAG_TEAM_DAMAGE, snap->scalars.teamDamage, sizeof(snap->scalars.teamDamage));
+    PUT(buf_size, &wr, TAG_STAR_WOLF_TEAM_ALIVE, snap->scalars.starWolfTeamAlive, sizeof(snap->scalars.starWolfTeamAlive));
+    PUT(buf_size, &wr, TAG_SAVED_STAR_WOLF_TEAM_ALIVE, snap->scalars.savedStarWolfTeamAlive,
+        sizeof(snap->scalars.savedStarWolfTeamAlive));
+    PUT(buf_size, &wr, TAG_RIGHT_WING_HEALTH, snap->scalars.rightWingHealth, sizeof(snap->scalars.rightWingHealth));
+    PUT(buf_size, &wr, TAG_LEFT_WING_HEALTH, snap->scalars.leftWingHealth, sizeof(snap->scalars.leftWingHealth));
     PUT_SCALAR(buf_size, &wr, TAG_FORMATION_LEADER_INDEX, formationLeaderIndex);
+    SAVE_TR_STAGE("cb after team/wing arrays");
     PUT_SCALAR(buf_size, &wr, TAG_PLAY_CAM_EYE, playCamEye);
     PUT_SCALAR(buf_size, &wr, TAG_PLAY_CAM_AT, playCamAt);
     PUT_SCALAR(buf_size, &wr, TAG_CS_CAM_EYE_X, csCamEyeX);
@@ -453,6 +499,7 @@ static uint32_t Practice_Save_Cb(void *buf, uint32_t buf_size) {
     PUT_SCALAR(buf_size, &wr, TAG_FOV_Y, fovY);
     PUT_SCALAR(buf_size, &wr, TAG_PROJECT_NEAR, projectNear);
     PUT_SCALAR(buf_size, &wr, TAG_PROJECT_FAR, projectFar);
+    SAVE_TR_STAGE("cb after scalar cam/proj");
     PUT_SCALAR(buf_size, &wr, TAG_GAME_FRAME_COUNT, gameFrameCount);
     PUT_SCALAR(buf_size, &wr, TAG_CS_FRAME_COUNT, csFrameCount);
     PUT_SCALAR(buf_size, &wr, TAG_LEVEL_CLEAR_SCREEN_TIMER, levelClearScreenTimer);
@@ -463,34 +510,42 @@ static uint32_t Practice_Save_Cb(void *buf, uint32_t buf_size) {
     PUT_SCALAR(buf_size, &wr, TAG_ALL_RANGE_FRAME_COUNT, allRangeFrameCount);
     PUT_SCALAR(buf_size, &wr, TAG_ALL_RANGE_SPAWN_EVENT, allRangeSpawnEvent);
     PUT_SCALAR(buf_size, &wr, TAG_ALL_RANGE_CHECKPOINT, allRangeCheckpoint);
-    PUT(buf_size, &wr, TAG_ALL_RANGE_COUNTDOWN, snap.scalars.allRangeCountdown, sizeof(snap.scalars.allRangeCountdown));
+    PUT(buf_size, &wr, TAG_ALL_RANGE_COUNTDOWN, snap->scalars.allRangeCountdown, sizeof(snap->scalars.allRangeCountdown));
     PUT_SCALAR(buf_size, &wr, TAG_SHOW_ALL_RANGE_COUNTDOWN, showAllRangeCountdown);
     PUT_SCALAR(buf_size, &wr, TAG_BOSS_FRAME_COUNT, bossFrameCount);
+    SAVE_TR_STAGE("cb after scalar boss/allrange");
     PUT_SCALAR(buf_size, &wr, TAG_SHOW_HUD, showHud);
-    PUT(buf_size, &wr, TAG_SHOW_RETICLES, snap.scalars.showReticles, sizeof(snap.scalars.showReticles));
+    PUT(buf_size, &wr, TAG_SHOW_RETICLES, snap->scalars.showReticles, sizeof(snap->scalars.showReticles));
     PUT_SCALAR(buf_size, &wr, TAG_FILL_SCREEN_ALPHA, fillScreenAlpha);
     PUT_SCALAR(buf_size, &wr, TAG_FILL_SCREEN_RED, fillScreenRed);
     PUT_SCALAR(buf_size, &wr, TAG_FILL_SCREEN_GREEN, fillScreenGreen);
     PUT_SCALAR(buf_size, &wr, TAG_FILL_SCREEN_BLUE, fillScreenBlue);
     PUT_SCALAR(buf_size, &wr, TAG_FILL_SCREEN_ALPHA_TARGET, fillScreenAlphaTarget);
     PUT_SCALAR(buf_size, &wr, TAG_FILL_SCREEN_ALPHA_STEP, fillScreenAlphaStep);
+    SAVE_TR_STAGE("cb after scalar hud/fill");
     PUT_SCALAR(buf_size, &wr, TAG_RADIO_STATE, radioState);
     PUT_SCALAR(buf_size, &wr, TAG_RADIO_STATE_TIMER, radioStateTimer);
     PUT_SCALAR(buf_size, &wr, TAG_RADIO_MSG_ID, radioMsgId);
     PUT_SCALAR(buf_size, &wr, TAG_KILL_EVENT_ACTORS, killEventActors);
     PUT_SCALAR(buf_size, &wr, TAG_PREV_EVENT_ACTOR_INDEX, prevEventActorIndex);
     PUT_SCALAR(buf_size, &wr, TAG_BGM_SEQ_ID, bgmSeqId);
+    SAVE_TR_STAGE("cb after scalar radio/kill/bgm");
 
 #undef PUT_SCALAR
 #undef PUT
 
-    return (uint32_t)serial_writer_size(&wr);
+    wr_sz = (uint32_t)serial_writer_size(&wr);
+#if PRACTICE_SAVE_TRACE
+    osSyncPrintf("[save_tr] cb done wr_sz=%u\n", (unsigned)wr_sz);
+#endif
+    return wr_sz;
 }
 
 static void Snapshot_ApplyToGame(const PracticeSnapshot *sn) {
     s32 i;
     s32 nplayer;
 
+    SAVE_TR_STAGE("apply begin");
     nplayer = gCamCount;
     if (nplayer > 4) {
         nplayer = 4;
@@ -501,6 +556,7 @@ static void Snapshot_ApplyToGame(const PracticeSnapshot *sn) {
     for (i = 0; i < nplayer; i++) {
         gPlayer[i] = sn->playerData[i];
     }
+    SAVE_TR_STAGE("apply after players");
     bcopy(sn->actors, gActors, sizeof(sn->actors));
     bcopy(sn->bosses, gBosses, sizeof(sn->bosses));
     bcopy(sn->scenery, gScenery, sizeof(sn->scenery));
@@ -511,6 +567,7 @@ static void Snapshot_ApplyToGame(const PracticeSnapshot *sn) {
     bcopy(sn->texturedLines, gTexturedLines, sizeof(sn->texturedLines));
     bcopy(sn->radarMarks, gRadarMarks, sizeof(sn->radarMarks));
     bcopy(sn->bonusText, gBonusText, sizeof(sn->bonusText));
+    SAVE_TR_STAGE("apply after world arrays");
 
     gPathProgress = sn->scalars.pathProgress;
     gSavedPathProgress = sn->scalars.savedPathProgress;
@@ -530,6 +587,7 @@ static void Snapshot_ApplyToGame(const PracticeSnapshot *sn) {
     gLevelMode = sn->scalars.levelMode;
     gLevelPhase = sn->scalars.levelPhase;
     gLoadLevelObjects = sn->scalars.loadLevelObjects;
+    SAVE_TR_STAGE("apply after path..loadobjs");
 
     bcopy(sn->scalars.laserStrength, gLaserStrength, sizeof(sn->scalars.laserStrength));
     bcopy(sn->scalars.bombCount, gBombCount, sizeof(sn->scalars.bombCount));
@@ -538,10 +596,12 @@ static void Snapshot_ApplyToGame(const PracticeSnapshot *sn) {
     bcopy(sn->scalars.shieldTimer, gShieldTimer, sizeof(sn->scalars.shieldTimer));
     bcopy(sn->scalars.hasShield, gHasShield, sizeof(sn->scalars.hasShield));
     bcopy(sn->scalars.playerForms, gPlayerForms, sizeof(sn->scalars.playerForms));
+    SAVE_TR_STAGE("apply after loadout bcopy");
 
     gHitCount = sn->scalars.hitCount;
     gDisplayedHitCount = sn->scalars.displayedHitCount;
     gRingPassCount = sn->scalars.ringPassCount;
+    SAVE_TR_STAGE("apply after combat scalars");
 
     bcopy(sn->scalars.teamShields, gTeamShields, sizeof(sn->scalars.teamShields));
     bcopy(sn->scalars.teamDamage, gTeamDamage, sizeof(sn->scalars.teamDamage));
@@ -550,6 +610,7 @@ static void Snapshot_ApplyToGame(const PracticeSnapshot *sn) {
     bcopy(sn->scalars.rightWingHealth, gRightWingHealth, sizeof(sn->scalars.rightWingHealth));
     bcopy(sn->scalars.leftWingHealth, gLeftWingHealth, sizeof(sn->scalars.leftWingHealth));
     gFormationLeaderIndex = sn->scalars.formationLeaderIndex;
+    SAVE_TR_STAGE("apply after team/wings");
 
     gPlayCamEye = sn->scalars.playCamEye;
     gPlayCamAt = sn->scalars.playCamAt;
@@ -565,6 +626,7 @@ static void Snapshot_ApplyToGame(const PracticeSnapshot *sn) {
     gFovY = sn->scalars.fovY;
     gProjectNear = sn->scalars.projectNear;
     gProjectFar = sn->scalars.projectFar;
+    SAVE_TR_STAGE("apply after cam/proj");
 
     gGameFrameCount = sn->scalars.gameFrameCount;
     gCsFrameCount = sn->scalars.csFrameCount;
@@ -579,6 +641,7 @@ static void Snapshot_ApplyToGame(const PracticeSnapshot *sn) {
     bcopy(sn->scalars.allRangeCountdown, gAllRangeCountdown, sizeof(sn->scalars.allRangeCountdown));
     gShowAllRangeCountdown = sn->scalars.showAllRangeCountdown;
     gBossFrameCount = sn->scalars.bossFrameCount;
+    SAVE_TR_STAGE("apply after boss/allrange");
 
     gShowHud = sn->scalars.showHud;
     bcopy(sn->scalars.showReticles, gShowReticles, sizeof(sn->scalars.showReticles));
@@ -595,23 +658,29 @@ static void Snapshot_ApplyToGame(const PracticeSnapshot *sn) {
 
     gKillEventActors = sn->scalars.killEventActors;
     gPrevEventActorIndex = sn->scalars.prevEventActorIndex;
+    SAVE_TR_STAGE("apply after hud/fill/kill");
 
     gPlayer[0].state = PLAYERSTATE_ACTIVE;
+    SAVE_TR_STAGE("apply after gPlayer[0].state=ACTIVE");
 
     Practice_Hud_Reset();
+    SAVE_TR_STAGE("apply after Practice_Hud_Reset");
 
     Audio_ClearVoice();
+    SAVE_TR_STAGE("apply after Audio_ClearVoice");
     /* Phase 5: apply TAG_AUDIO_SPEC_PACKED via Audio_SetAudioSpec (emit-only TLV in Phase 4). */
     AUDIO_PLAY_BGM(sn->scalars.bgmSeqId);
+    SAVE_TR_STAGE("apply after AUDIO_PLAY_BGM");
 }
 
 static int Practice_Load_Cb(const void *buf, uint32_t size) {
     serial_reader_t r;
-    PracticeSnapshot sn;
+    PracticeSnapshot *sn = &gPracticeSaveScratch;
     uint16_t raw_tag;
     uint32_t len;
     const void *data;
     serial_status_t st;
+    u32 tlv_trace_n;
     u32 tlv_ov_build_id;
     u32 tlv_ov_vram_u32;
     const uint8_t *overlay_src;
@@ -627,10 +696,15 @@ static int Practice_Load_Cb(const void *buf, uint32_t size) {
     have_overlay_meta = false;
     have_segments = false;
 
-    bzero(&sn, sizeof(sn));
+    bzero(sn, sizeof(*sn));
     bzero(segments_copy, sizeof(segments_copy));
+    tlv_trace_n = 0;
 
+#if PRACTICE_SAVE_TRACE
+    osSyncPrintf("[save_tr] load_cb enter size=%u buf=%08x\n", (unsigned)size, (u32)(uintptr_t)buf);
+#endif
     serial_reader_init(&r, buf, size);
+    SAVE_TR_STAGE("load tlv loop start");
 
     for (;;) {
         st = serial_get_next(&r, &raw_tag, &len, &data);
@@ -638,8 +712,19 @@ static int Practice_Load_Cb(const void *buf, uint32_t size) {
             break;
         }
         if (st != SERIAL_OK_TAG_READ) {
+#if PRACTICE_SAVE_TRACE
+            osSyncPrintf("[save_tr] load tlv serial_get_next st=%d (not TAG_READ)\n", (s32)st);
+#endif
             return -1;
         }
+
+        tlv_trace_n++;
+#if PRACTICE_SAVE_TRACE
+        if (tlv_trace_n <= 36U) {
+            osSyncPrintf("[save_tr] load tlv #%u tag=%u len=%u\n", (unsigned)tlv_trace_n, (unsigned)raw_tag,
+                         (unsigned)len);
+        }
+#endif
 
         switch ((practice_save_tag_t)raw_tag) {
             case TAG_LEVEL_ID:
@@ -687,7 +772,7 @@ static int Practice_Load_Cb(const void *buf, uint32_t size) {
                 if (len != sizeof(u16)) {
                     return -1;
                 }
-                sn.scalars.bgmSeqId = *(const u16 *)data;
+                sn->scalars.bgmSeqId = *(const u16 *)data;
                 break;
 
             case TAG_AUDIO_SPEC_PACKED:
@@ -704,86 +789,86 @@ static int Practice_Load_Cb(const void *buf, uint32_t size) {
                 break;
 
             case TAG_PLAYER_ARRAY:
-                if (len != sizeof(sn.playerData)) {
+                if (len != sizeof(sn->playerData)) {
                     return -1;
                 }
-                bcopy((void *)data, sn.playerData, sizeof(sn.playerData));
+                bcopy((void *)data, sn->playerData, sizeof(sn->playerData));
                 break;
 
             case TAG_ACTORS:
-                if (len != sizeof(sn.actors)) {
+                if (len != sizeof(sn->actors)) {
                     return -1;
                 }
-                bcopy((void *)data, sn.actors, sizeof(sn.actors));
+                bcopy((void *)data, sn->actors, sizeof(sn->actors));
                 break;
 
             case TAG_BOSSES:
-                if (len != sizeof(sn.bosses)) {
+                if (len != sizeof(sn->bosses)) {
                     return -1;
                 }
-                bcopy((void *)data, sn.bosses, sizeof(sn.bosses));
+                bcopy((void *)data, sn->bosses, sizeof(sn->bosses));
                 break;
 
             case TAG_SCENERY:
-                if (len != sizeof(sn.scenery)) {
+                if (len != sizeof(sn->scenery)) {
                     return -1;
                 }
-                bcopy((void *)data, sn.scenery, sizeof(sn.scenery));
+                bcopy((void *)data, sn->scenery, sizeof(sn->scenery));
                 break;
 
             case TAG_SPRITES:
-                if (len != sizeof(sn.sprites)) {
+                if (len != sizeof(sn->sprites)) {
                     return -1;
                 }
-                bcopy((void *)data, sn.sprites, sizeof(sn.sprites));
+                bcopy((void *)data, sn->sprites, sizeof(sn->sprites));
                 break;
 
             case TAG_EFFECTS:
-                if (len != sizeof(sn.effects)) {
+                if (len != sizeof(sn->effects)) {
                     return -1;
                 }
-                bcopy((void *)data, sn.effects, sizeof(sn.effects));
+                bcopy((void *)data, sn->effects, sizeof(sn->effects));
                 break;
 
             case TAG_ITEMS:
-                if (len != sizeof(sn.items)) {
+                if (len != sizeof(sn->items)) {
                     return -1;
                 }
-                bcopy((void *)data, sn.items, sizeof(sn.items));
+                bcopy((void *)data, sn->items, sizeof(sn->items));
                 break;
 
             case TAG_PLAYER_SHOTS:
-                if (len != sizeof(sn.playerShots)) {
+                if (len != sizeof(sn->playerShots)) {
                     return -1;
                 }
-                bcopy((void *)data, sn.playerShots, sizeof(sn.playerShots));
+                bcopy((void *)data, sn->playerShots, sizeof(sn->playerShots));
                 break;
 
             case TAG_TEXTURED_LINES:
-                if (len != sizeof(sn.texturedLines)) {
+                if (len != sizeof(sn->texturedLines)) {
                     return -1;
                 }
-                bcopy((void *)data, sn.texturedLines, sizeof(sn.texturedLines));
+                bcopy((void *)data, sn->texturedLines, sizeof(sn->texturedLines));
                 break;
 
             case TAG_RADAR_MARKS:
-                if (len != sizeof(sn.radarMarks)) {
+                if (len != sizeof(sn->radarMarks)) {
                     return -1;
                 }
-                bcopy((void *)data, sn.radarMarks, sizeof(sn.radarMarks));
+                bcopy((void *)data, sn->radarMarks, sizeof(sn->radarMarks));
                 break;
 
             case TAG_BONUS_TEXT:
-                if (len != sizeof(sn.bonusText)) {
+                if (len != sizeof(sn->bonusText)) {
                     return -1;
                 }
-                bcopy((void *)data, sn.bonusText, sizeof(sn.bonusText));
+                bcopy((void *)data, sn->bonusText, sizeof(sn->bonusText));
                 break;
 
 #define LD(field)                                                                                              \
-                if (len != sizeof(sn.scalars.field))                                                        \
+                if (len != sizeof(sn->scalars.field))                                                        \
                     return -1;                                                                                \
-                bcopy((void *)data, &(sn.scalars.field), sizeof(sn.scalars.field));                            \
+                bcopy((void *)data, &(sn->scalars.field), sizeof(sn->scalars.field));                            \
                 break
 
 
@@ -889,192 +974,192 @@ static int Practice_Load_Cb(const void *buf, uint32_t size) {
 #undef LD
 
             case TAG_LASER_STRENGTH:
-                if (len != sizeof(sn.scalars.laserStrength)) {
+                if (len != sizeof(sn->scalars.laserStrength)) {
                     return -1;
                 }
-                bcopy((void *)data, sn.scalars.laserStrength, sizeof(sn.scalars.laserStrength));
+                bcopy((void *)data, sn->scalars.laserStrength, sizeof(sn->scalars.laserStrength));
                 break;
 
             case TAG_BOMB_COUNT:
-                if (len != sizeof(sn.scalars.bombCount)) {
+                if (len != sizeof(sn->scalars.bombCount)) {
                     return -1;
                 }
-                bcopy((void *)data, sn.scalars.bombCount, sizeof(sn.scalars.bombCount));
+                bcopy((void *)data, sn->scalars.bombCount, sizeof(sn->scalars.bombCount));
                 break;
 
             case TAG_LIFE_COUNT:
-                if (len != sizeof(sn.scalars.lifeCount)) {
+                if (len != sizeof(sn->scalars.lifeCount)) {
                     return -1;
                 }
-                bcopy((void *)data, sn.scalars.lifeCount, sizeof(sn.scalars.lifeCount));
+                bcopy((void *)data, sn->scalars.lifeCount, sizeof(sn->scalars.lifeCount));
                 break;
 
             case TAG_CHARGE_TIMERS:
-                if (len != sizeof(sn.scalars.chargeTimers)) {
+                if (len != sizeof(sn->scalars.chargeTimers)) {
                     return -1;
                 }
-                bcopy((void *)data, sn.scalars.chargeTimers, sizeof(sn.scalars.chargeTimers));
+                bcopy((void *)data, sn->scalars.chargeTimers, sizeof(sn->scalars.chargeTimers));
                 break;
 
             case TAG_SHIELD_TIMER:
-                if (len != sizeof(sn.scalars.shieldTimer)) {
+                if (len != sizeof(sn->scalars.shieldTimer)) {
                     return -1;
                 }
-                bcopy((void *)data, sn.scalars.shieldTimer, sizeof(sn.scalars.shieldTimer));
+                bcopy((void *)data, sn->scalars.shieldTimer, sizeof(sn->scalars.shieldTimer));
                 break;
 
             case TAG_HAS_SHIELD:
-                if (len != sizeof(sn.scalars.hasShield)) {
+                if (len != sizeof(sn->scalars.hasShield)) {
                     return -1;
                 }
-                bcopy((void *)data, sn.scalars.hasShield, sizeof(sn.scalars.hasShield));
+                bcopy((void *)data, sn->scalars.hasShield, sizeof(sn->scalars.hasShield));
                 break;
 
             case TAG_PLAYER_FORMS:
-                if (len != sizeof(sn.scalars.playerForms)) {
+                if (len != sizeof(sn->scalars.playerForms)) {
                     return -1;
                 }
-                bcopy((void *)data, sn.scalars.playerForms, sizeof(sn.scalars.playerForms));
+                bcopy((void *)data, sn->scalars.playerForms, sizeof(sn->scalars.playerForms));
                 break;
 
             case TAG_TEAM_SHIELDS:
-                if (len != sizeof(sn.scalars.teamShields)) {
+                if (len != sizeof(sn->scalars.teamShields)) {
                     return -1;
                 }
-                bcopy((void *)data, sn.scalars.teamShields, sizeof(sn.scalars.teamShields));
+                bcopy((void *)data, sn->scalars.teamShields, sizeof(sn->scalars.teamShields));
                 break;
 
             case TAG_TEAM_DAMAGE:
-                if (len != sizeof(sn.scalars.teamDamage)) {
+                if (len != sizeof(sn->scalars.teamDamage)) {
                     return -1;
                 }
-                bcopy((void *)data, sn.scalars.teamDamage, sizeof(sn.scalars.teamDamage));
+                bcopy((void *)data, sn->scalars.teamDamage, sizeof(sn->scalars.teamDamage));
                 break;
 
             case TAG_STAR_WOLF_TEAM_ALIVE:
-                if (len != sizeof(sn.scalars.starWolfTeamAlive)) {
+                if (len != sizeof(sn->scalars.starWolfTeamAlive)) {
                     return -1;
                 }
-                bcopy((void *)data, sn.scalars.starWolfTeamAlive, sizeof(sn.scalars.starWolfTeamAlive));
+                bcopy((void *)data, sn->scalars.starWolfTeamAlive, sizeof(sn->scalars.starWolfTeamAlive));
                 break;
 
             case TAG_SAVED_STAR_WOLF_TEAM_ALIVE:
-                if (len != sizeof(sn.scalars.savedStarWolfTeamAlive)) {
+                if (len != sizeof(sn->scalars.savedStarWolfTeamAlive)) {
                     return -1;
                 }
-                bcopy((void *)data, sn.scalars.savedStarWolfTeamAlive, sizeof(sn.scalars.savedStarWolfTeamAlive));
+                bcopy((void *)data, sn->scalars.savedStarWolfTeamAlive, sizeof(sn->scalars.savedStarWolfTeamAlive));
                 break;
 
             case TAG_RIGHT_WING_HEALTH:
-                if (len != sizeof(sn.scalars.rightWingHealth)) {
+                if (len != sizeof(sn->scalars.rightWingHealth)) {
                     return -1;
                 }
-                bcopy((void *)data, sn.scalars.rightWingHealth, sizeof(sn.scalars.rightWingHealth));
+                bcopy((void *)data, sn->scalars.rightWingHealth, sizeof(sn->scalars.rightWingHealth));
                 break;
 
             case TAG_LEFT_WING_HEALTH:
-                if (len != sizeof(sn.scalars.leftWingHealth)) {
+                if (len != sizeof(sn->scalars.leftWingHealth)) {
                     return -1;
                 }
-                bcopy((void *)data, sn.scalars.leftWingHealth, sizeof(sn.scalars.leftWingHealth));
+                bcopy((void *)data, sn->scalars.leftWingHealth, sizeof(sn->scalars.leftWingHealth));
                 break;
 
             case TAG_ALL_RANGE_COUNTDOWN:
-                if (len != sizeof(sn.scalars.allRangeCountdown)) {
+                if (len != sizeof(sn->scalars.allRangeCountdown)) {
                     return -1;
                 }
-                bcopy((void *)data, sn.scalars.allRangeCountdown, sizeof(sn.scalars.allRangeCountdown));
+                bcopy((void *)data, sn->scalars.allRangeCountdown, sizeof(sn->scalars.allRangeCountdown));
                 break;
 
             case TAG_SHOW_RETICLES:
-                if (len != sizeof(sn.scalars.showReticles)) {
+                if (len != sizeof(sn->scalars.showReticles)) {
                     return -1;
                 }
-                bcopy((void *)data, sn.scalars.showReticles, sizeof(sn.scalars.showReticles));
+                bcopy((void *)data, sn->scalars.showReticles, sizeof(sn->scalars.showReticles));
                 break;
 
             case TAG_FILL_SCREEN_ALPHA:
-                if (len != sizeof(sn.scalars.fillScreenAlpha)) {
+                if (len != sizeof(sn->scalars.fillScreenAlpha)) {
                     return -1;
                 }
-                bcopy((void *)data, &(sn.scalars.fillScreenAlpha), sizeof(sn.scalars.fillScreenAlpha));
+                bcopy((void *)data, &(sn->scalars.fillScreenAlpha), sizeof(sn->scalars.fillScreenAlpha));
                 break;
 
             case TAG_FILL_SCREEN_RED:
-                if (len != sizeof(sn.scalars.fillScreenRed)) {
+                if (len != sizeof(sn->scalars.fillScreenRed)) {
                     return -1;
                 }
-                bcopy((void *)data, &(sn.scalars.fillScreenRed), sizeof(sn.scalars.fillScreenRed));
+                bcopy((void *)data, &(sn->scalars.fillScreenRed), sizeof(sn->scalars.fillScreenRed));
                 break;
 
             case TAG_FILL_SCREEN_GREEN:
-                if (len != sizeof(sn.scalars.fillScreenGreen)) {
+                if (len != sizeof(sn->scalars.fillScreenGreen)) {
                     return -1;
                 }
-                bcopy((void *)data, &(sn.scalars.fillScreenGreen), sizeof(sn.scalars.fillScreenGreen));
+                bcopy((void *)data, &(sn->scalars.fillScreenGreen), sizeof(sn->scalars.fillScreenGreen));
                 break;
 
             case TAG_FILL_SCREEN_BLUE:
-                if (len != sizeof(sn.scalars.fillScreenBlue)) {
+                if (len != sizeof(sn->scalars.fillScreenBlue)) {
                     return -1;
                 }
-                bcopy((void *)data, &(sn.scalars.fillScreenBlue), sizeof(sn.scalars.fillScreenBlue));
+                bcopy((void *)data, &(sn->scalars.fillScreenBlue), sizeof(sn->scalars.fillScreenBlue));
                 break;
 
             case TAG_FILL_SCREEN_ALPHA_TARGET:
-                if (len != sizeof(sn.scalars.fillScreenAlphaTarget)) {
+                if (len != sizeof(sn->scalars.fillScreenAlphaTarget)) {
                     return -1;
                 }
-                bcopy((void *)data, &(sn.scalars.fillScreenAlphaTarget), sizeof(sn.scalars.fillScreenAlphaTarget));
+                bcopy((void *)data, &(sn->scalars.fillScreenAlphaTarget), sizeof(sn->scalars.fillScreenAlphaTarget));
                 break;
 
             case TAG_FILL_SCREEN_ALPHA_STEP:
-                if (len != sizeof(sn.scalars.fillScreenAlphaStep)) {
+                if (len != sizeof(sn->scalars.fillScreenAlphaStep)) {
                     return -1;
                 }
-                bcopy((void *)data, &(sn.scalars.fillScreenAlphaStep), sizeof(sn.scalars.fillScreenAlphaStep));
+                bcopy((void *)data, &(sn->scalars.fillScreenAlphaStep), sizeof(sn->scalars.fillScreenAlphaStep));
                 break;
 
             case TAG_RADIO_STATE:
-                if (len != sizeof(sn.scalars.radioState)) {
+                if (len != sizeof(sn->scalars.radioState)) {
                     return -1;
                 }
-                bcopy((void *)data, &(sn.scalars.radioState), sizeof(sn.scalars.radioState));
+                bcopy((void *)data, &(sn->scalars.radioState), sizeof(sn->scalars.radioState));
                 break;
 
             case TAG_RADIO_STATE_TIMER:
-                if (len != sizeof(sn.scalars.radioStateTimer)) {
+                if (len != sizeof(sn->scalars.radioStateTimer)) {
                     return -1;
                 }
-                bcopy((void *)data, &(sn.scalars.radioStateTimer), sizeof(sn.scalars.radioStateTimer));
+                bcopy((void *)data, &(sn->scalars.radioStateTimer), sizeof(sn->scalars.radioStateTimer));
                 break;
 
             case TAG_RADIO_MSG_ID:
-                if (len != sizeof(sn.scalars.radioMsgId)) {
+                if (len != sizeof(sn->scalars.radioMsgId)) {
                     return -1;
                 }
-                bcopy((void *)data, &(sn.scalars.radioMsgId), sizeof(sn.scalars.radioMsgId));
+                bcopy((void *)data, &(sn->scalars.radioMsgId), sizeof(sn->scalars.radioMsgId));
                 break;
 
             case TAG_KILL_EVENT_ACTORS:
-                if (len != sizeof(sn.scalars.killEventActors)) {
+                if (len != sizeof(sn->scalars.killEventActors)) {
                     return -1;
                 }
-                bcopy((void *)data, &(sn.scalars.killEventActors), sizeof(sn.scalars.killEventActors));
+                bcopy((void *)data, &(sn->scalars.killEventActors), sizeof(sn->scalars.killEventActors));
                 break;
 
             case TAG_PREV_EVENT_ACTOR_INDEX:
-                if (len != sizeof(sn.scalars.prevEventActorIndex)) {
+                if (len != sizeof(sn->scalars.prevEventActorIndex)) {
                     return -1;
                 }
-                bcopy((void *)data, &(sn.scalars.prevEventActorIndex), sizeof(sn.scalars.prevEventActorIndex));
+                bcopy((void *)data, &(sn->scalars.prevEventActorIndex), sizeof(sn->scalars.prevEventActorIndex));
                 break;
 
             case TAG_BGM_SEQ_ID:
-                if (len != sizeof(sn.scalars.bgmSeqId)) {
+                if (len != sizeof(sn->scalars.bgmSeqId)) {
                     return -1;
                 }
-                bcopy((void *)data, &(sn.scalars.bgmSeqId), sizeof(sn.scalars.bgmSeqId));
+                bcopy((void *)data, &(sn->scalars.bgmSeqId), sizeof(sn->scalars.bgmSeqId));
                 break;
 
             default:
@@ -1082,8 +1167,12 @@ static int Practice_Load_Cb(const void *buf, uint32_t size) {
         }
     }
 
+#if PRACTICE_SAVE_TRACE
+    osSyncPrintf("[save_tr] load tlv loop done tags=%u\n", (unsigned)tlv_trace_n);
+#endif
     (void)have_overlay_meta;
 
+    SAVE_TR_STAGE("load before overlay restore");
     if ((overlay_src != NULL) && (overlay_len > 0)) {
         void *dst;
         u32 ds;
@@ -1101,12 +1190,16 @@ static int Practice_Load_Cb(const void *buf, uint32_t size) {
             }
         }
     }
+    SAVE_TR_STAGE("load after overlay restore");
 
     if (have_segments) {
+        SAVE_TR_STAGE("load apply TAG_SEGMENTS");
         bcopy(segments_copy, gSegments, sizeof(gSegments));
     }
 
-    Snapshot_ApplyToGame(&sn);
+    SAVE_TR_STAGE("load before Snapshot_ApplyToGame");
+    Snapshot_ApplyToGame(sn);
+    SAVE_TR_STAGE("load_cb ok return 0");
     return 0;
 }
 
@@ -1121,6 +1214,16 @@ static void Practice_Save_InvalidSlotProbe(void) {
     }
 }
 #endif
+
+static void Practice_SaveTrace_CanSaveFields(void) {
+#if PRACTICE_SAVE_TRACE
+    osSyncPrintf(
+        "[save_tr] gates dis=%d gs=%d ps=%d menu=%d ovl_ok=%d gpl=%08x p0st=%d\n", (s32)gPracticeSaveDisabled,
+        (s32)gGameState, (s32)gPlayState, (s32)gPracticeMenuState,
+        practice_overlay_is_saveable(gCurrentLevel) ? 1 : 0, (u32)(uintptr_t)gPlayer,
+        (gPlayer != NULL) ? (s32)gPlayer[0].state : -99);
+#endif
+}
 
 s32 Practice_CanSaveHere(void) {
     if (gPracticeSaveDisabled) {
@@ -1216,6 +1319,20 @@ void Practice_Save_Init(void) {
 #endif
 }
 
+void Practice_SaveTrace_HotkeyIsv(void) {
+#if PRACTICE_SAVE_TRACE
+    osSyncPrintf("[save_tr] hotkey SAVE lvl=%d gs=%d ps=%d menu=%d scr=%d\n", (s32)gCurrentLevel, (s32)gGameState,
+                 (s32)gPlayState, (s32)gPracticeMenuState, (s32)gPracticeScreen);
+#endif
+}
+
+void Practice_SaveTrace_LoadHotkeyIsv(void) {
+#if PRACTICE_SAVE_TRACE
+    osSyncPrintf("[save_tr] hotkey LOAD lvl=%d gs=%d ps=%d menu=%d scr=%d\n", (s32)gCurrentLevel, (s32)gGameState,
+                 (s32)gPlayState, (s32)gPracticeMenuState, (s32)gPracticeScreen);
+#endif
+}
+
 void Practice_ClearCheckpoint(void) {
     s32 i;
 
@@ -1253,6 +1370,12 @@ void Practice_SaveStateSlot(s32 slot) {
 
     gPracticeLastSaveResult = SLOT_MANAGER_ERR_INVALID_SLOT;
 
+#if PRACTICE_SAVE_TRACE
+    osSyncPrintf("[save_tr] SaveStateSlot enter slot=%d dis=%d gs=%d ps=%d menu=%d scr=%d\n", slot,
+                 (s32)gPracticeSaveDisabled, (s32)gGameState, (s32)gPlayState, (s32)gPracticeMenuState,
+                 (s32)gPracticeScreen);
+#endif
+
     if (gPracticeSaveDisabled) {
         osSyncPrintf("[save] disabled: no Expansion Pak (stock 4MB)\n");
         return;
@@ -1263,6 +1386,7 @@ void Practice_SaveStateSlot(s32 slot) {
         return;
     }
 
+    Practice_SaveTrace_CanSaveFields();
     if (!Practice_CanSaveHere()) {
         gPracticeLastSaveResult = SLOT_MANAGER_ERR_INVALID_SLOT;
         osSyncPrintf("[save] refuse: not saveable (level=%d play=%d menu=%d)\n", (s32)gCurrentLevel,
@@ -1270,7 +1394,13 @@ void Practice_SaveStateSlot(s32 slot) {
         return;
     }
 
+#if PRACTICE_SAVE_TRACE
+    osSyncPrintf("[save_tr] call slot_manager_save_ram(slot=%d)\n", slot);
+#endif
     rr = slot_manager_save_ram(slot);
+#if PRACTICE_SAVE_TRACE
+    osSyncPrintf("[save_tr] slot_manager_save_ram ret=%d\n", rr);
+#endif
     gPracticeLastSaveResult = rr;
     SyncValidBits();
 }
@@ -1284,20 +1414,37 @@ void Practice_LoadStateSlot(s32 slot) {
 
     gPracticeLastLoadResult = SLOT_MANAGER_ERR_INVALID_SLOT;
 
+#if PRACTICE_SAVE_TRACE
+    osSyncPrintf("[save_tr] LoadStateSlot enter slot=%d dis=%d scr=%d\n", slot, (s32)gPracticeSaveDisabled,
+                 (s32)gPracticeScreen);
+#endif
+
     if (gPracticeSaveDisabled) {
         osSyncPrintf("[load] disabled: no Expansion Pak (stock 4MB)\n");
         return;
     }
 
     if ((slot < 0) || (slot >= gPracticeRamSlotCount)) {
+#if PRACTICE_SAVE_TRACE
+        osSyncPrintf("[save_tr] LoadStateSlot refuse bad slot=%d\n", slot);
+#endif
         return;
     }
     if (!slot_manager_ram_valid(slot)) {
         gPracticeLastLoadResult = SLOT_MANAGER_ERR_INVALID_SLOT;
+#if PRACTICE_SAVE_TRACE
+        osSyncPrintf("[save_tr] LoadStateSlot refuse slot empty\n");
+#endif
         return;
     }
 
+#if PRACTICE_SAVE_TRACE
+    osSyncPrintf("[save_tr] call slot_manager_load_ram(%d)\n", slot);
+#endif
     rr = slot_manager_load_ram(slot);
+#if PRACTICE_SAVE_TRACE
+    osSyncPrintf("[save_tr] slot_manager_load_ram ret=%d\n", rr);
+#endif
     gPracticeLastLoadResult = rr;
 }
 

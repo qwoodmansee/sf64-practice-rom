@@ -61,6 +61,11 @@ Lead confirms scope, dispatches sf64-coder with the 8-step checklist, verifies, 
 
 ---
 
+## Project skills (`.claude/skills/`)
+
+- **`debug-ram-layout`** — linker overlap / dynamic load window vs practice BSS.
+- **`practice-hw-isv-trace`** — SC64 + IS-Viewer save/load bracketing (`PRACTICE_SAVE_TRACE=1`), `gPracticeScreen` vs engine state, static `PracticeSnapshot` scratch (no giant stack locals).
+
 ## Design principles
 
 - **CLAUDE.md is the spec.** Agents reference it — they don't duplicate it. Keep CLAUDE.md up to date and the agents stay accurate.
