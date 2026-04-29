@@ -254,11 +254,30 @@ void practice_overlay_prime_build_ids(void) {
 }
 
 void practice_overlay_request_load(LevelId id, s32 phase) {
-    /* Wave 5 fills this in: drives the cross-scene transition state machine
-     * (sets gNextLevel/gNextGameStateTimer, primes overlay DMA, applies the
-     * saved phase). Wave 2.1 keeps it as a logging stub so callers compile. */
-    osSyncPrintf("[overlay] request_load stub level=%d phase=%d\n",
-                 (s32)id, phase);
+    /* Same engine handoff as Practice_LaunchLevel, minus the practice-side
+     * housekeeping (HUD reset, checkpoint clear, screen flip): the
+     * cross-scene state machine in practice_save.c does its own apply
+     * once the destination scene reaches PLAY_UPDATE. Touching gPracticeScreen
+     * or wiping HUD here would corrupt the in-flight load (and the active
+     * radial menu path that initiated it). */
+    if (!practice_overlay_is_saveable(id)) {
+        osSyncPrintf("[overlay] request_load refuse: non-saveable level=%d\n",
+                     (s32)id);
+        return;
+    }
+
+    gNextLevel = (u16)id;
+    gNextLevelPhase = (u16)phase;
+    gClearPlayerInfo = true;
+    gPracticeCheckpointProgress = 0.0f;
+
+    /* Single-source audio dispatch. Practice_LaunchLevel uses the same call. */
+    Audio_SetAudioSpec(0, Practice_AudioSpecForLevel(id));
+
+    gNextGameState = GSTATE_PLAY;
+    gDrawMode = DRAW_NONE;
+
+    osSyncPrintf("[overlay] request_load level=%d phase=%d\n", (s32)id, phase);
 }
 
 #endif /* PRACTICE_ROM */
