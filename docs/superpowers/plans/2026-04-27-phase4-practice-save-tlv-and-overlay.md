@@ -719,6 +719,9 @@ completion to the executor.
   `Play_Main()` is paused under `PMENU_OPEN_FROZEN`.
 - Added `check_radial_menu_save_allowed()` to the static invariants so this
   radial-save gate cannot regress silently.
+- Patched Aquas Blue Marine torpedo bookkeeping to validate the active torpedo
+  slot before reading `gPlayerShots[slot - 1]`; the old order could read slot
+  `-1` immediately after Aquas init when no torpedo existed.
 - Local verification passed: static invariants, practice ROM build, host
   `lib-test`, and whitespace check.
 - BizHawk rows below are still pending on this machine because BizHawk is not

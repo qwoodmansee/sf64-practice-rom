@@ -137,7 +137,7 @@ For each saveable level:
 | VENOM_ANDROSS | | | |
 | MACBETH | | | |
 | TITANIA | 5788384 | yes | 2026-04-29: level 12; bump_hwm=13248, gfx_peak=154944, audio_peak=716368, free_low=5788384. ISV emitted garbage bytes after several clean tick60 lines; watch for repeat/desync. |
-| AQUAS | 5878400 | yes | 2026-04-29 partial/crash: level 13 reached tick60 once; bump_hwm=1248, gfx_peak=76928, audio_peak=716368, free_low=5878400. Then crashed / ISV reported `Debug data write dropped due to timeout`; do not use as final pass. |
+| AQUAS | 5878400 | yes | 2026-04-29 partial/crash: level 13 reached tick60 once; bump_hwm=1248, gfx_peak=76928, audio_peak=716368, free_low=5878400. Then crashed / ISV reported `Debug data write dropped due to timeout`; do not use as final pass. Candidate fix: guard torpedo slot `D_i3_801C4190[5]` before indexing `gPlayerShots[slot - 1]`. Needs hardware retest. |
 | FORTUNA | | | |
 | KATINA | | | |
 | BOLSE | | | |
