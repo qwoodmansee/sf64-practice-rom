@@ -23,9 +23,13 @@ PATCHER_PACKAGE = "tools/patcher/package.json"
 PATCHER_CREATE_RELEASE = "tools/patcher/src/create-release.ts"
 
 errors = []
+warnings = []
 
 def error(msg):
     errors.append(msg)
+
+def warning(msg):
+    warnings.append(msg)
 
 def read(path):
     with open(path) as f:
@@ -602,6 +606,163 @@ def check_phase4_engine_hooks():
         )
 
 
+def check_practice_pool_placement():
+    """practice_save.o BSS must be in .practice_pool (after .dma_table).
+
+    When sSlotPool is large (>= ~0xec0 bytes from the start of practice_save BSS)
+    and lives in .main_bss, BSS zero-init at boot zeroes the .dma_table region,
+    corrupting all DMA loads. The fix: practice_save.o(.bss) is placed in a
+    dedicated .practice_pool section after .dma_table in the linker script.
+    """
+    linker = "linker_scripts/us/rev1/starfox64.ld"
+    if not os.path.isfile(linker):
+        return
+    ld = read(linker)
+    if ".practice_pool" not in ld:
+        error(
+            f"{linker}: .practice_pool section missing; "
+            "run tools/patch_linker_script.py (check_practice_pool_placement)"
+        )
+    # practice_save.o(.bss) must NOT appear inside .main_bss (only in .practice_pool).
+    main_bss_start = ld.find(".main_bss")
+    main_bss_end = ld.find("main_VRAM_END", main_bss_start) if main_bss_start >= 0 else -1
+    practice_pool_start = ld.find(".practice_pool")
+    if main_bss_start >= 0 and main_bss_end >= 0:
+        main_bss_block = ld[main_bss_start:main_bss_end]
+        if "practice_save.o(.bss)" in main_bss_block:
+            error(
+                f"{linker}: practice_save.o(.bss) is inside .main_bss; "
+                "it must be moved to .practice_pool to avoid clobbering gDmaTable "
+                "(check_practice_pool_placement)"
+            )
+    pool_section_start = ld.find(".practice_pool (NOLOAD)")
+    if pool_section_start >= 0:
+        pool_section_block = ld[pool_section_start:pool_section_start + 600]
+        if "practice_save.o(.bss)" not in pool_section_block:
+            error(
+                f"{linker}: .practice_pool section does not contain practice_save.o(.bss) "
+                "(check_practice_pool_placement)"
+            )
+
+
+def check_practice_pool_no_overlay_overlap():
+    """Warn if any practice-owned BSS section overlaps an overlay slot.
+
+    SF64 streams overlays + scene assets into a fixed RAM slot starting at
+    SEGMENT_VRAM_START(ovl_i1). Any practice-defined NOLOAD section that lands
+    in that slot will be clobbered by overlay loads (or vice versa: a practice
+    bzero will wipe a live overlay's code/data).
+
+    This is reported as a non-fatal warning rather than a hard error: the user
+    knows save state is structurally blocked on the Wave 6 audit, and gating
+    every commit on the layout fix would block unrelated work. Once a final
+    layout lands and removes the overlap, this warning will silently disappear.
+
+    Logic delegated to tools/audit_ram_layout.py so the report and the gate
+    stay in sync. Skips silently if the map file is missing (e.g. fresh checkout
+    without a build) — matches the pattern in check_practice_pool_placement.
+    """
+    map_path = "build/starfox64.us.rev1.map"
+    if not os.path.isfile(map_path):
+        return
+    # Import via path manipulation so this works whether invoked from the repo
+    # root or from a worktree with a different sys.path.
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    try:
+        import audit_ram_layout
+    except ImportError:
+        return
+    finally:
+        # Restore sys.path.
+        if sys.path and sys.path[0] == os.path.dirname(os.path.abspath(__file__)):
+            sys.path.pop(0)
+
+    regions = audit_ram_layout.parse_map(map_path)
+    overlaps = audit_ram_layout.find_overlaps(regions)
+    if not overlaps:
+        return
+
+    # Collapse to one warning per practice section: the per-overlay detail is
+    # in audit_ram_layout's full report; here we just want a one-line nudge.
+    by_practice = {}
+    for p, o, n in overlaps:
+        by_practice.setdefault(p.name, []).append((o.name, n))
+
+    for pname, hits in by_practice.items():
+        worst_overlay, worst_size = max(hits, key=lambda t: t[1])
+        warning(
+            f"{pname} overlaps overlay/asset load region "
+            f"(largest: {worst_overlay} by {audit_ram_layout._human_size(worst_size)}); "
+            f"run `python3 tools/audit_ram_layout.py` for the full report "
+            "(check_practice_pool_no_overlay_overlap)"
+        )
+
+
+def check_practice_text_glyphs():
+    """Practice_DrawText* string literals must use only the glyphs supported
+    by Graphics_DisplaySmallText. Per CLAUDE.md the renderer's table is
+    `[A-Z 0-9 space ! : - .]`; lowercase, '<', '>', '^', 'v', '/', etc. all
+    render as blanks. This catches the input-display class of bug where
+    direction arrows were silently invisible."""
+    allowed = set("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 !:-.")
+    # Match Practice_DrawText, Practice_DrawTextColor, Practice_DrawTextOutline
+    # call. Capture any "..." literal inside the call up to the matching ).
+    # We find calls greedily across newlines, then scan each call site for
+    # string literals.
+    call_re = re.compile(r"Practice_DrawText[A-Za-z_]*\s*\(", re.MULTILINE)
+    string_re = re.compile(r'"((?:\\.|[^"\\])*)"')
+    if not os.path.isdir(SRC_PRACTICE):
+        return
+    for fn in sorted(os.listdir(SRC_PRACTICE)):
+        if not fn.endswith(".c"):
+            continue
+        path = os.path.join(SRC_PRACTICE, fn)
+        src = read(path)
+        for m in call_re.finditer(src):
+            # Find the matching close paren for this call.
+            depth = 1
+            i = m.end()
+            n = len(src)
+            in_str = False
+            in_chr = False
+            while i < n and depth > 0:
+                ch = src[i]
+                if in_str:
+                    if ch == "\\":
+                        i += 2
+                        continue
+                    if ch == '"':
+                        in_str = False
+                elif in_chr:
+                    if ch == "\\":
+                        i += 2
+                        continue
+                    if ch == "'":
+                        in_chr = False
+                else:
+                    if ch == '"':
+                        in_str = True
+                    elif ch == "'":
+                        in_chr = True
+                    elif ch == "(":
+                        depth += 1
+                    elif ch == ")":
+                        depth -= 1
+                i += 1
+            call_text = src[m.start():i]
+            for sm in string_re.finditer(call_text):
+                literal = sm.group(1)
+                bad = sorted({c for c in literal if c not in allowed})
+                if bad:
+                    line = src[:m.start()].count("\n") + 1
+                    error(
+                        f"{path}:{line}: Practice_DrawText literal {literal!r} "
+                        f"contains unsupported glyphs {bad}; "
+                        f"only [A-Z 0-9 space ! : - .] render. See CLAUDE.md "
+                        f"(check_practice_text_glyphs)"
+                    )
+
+
 def check_sys_memory_practice_bump_getter():
     """Practice_MemoryGetBumpUsed exposes bump-arena watermark for heap audit."""
     if not os.path.isfile(SYS_MEMORY):
@@ -642,12 +803,25 @@ def main():
     check_max_state_size_budget()
     check_phase4_engine_hooks()
     check_sys_memory_practice_bump_getter()
+    check_practice_pool_placement()
+    check_practice_pool_no_overlay_overlap()
+    check_practice_text_glyphs()
 
     if errors:
         print("Practice ROM invariant check FAILED:")
         for e in errors:
             print(f"  - {e}")
+        if warnings:
+            print("Warnings:")
+            for w in warnings:
+                print(f"  - {w}")
         return 1
+
+    if warnings:
+        print("Practice ROM invariant checks passed (with warnings):")
+        for w in warnings:
+            print(f"  - {w}")
+        return 0
 
     print("Practice ROM invariant checks passed.")
     return 0

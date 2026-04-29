@@ -67,6 +67,19 @@ LIB_FATFS_OBJS = [
 
 ANCHOR = "build/src/engine/fox_save.o"
 
+# Inserted after dma_table_VRAM_END so sSlotPool cannot clobber gDmaTable.
+PRACTICE_POOL_SECTION = """\
+    /* practice_save.o BSS lives here so it cannot clobber gDmaTable.
+     * sSlotPool (up to 512 KB) would overlap gDmaTable in .main_bss. */
+    .practice_pool (NOLOAD) : SUBALIGN(8)
+    {
+        practice_pool_BSS_START = .;
+        build/src/practice/practice_save.o(.bss);
+        . = ALIGN(., 8);
+        practice_pool_BSS_END = .;
+    }
+"""
+
 
 def _replace_after_anchor(content, anchor_line, injection):
     """Append `injection` immediately after `anchor_line` in `content`.
@@ -200,6 +213,27 @@ def patch():
             anchor_line = f"{predecessor}.o({section});"
             injection = f"        build/lib/fatfs/{obj}.o({section});"
             content = _replace_after_anchor(content, anchor_line, injection)
+        inject_count += 1
+
+    # Inject .practice_pool section after dma_table_VRAM_END if not present.
+    # Also remove practice_save.o(.bss) from .main_bss — it must live in
+    # .practice_pool to avoid clobbering gDmaTable during BSS zero-init.
+    if ".practice_pool" not in content:
+        anchor_line = "    dma_table_VRAM_END = .;"
+        needle = anchor_line + "\n"
+        replacement = anchor_line + "\n\n" + PRACTICE_POOL_SECTION
+        new_content = content.replace(needle, replacement, 1)
+        if new_content == content:
+            raise RuntimeError(
+                "Linker patcher: dma_table_VRAM_END anchor not found for "
+                ".practice_pool injection."
+            )
+        # Remove practice_save.o(.bss) from .main_bss and leave a comment.
+        save_bss = "        build/src/practice/practice_save.o(.bss);\n"
+        save_comment = "        /* practice_save BSS is in .practice_pool (after .dma_table). */\n"
+        if save_bss in new_content:
+            new_content = new_content.replace(save_bss, save_comment, 1)
+        content = new_content
         inject_count += 1
 
     if inject_count == 0:

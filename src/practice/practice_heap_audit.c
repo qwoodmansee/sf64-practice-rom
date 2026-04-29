@@ -140,16 +140,14 @@ void Practice_HeapAudit_Boot(void) {
 
     span = heap_audit_static_span();
 
-    osSyncPrintf(
-        "[heap] boot osMemSize=%u bss_span~%u headroom~%u bump=%u slot_pool=%08x "
-        "slot_pool_sz=%u (RAM_SLOT_COUNT*MAX_STATE_SIZE=%u)\n",
-        osMemSize, span, (osMemSize > span) ? (osMemSize - span) : 0U,
+    osSyncPrintf("[heap] boot memSz=%u bss~%u free~%u\n",
+        osMemSize, span, (osMemSize > span) ? (osMemSize - span) : 0U);
+    osSyncPrintf("[heap] boot bump=%u pool=%08x poolsz=%u\n",
         (u32)Practice_MemoryGetBumpUsed(), (u32)Practice_Save_SlotPoolBase(),
-        (u32)(RAM_SLOT_COUNT * MAX_STATE_SIZE), (u32)(RAM_SLOT_COUNT * MAX_STATE_SIZE));
-
-    osSyncPrintf(
-        "[heap] ovl_i1=%d ovl_i2=%d ovl_i3=%d ovl_i4=%d ovl_i5=%d ovl_i6=%d\n",
-        gPracticeOverlaySizes[0], gPracticeOverlaySizes[1], gPracticeOverlaySizes[2],
+        (u32)(RAM_SLOT_COUNT * MAX_STATE_SIZE));
+    osSyncPrintf("[heap] ovl i1=%d i2=%d i3=%d\n",
+        gPracticeOverlaySizes[0], gPracticeOverlaySizes[1], gPracticeOverlaySizes[2]);
+    osSyncPrintf("[heap] ovl i4=%d i5=%d i6=%d\n",
         gPracticeOverlaySizes[3], gPracticeOverlaySizes[4], gPracticeOverlaySizes[5]);
 }
 
@@ -181,6 +179,10 @@ void Practice_HeapAudit_PerFrame(void) {
     free_now = heap_audit_free_approx(bump, sHeapAuditPeakGfx, sHeapAuditPeakAudio);
     if ((s32)free_now < gPracticeFreeRamLow) {
         gPracticeFreeRamLow = (s32)free_now;
+    }
+
+    if ((gGameState != GSTATE_PLAY) || (gPlayState != PLAY_UPDATE)) {
+        return;
     }
 
     scene_change = (gCurrentLevel != sHeapAuditLastLevel);

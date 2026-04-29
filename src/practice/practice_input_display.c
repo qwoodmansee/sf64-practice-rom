@@ -58,15 +58,15 @@ void Practice_InputDisplay_Draw(void) {
 
     Practice_InputDisplay_DrawButton(baseX + 50, baseY - 2, "S", (btn & START_BUTTON) != 0);
 
-    Practice_InputDisplay_DrawButton(baseX + 94, baseY - 2, "^", (btn & U_CBUTTONS) != 0);
-    Practice_InputDisplay_DrawButton(baseX + 94, baseY + 14, "v", (btn & D_CBUTTONS) != 0);
-    Practice_InputDisplay_DrawButton(baseX + 84, baseY + 6, "<", (btn & L_CBUTTONS) != 0);
-    Practice_InputDisplay_DrawButton(baseX + 104, baseY + 6, ">", (btn & R_CBUTTONS) != 0);
+    Practice_InputDisplay_DrawButton(baseX + 94, baseY - 2, "U", (btn & U_CBUTTONS) != 0);
+    Practice_InputDisplay_DrawButton(baseX + 94, baseY + 14, "D", (btn & D_CBUTTONS) != 0);
+    Practice_InputDisplay_DrawButton(baseX + 84, baseY + 6, "L", (btn & L_CBUTTONS) != 0);
+    Practice_InputDisplay_DrawButton(baseX + 104, baseY + 6, "R", (btn & R_CBUTTONS) != 0);
 
-    Practice_DrawTextColor(baseX + 34, baseY + 2, "^", (btn & U_JPAD) ? 255 : 80, (btn & U_JPAD) ? 255 : 80, (btn & U_JPAD) ? 255 : 80);
-    Practice_DrawTextColor(baseX + 34, baseY + 16, "v", (btn & D_JPAD) ? 255 : 80, (btn & D_JPAD) ? 255 : 80, (btn & D_JPAD) ? 255 : 80);
-    Practice_DrawTextColor(baseX + 28, baseY + 9, "<", (btn & L_JPAD) ? 255 : 80, (btn & L_JPAD) ? 255 : 80, (btn & L_JPAD) ? 255 : 80);
-    Practice_DrawTextColor(baseX + 40, baseY + 9, ">", (btn & R_JPAD) ? 255 : 80, (btn & R_JPAD) ? 255 : 80, (btn & R_JPAD) ? 255 : 80);
+    Practice_DrawTextColor(baseX + 34, baseY + 2, "U", (btn & U_JPAD) ? 255 : 80, (btn & U_JPAD) ? 255 : 80, (btn & U_JPAD) ? 255 : 80);
+    Practice_DrawTextColor(baseX + 34, baseY + 16, "D", (btn & D_JPAD) ? 255 : 80, (btn & D_JPAD) ? 255 : 80, (btn & D_JPAD) ? 255 : 80);
+    Practice_DrawTextColor(baseX + 28, baseY + 9, "L", (btn & L_JPAD) ? 255 : 80, (btn & L_JPAD) ? 255 : 80, (btn & L_JPAD) ? 255 : 80);
+    Practice_DrawTextColor(baseX + 40, baseY + 9, "R", (btn & R_JPAD) ? 255 : 80, (btn & R_JPAD) ? 255 : 80, (btn & R_JPAD) ? 255 : 80);
 }
 
 #endif

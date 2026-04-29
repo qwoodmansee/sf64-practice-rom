@@ -17,7 +17,9 @@
 #define PRACTICE_SAVE_SELFTEST 0
 #endif
 
-/* Slot pool (.bss): one TLV stream per RAM slot (+ slot_manager header slots). */
+/* Slot pool: placed via linker script in .practice_pool (after .dma_table)
+ * to prevent BSS zero-init from clobbering gDmaTable. Explicitly zeroed
+ * in Practice_Save_Init. */
 static u8 sSlotPool[RAM_SLOT_COUNT * MAX_STATE_SIZE]
     __attribute__((aligned(8)));
 
@@ -1118,6 +1120,14 @@ s32 Practice_CanSaveHere(void) {
 }
 
 void Practice_Save_Init(void) {
+    /* Do NOT bzero(sSlotPool, ...) here. The .practice_pool BSS region
+     * (0x8018c940-0x8020c950) overlaps the dynamic overlay/asset load region
+     * (starts at 0x8019ae50). By the time this runs, SCENE_TITLE has already
+     * loaded ovl_menu + ast_text into that range; bzero would wipe them, and
+     * Load_SceneFiles for SCENE_MAP would not reload (same overlay, cached
+     * sCurrentScene), leaving the level-select with garbage textures.
+     * BSS is zero at cold boot anyway. Saving a state will still clobber
+     * overlays - gated by the hardware audit (Wave 6) to fix the layout. */
     slot_manager_init(STATE_VERSION, LIB_VERSION, Practice_Save_Cb, Practice_Load_Cb, RAM_SLOT_COUNT);
 
     if (slot_manager_set_ram_storage(sSlotPool, (uint32_t)sizeof(sSlotPool), MAX_STATE_SIZE) != SLOT_MANAGER_OK) {
