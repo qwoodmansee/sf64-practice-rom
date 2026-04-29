@@ -1,0 +1,49 @@
+tools/audit_ram_layout.py
+  663b97acc6aac727 30,34-38,341-737,749-758,760-783
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "637a2d69e65a207f6a7cf00dd4a1e7bd0b998306",
+  "prompts": {
+    "28273266bfd2241f": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6a0af00c-ef63-46e9-9de9-efaade43ec99",
+        "model": "claude-haiku-4-5-20251001"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 24,
+      "total_deletions": 12,
+      "accepted_lines": 24,
+      "overriden_lines": 0
+    },
+    "663b97acc6aac727": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d6c7c16f-cc75-457d-8c99-1cd92a6717ab",
+        "model": "claude-haiku-4-5-20251001"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 437,
+      "total_deletions": 3,
+      "accepted_lines": 437,
+      "overriden_lines": 0
+    },
+    "aecede1708b77eac": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "83eee62f-f79b-48bb-9585-53fad0ecc25d",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 1449,
+      "overriden_lines": 0
+    }
+  }
+}
