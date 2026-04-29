@@ -1,0 +1,52 @@
+include/practice.h
+  d4f8fc3c86d15e6a 182-184
+tools/sc64dev
+  d4f8fc3c86d15e6a 1-130
+.claude/skills/practice-hw-isv-trace/SKILL.md
+  d4f8fc3c86d15e6a 1-62
+src/practice/practice_save.c
+  d4f8fc3c86d15e6a 20-29,149-151,229,245,256,276,285,298,314,329,339,351,363,374,378-383,386,392,396,413-416,420,428-447,467-474,478-485,487,502,513,516,518,525,532,537-541,548,559,570,590,599,604,613,629,644,661,664,667,670,673,678,683,699,701,703-705,707,715-717,721-728,775,792,795,799,802,806,809,813,816,820,823,827,830,834,837,841,844,848,851,855,858,862,865,869,871,977,980,984,987,991,994,998,1001,1005,1008,1012,1015,1019,1022,1026,1029,1033,1036,1040,1043,1047,1050,1054,1057,1061,1064,1068,1071,1075,1078,1082,1085,1089,1092,1096,1099,1103,1106,1110,1113,1117,1120,1124,1127,1131,1134,1138,1141,1145,1148,1152,1155,1159,1162,1170-1172,1175,1193,1196,1200-1202,1218-1227,1322-1335,1373-1378,1389,1397-1399,1401-1403,1417-1421,1428-1430,1435-1437,1441-1443,1445-1447
+.claude/AGENTS.md
+  d4f8fc3c86d15e6a 64-68
+src/practice/practice_main.c
+  d4f8fc3c86d15e6a 78,81
+Makefile
+  d4f8fc3c86d15e6a 158-160,162-163
+src/practice/practice_level.c
+  1b3f90752ce3d0cf 59-63,98-100,104-105,108-110,113-119,122-142,145,149,155-156,161,208-209
+CLAUDE.md
+  d4f8fc3c86d15e6a 148-154
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "f165d0eb883bfff1f713e6db3407be5ea404046c",
+  "prompts": {
+    "1b3f90752ce3d0cf": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "ea3be6c9-8e45-48e8-9cc1-5ef085c26f08",
+        "model": "default"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 55,
+      "total_deletions": 19,
+      "accepted_lines": 49,
+      "overriden_lines": 0
+    },
+    "d4f8fc3c86d15e6a": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "ea17f3ba-b2d3-463b-a0a2-776981b36af8",
+        "model": "default"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 497,
+      "total_deletions": 138,
+      "accepted_lines": 474,
+      "overriden_lines": 0
+    }
+  }
+}
