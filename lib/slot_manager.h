@@ -55,6 +55,13 @@ uint8_t slot_manager_ram_slot_count(void);
 int slot_manager_next_slot(int slot);
 int slot_manager_prev_slot(int slot);
 
+/* Phase 7: SD persistence. Call once after slot_manager_init() with a
+ * caller-owned scratch buffer of at least max_state_size bytes.
+ * Required before slot_manager_save_sd_named / load_sd_named will work. */
+void slot_manager_set_sd_scratch(void *buf, uint32_t buf_size);
+
+/* SD methods are compiled only when SLOT_MANAGER_USE_FATFS is defined.
+ * Without it, save_sd_named and load_sd_named return ERR_UNSUPPORTED. */
 int slot_manager_save_sd_named(const char *path);
 int slot_manager_load_sd_named(const char *path);
 

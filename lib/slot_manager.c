@@ -1,4 +1,7 @@
 #include "slot_manager.h"
+#ifdef SLOT_MANAGER_USE_FATFS
+#include "fatfs/ff.h"
+#endif
 
 #define SLOT_MAGIC_0 'S'
 #define SLOT_MAGIC_1 'F'
@@ -16,6 +19,8 @@ typedef struct {
     uint32_t max_state_size;
     uint32_t slot_size[SLOT_MANAGER_MAX_RAM_SLOTS];
     bool slot_valid[SLOT_MANAGER_MAX_RAM_SLOTS];
+    uint8_t *sd_scratch;
+    uint32_t sd_scratch_size;
 } slot_manager_state_t;
 
 static slot_manager_state_t sSlotManager;
@@ -257,12 +262,138 @@ int slot_manager_prev_slot(int slot) {
     return (slot - 1) % (int)sSlotManager.ram_slots;
 }
 
+void slot_manager_set_sd_scratch(void *buf, uint32_t buf_size) {
+    sSlotManager.sd_scratch      = (uint8_t *)buf;
+    sSlotManager.sd_scratch_size = buf_size;
+}
+
+#ifdef SLOT_MANAGER_USE_FATFS
+static int tmp_path_from(const char *path, char *tmp, uint32_t tmp_size) {
+    uint32_t i;
+    for (i = 0; path[i] && i + 4 < tmp_size; i++) tmp[i] = path[i];
+    tmp[i++] = '.';
+    tmp[i++] = 't';
+    tmp[i++] = 'm';
+    tmp[i++] = 'p';
+    tmp[i]   = '\0';
+    return (i >= tmp_size) ? -1 : 0;
+}
+#endif
+
 int slot_manager_save_sd_named(const char *path) {
+#ifndef SLOT_MANAGER_USE_FATFS
     (void)path;
     return SLOT_MANAGER_ERR_UNSUPPORTED;
+#else
+    char     tmp[FF_MAX_LFN + 5];
+    FIL      fp;
+    FRESULT  res;
+    UINT     written;
+    uint8_t *base;
+    uint8_t *payload;
+    uint32_t payload_cap;
+    uint32_t payload_size;
+    uint32_t total_size;
+
+    if (!path || !sSlotManager.save_cb)      return SLOT_MANAGER_ERR_PARAM;
+    if (!sSlotManager.sd_scratch ||
+        sSlotManager.sd_scratch_size < sSlotManager.max_state_size)
+        return SLOT_MANAGER_ERR_NO_STORAGE;
+
+    base        = sSlotManager.sd_scratch;
+    payload     = base + SLOT_MANAGER_HEADER_SIZE;
+    payload_cap = sSlotManager.sd_scratch_size - SLOT_MANAGER_HEADER_SIZE;
+
+    slot_zero(base, sSlotManager.max_state_size);
+    payload_size = sSlotManager.save_cb(payload, payload_cap);
+    if (payload_size > payload_cap) return SLOT_MANAGER_ERR_OVERFLOW;
+
+    total_size = SLOT_MANAGER_HEADER_SIZE + payload_size;
+    base[0x00] = SLOT_MAGIC_0;
+    base[0x01] = SLOT_MAGIC_1;
+    base[0x02] = SLOT_MAGIC_2;
+    base[0x03] = SLOT_MAGIC_3;
+    slot_put_le16(&base[0x04], sSlotManager.lib_version);
+    slot_put_le16(&base[0x06], sSlotManager.state_version);
+    slot_put_le32(&base[0x08], total_size);
+
+    if (tmp_path_from(path, tmp, sizeof(tmp)) != 0) return SLOT_MANAGER_ERR_PARAM;
+
+    res = f_open(&fp, tmp, FA_WRITE | FA_CREATE_ALWAYS);
+    if (res != FR_OK) return SLOT_MANAGER_ERR_NO_STORAGE;
+
+    res = f_write(&fp, base, total_size, &written);
+    f_close(&fp);
+
+    if (res != FR_OK || written != total_size) {
+        f_unlink(tmp);
+        return SLOT_MANAGER_ERR_NO_STORAGE;
+    }
+
+    f_unlink(path);
+    res = f_rename(tmp, path);
+    if (res != FR_OK) {
+        f_unlink(tmp);
+        return SLOT_MANAGER_ERR_NO_STORAGE;
+    }
+
+    return SLOT_MANAGER_OK;
+#endif
 }
 
 int slot_manager_load_sd_named(const char *path) {
+#ifndef SLOT_MANAGER_USE_FATFS
     (void)path;
     return SLOT_MANAGER_ERR_UNSUPPORTED;
+#else
+    FIL      fp;
+    FRESULT  res;
+    FSIZE_t  fsize;
+    UINT     bytes_read;
+    uint8_t *base;
+    uint32_t total_size;
+    uint32_t payload_size;
+    int      cb_result;
+
+    if (!path || !sSlotManager.load_cb)      return SLOT_MANAGER_ERR_PARAM;
+    if (!sSlotManager.sd_scratch ||
+        sSlotManager.sd_scratch_size < sSlotManager.max_state_size)
+        return SLOT_MANAGER_ERR_NO_STORAGE;
+
+    base = sSlotManager.sd_scratch;
+
+    res = f_open(&fp, path, FA_READ);
+    if (res != FR_OK) return SLOT_MANAGER_ERR_NO_STORAGE;
+
+    fsize = f_size(&fp);
+    if (fsize < SLOT_MANAGER_HEADER_SIZE || fsize > sSlotManager.sd_scratch_size) {
+        f_close(&fp);
+        return SLOT_MANAGER_ERR_CORRUPT;
+    }
+
+    res = f_read(&fp, base, (UINT)fsize, &bytes_read);
+    f_close(&fp);
+
+    if (res != FR_OK || bytes_read != (UINT)fsize) return SLOT_MANAGER_ERR_NO_STORAGE;
+
+    if (base[0x00] != SLOT_MAGIC_0 || base[0x01] != SLOT_MAGIC_1 ||
+        base[0x02] != SLOT_MAGIC_2 || base[0x03] != SLOT_MAGIC_3) {
+        return SLOT_MANAGER_ERR_MAGIC;
+    }
+
+    if (slot_get_le16(&base[0x04]) != sSlotManager.lib_version ||
+        slot_get_le16(&base[0x06]) != sSlotManager.state_version) {
+        return SLOT_MANAGER_ERR_VERSION;
+    }
+
+    total_size = slot_get_le32(&base[0x08]);
+    if (total_size != (uint32_t)fsize || total_size < SLOT_MANAGER_HEADER_SIZE) {
+        return SLOT_MANAGER_ERR_CORRUPT;
+    }
+
+    payload_size = total_size - SLOT_MANAGER_HEADER_SIZE;
+    cb_result = sSlotManager.load_cb(&base[SLOT_MANAGER_HEADER_SIZE], payload_size);
+    if (cb_result != 0) return SLOT_MANAGER_ERR_CALLBACK;
+    return SLOT_MANAGER_OK;
+#endif
 }
