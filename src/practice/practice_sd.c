@@ -40,10 +40,8 @@ static u8 osk_buttons_from_n64(void) {
 static void on_save_name_confirmed(const char *name, void *ud) {
     int res, i, j;
     (void)ud;
-    osSyncPrintf("[sd_save] confirmed: name='%s'\n", name);
     f_mkdir(SD_PARENT);
     f_mkdir(SD_DIR);
-    osSyncPrintf("[sd_save] mkdir done, building path\n");
     i = 0;
     for (j = 0; SD_DIR[j] && i < SD_PATH_MAX - 1; j++) { sSavePath[i++] = SD_DIR[j]; }
     if (i < SD_PATH_MAX - 1) { sSavePath[i++] = '/'; }
@@ -51,10 +49,7 @@ static void on_save_name_confirmed(const char *name, void *ud) {
     for (j = 0; SD_EXT[j] && i < SD_PATH_MAX - 1; j++) { sSavePath[i++] = SD_EXT[j]; }
     sSavePath[i] = '\0';
 
-    osSyncPrintf("[sd_save] path='%s'\n", sSavePath);
-    osSyncPrintf("[sd_save] calling slot_manager_save_sd_named\n");
     res = slot_manager_save_sd_named(sSavePath);
-    osSyncPrintf("[sd_save] result=%d\n", res);
     if (res == SLOT_MANAGER_OK) {
         Practice_Hud_ShowStatus("SD SAVE OK", 80, 255, 120);
     } else {
@@ -95,7 +90,6 @@ void Practice_Sd_Init(void) {
     if (sSdAvailable) {
         f_mount(&sFatfsWork, "", 1);
     }
-    osSyncPrintf("[sd] Practice_Sd_Init: sd_was_ok=%d\n", sSdAvailable);
     slot_manager_set_sd_scratch(Practice_Save_ScratchBase(), MAX_STATE_SIZE);
 }
 
