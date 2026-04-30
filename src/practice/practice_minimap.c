@@ -94,8 +94,10 @@ void Practice_Minimap_Draw(void) {
 
     if (!gPracticeConfig.showPauseMinimap) return;
     if (gLevelMode != LEVELMODE_ALL_RANGE) return;
-    if (gPlayState != PLAY_PAUSE) return;
-    if (gPracticeMenuState != PMENU_CLOSED) return;
+    if (!Practice_FreeCam_IsActive()) {
+        if (gPlayState != PLAY_PAUSE) return;
+        if (gPracticeMenuState != PMENU_CLOSED) return;
+    }
 
     halfSize = Minimap_WorldHalfSize();
 
@@ -145,7 +147,7 @@ void Practice_Minimap_Draw(void) {
         }
     }
 
-    /* Player - safe to access: PLAY_PAUSE is only reachable after PLAY_INIT */
+    /* Player - safe: PLAY_PAUSE and free cam (PLAY_UPDATE from menu) both require PLAY_INIT */
     {
         f32 ppx = gPlayer[0].pos.x;
         f32 ppz = gPlayer[0].trueZpos;
