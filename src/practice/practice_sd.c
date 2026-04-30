@@ -13,7 +13,8 @@
 #include "fatfs/ff.h"
 #include "slot_manager.h"
 
-#define SD_DIR      "/sf64-practice/states"
+#define SD_PARENT   "/sf64-practice"
+#define SD_DIR      SD_PARENT "/states"
 #define SD_EXT      ".SF64ST"
 #define SD_PATH_MAX (FB_PATH_MAX)
 
@@ -40,7 +41,7 @@ static void on_save_name_confirmed(const char *name, void *ud) {
     int res, i, j;
     (void)ud;
     osSyncPrintf("[sd_save] confirmed: name='%s'\n", name);
-    osSyncPrintf("[sd_save] mkdir %s\n", SD_DIR);
+    f_mkdir(SD_PARENT);
     f_mkdir(SD_DIR);
     osSyncPrintf("[sd_save] mkdir done, building path\n");
     i = 0;
