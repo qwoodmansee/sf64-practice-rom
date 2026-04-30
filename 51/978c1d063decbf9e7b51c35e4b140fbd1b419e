@@ -1,0 +1,23 @@
+src/practice/practice_freecam.c
+  bf1af11f1deb1522 21,31
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "51978c1d063decbf9e7b51c35e4b140fbd1b419e",
+  "prompts": {
+    "bf1af11f1deb1522": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cca235f1-fd29-418b-bd0f-f060c91430ef",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 2,
+      "total_deletions": 4,
+      "accepted_lines": 2,
+      "overriden_lines": 0
+    }
+  }
+}
