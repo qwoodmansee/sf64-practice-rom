@@ -109,12 +109,13 @@ void Practice_Draw(void) {
                     Practice_InputDisplay_Draw();
                 }
             }
-            if (Practice_FreeCam_IsActive()) {
+            if (Practice_Sd_IsActive()) {
+                Practice_Sd_Draw();
+            } else if (Practice_FreeCam_IsActive()) {
                 Practice_FreeCam_Draw();
             } else if (gPracticeMenuState != PMENU_CLOSED) {
                 Practice_Menu_Draw();
             }
-            Practice_Sd_Draw();
             break;
     }
 }

@@ -115,14 +115,14 @@ void Practice_Sd_Update(void) {
 
 /* OSK rendering */
 #define OSK_X0 20
-#define OSK_Y0 20
+#define OSK_Y0 64   /* grid top; -20 original put prompt in TV overscan */
 #define OSK_CW 12
 #define OSK_CH 10
 
 static void draw_osk(void) {
     int col, row;
     s32 bx = OSK_X0 - 4;
-    s32 by = OSK_Y0 - 20;
+    s32 by = OSK_Y0 - 34;
     s32 bw = OSK_GRID_COLS * OSK_CW + 8;
     s32 bh = OSK_GRID_ROWS * OSK_CH + 30;
 
@@ -157,13 +157,13 @@ static void draw_osk(void) {
 
 /* File browser rendering */
 #define FB_X0    20
-#define FB_Y0    15
+#define FB_Y0    40   /* row top; -12 original put header in TV overscan */
 #define FB_ROW_H 10
 
 static void draw_file_browser(void) {
     int i;
     s32 bx = FB_X0 - 4;
-    s32 by = FB_Y0 - 12;
+    s32 by = FB_Y0 - 20;
     s32 bw = 280;
     s32 bh = FB_VISIBLE_ROWS * FB_ROW_H + 24;
 
