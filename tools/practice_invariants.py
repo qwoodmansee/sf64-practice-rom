@@ -1209,6 +1209,27 @@ def check_sd_load_implemented():
             "(check_sd_load_implemented)"
         )
 
+
+def check_sd_per_op_release():
+    """practice_sd.c must acquire/release SD lock around each FatFs operation
+    so the host (sc64deployer / WebDAV) can access the card while the ROM is idle."""
+    src = read("src/practice/practice_sd.c")
+    if "iodev_sd_release" not in src:
+        errors.append(
+            "practice_sd.c does not call iodev_sd_release — SD card will stay locked "
+            "to the N64 indefinitely, blocking host access (check_sd_per_op_release)"
+        )
+    if "iodev_sd_acquire" not in src:
+        errors.append(
+            "practice_sd.c does not call iodev_sd_acquire — save/load will fail after "
+            "the initial release (check_sd_per_op_release)"
+        )
+    if "sd_op_begin" not in src or "sd_op_end" not in src:
+        errors.append(
+            "practice_sd.c missing sd_op_begin/sd_op_end helpers "
+            "(check_sd_per_op_release)"
+        )
+
 def main():
     check_config_inits()
     check_function_definitions()
@@ -1248,6 +1269,7 @@ def main():
     check_sd_fatfs_mounted()
     check_sd_save_implemented()
     check_sd_load_implemented()
+    check_sd_per_op_release()
 
     if errors:
         print("Practice ROM invariant check FAILED:")

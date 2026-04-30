@@ -42,4 +42,15 @@ iodev_result_t iodev_sd_read_sectors(uint32_t lba, uint32_t count, void *buf);
  * Same alignment requirement. */
 iodev_result_t iodev_sd_write_sectors(uint32_t lba, uint32_t count, const void *buf);
 
+/* Release the hardware SD lock so the host (sc64deployer sd) can access the
+ * card. The ROM must not call any FatFs function after this returns until
+ * iodev_sd_acquire() re-establishes the lock. On backends without an explicit
+ * lock protocol (ED64, stub) this is a no-op that returns IODEV_OK. */
+iodev_result_t iodev_sd_release(void);
+
+/* Re-acquire the hardware SD lock (SD_OP_INIT) before a FatFs operation
+ * that follows a prior iodev_sd_release(). Updates the init-result cache so
+ * diskio.c continues to function correctly. */
+iodev_result_t iodev_sd_acquire(void);
+
 #endif /* LIB_IODEV_H */

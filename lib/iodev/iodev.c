@@ -67,3 +67,18 @@ iodev_result_t iodev_sd_write_sectors(uint32_t lba, uint32_t count, const void *
     if (!buf || count == 0) return IODEV_ERR_PARAM;
     return gIodevActive->sd_write_sectors(lba, count, buf);
 }
+
+iodev_result_t iodev_sd_release(void) {
+    if (!gIodevActive) return IODEV_ERR_NO_DEVICE;
+    return gIodevActive->sd_release();
+}
+
+iodev_result_t iodev_sd_acquire(void) {
+    iodev_result_t r;
+    if (!gIodevActive) iodev_detect();
+    r = gIodevActive->sd_init();
+    if (r == IODEV_OK) {
+        sIodevSdInitResult = IODEV_OK;
+    }
+    return r;
+}

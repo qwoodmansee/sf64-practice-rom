@@ -158,15 +158,21 @@ static iodev_result_t ed64_sd_write_sectors(uint32_t lba, uint32_t count, const 
     return IODEV_ERR_NO_DEVICE;
 }
 
+static iodev_result_t ed64_sd_release(void) {
+    /* ED64 has no firmware-level SD lock protocol equivalent to SC64. */
+    return IODEV_OK;
+}
+
 /* IDO does not support C99 designated initializers; the order below must
  * track the field order in iodev_backend_t (id, detect, sd_init,
- * sd_read_sectors, sd_write_sectors). */
+ * sd_read_sectors, sd_write_sectors, sd_release). */
 static const iodev_backend_t ED64_BACKEND = {
     IODEV_ED64,
     ed64_detect,
     ed64_sd_init,
     ed64_sd_read_sectors,
     ed64_sd_write_sectors,
+    ed64_sd_release,
 };
 
 const iodev_backend_t *iodev_backend_ed64(void) { return &ED64_BACKEND; }

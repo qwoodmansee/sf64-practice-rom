@@ -139,6 +139,13 @@ static iodev_result_t sc64_sd_init(void) {
                             0, 0);
 }
 
+static iodev_result_t sc64_sd_release(void) {
+    /* SD_OP_DEINIT releases SD_LOCK_N64 in the SC64 firmware, allowing the
+     * host (sc64deployer sd) to acquire SD_LOCK_USB. Must be followed by
+     * sc64_sd_init (re-acquire) before any further FatFs operations. */
+    return sc64_execute_cmd(SC64_CMD_SD_CARD_OP, 0, SD_OP_DEINIT, 0, 0);
+}
+
 /* SD DMA bookkeeping. File-static because the queue must persist across
  * calls; first call lazily creates it. NOT thread-safe -- callers must
  * not invoke iodev_sd_*_sectors concurrently. (The practice ROM is
@@ -221,13 +228,14 @@ static iodev_result_t sc64_sd_write_sectors(uint32_t lba, uint32_t count, const 
 
 /* IDO does not support C99 designated initializers; the order below must
  * track the field order in iodev_backend_t (id, detect, sd_init,
- * sd_read_sectors, sd_write_sectors). */
+ * sd_read_sectors, sd_write_sectors, sd_release). */
 static const iodev_backend_t SC64_BACKEND = {
     IODEV_SC64,
     sc64_detect,
     sc64_sd_init,
     sc64_sd_read_sectors,
     sc64_sd_write_sectors,
+    sc64_sd_release,
 };
 
 const iodev_backend_t *iodev_backend_sc64(void) { return &SC64_BACKEND; }

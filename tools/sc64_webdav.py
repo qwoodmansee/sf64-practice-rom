@@ -67,7 +67,7 @@ def sd_size(path):
 
 
 def sd_ls(path):
-    r = _sd("ls", path) if (path and path != "/") else _sd("ls")
+    r = _sd("ls", path or "/")
     if r.returncode != 0:
         return []
     return [l.strip() for l in r.stdout.splitlines() if l.strip()]
@@ -104,8 +104,10 @@ def _multistatus(entries):
 # ---------------------------------------------------------------------------
 
 _APPLE_JUNK = frozenset({
-    ".DS_Store", ".metadata_never_index", ".Trashes",
-    ".fseventsd", ".Spotlight-V100", ".TemporaryItems",
+    ".DS_Store", ".hidden",
+    ".metadata_never_index", ".metadata_never_index_unless_rootfs",
+    ".metadata_direct_scope_only",
+    ".Trashes", ".fseventsd", ".Spotlight-V100", ".TemporaryItems",
 })
 
 

@@ -23,6 +23,18 @@ static FATFS sFatfsWork;
 static bool sSdAvailable = false;
 static char sSavePath[SD_PATH_MAX];
 
+/* Acquire the SC64 SD hardware lock before any FatFs operation and force
+ * a lazy re-mount so FatFs discards its cached FAT state (host may have
+ * modified the card while the lock was released). Pair with sd_op_end(). */
+static void sd_op_begin(void) {
+    iodev_sd_acquire();
+    f_mount(&sFatfsWork, "", 0);
+}
+
+static void sd_op_end(void) {
+    iodev_sd_release();
+}
+
 /* N64 button -> OSK_BTN_* translation */
 static u8 osk_buttons_from_n64(void) {
     OSContPad* press = &gControllerPress[gMainController];
@@ -48,7 +60,9 @@ static void on_save_name_confirmed(const char *name, void *ud) {
     for (j = 0; SD_EXT[j] && i < SD_PATH_MAX - 1; j++) { sSavePath[i++] = SD_EXT[j]; }
     sSavePath[i] = '\0';
 
+    sd_op_begin();
     res = slot_manager_save_sd_named(sSavePath);
+    sd_op_end();
     if (res == SLOT_MANAGER_OK) {
         Practice_Hud_ShowStatus("SD SAVE OK", 80, 255, 120);
     } else {
@@ -64,7 +78,9 @@ static void on_save_canceled(void *ud) {
 static void on_load_file_selected(const char *path, void *ud) {
     int res;
     (void)ud;
+    sd_op_begin();
     res = slot_manager_load_sd_named(path);
+    sd_op_end();
     if (res == SLOT_MANAGER_OK) {
         Practice_Hud_ShowStatus("SD LOAD OK", 80, 255, 120);
     } else {
@@ -91,6 +107,9 @@ void Practice_Sd_Init(void) {
         f_mkdir(SD_ROOT);
         f_mkdir(SD_APP);
         f_mkdir(SD_DIR);
+        /* Release the SD lock so the host (sc64deployer / WebDAV) can access
+         * the card while the ROM is idle. Each save/load re-acquires it. */
+        iodev_sd_release();
     }
     slot_manager_set_sd_scratch(Practice_Save_ScratchBase(), MAX_STATE_SIZE);
 }
@@ -109,12 +128,19 @@ void Practice_Sd_StartSave(void) {
 }
 
 void Practice_Sd_StartLoad(void) {
+    int r;
     if (!sSdAvailable || gPracticeSaveDisabled) {
         Practice_Hud_ShowStatus("NO SD CART", 255, 180, 80);
         return;
     }
-    if (file_browser_open(FB_LOAD, SD_DIR, SD_EXT,
-                          on_load_file_selected, on_load_canceled, NULL) != 0) {
+    /* Acquire SD lock for directory listing, then release immediately after.
+     * file_browser_open() reads all entries into RAM; no SD needed during
+     * user navigation. The selection callback re-acquires for the file read. */
+    sd_op_begin();
+    r = file_browser_open(FB_LOAD, SD_DIR, SD_EXT,
+                          on_load_file_selected, on_load_canceled, NULL);
+    sd_op_end();
+    if (r != 0) {
         Practice_Hud_ShowStatus("SD OPEN ERR", 255, 120, 80);
     }
 }
