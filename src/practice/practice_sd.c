@@ -13,8 +13,9 @@
 #include "fatfs/ff.h"
 #include "slot_manager.h"
 
-#define SD_PARENT   "/sf64-practice"
-#define SD_DIR      SD_PARENT "/states"
+#define SD_ROOT     "/sageraces"
+#define SD_APP      SD_ROOT "/sf64"
+#define SD_DIR      SD_APP  "/states"
 #define SD_EXT      ".SF64ST"
 #define SD_PATH_MAX (FB_PATH_MAX)
 
@@ -40,8 +41,6 @@ static u8 osk_buttons_from_n64(void) {
 static void on_save_name_confirmed(const char *name, void *ud) {
     int res, i, j;
     (void)ud;
-    f_mkdir(SD_PARENT);
-    f_mkdir(SD_DIR);
     i = 0;
     for (j = 0; SD_DIR[j] && i < SD_PATH_MAX - 1; j++) { sSavePath[i++] = SD_DIR[j]; }
     if (i < SD_PATH_MAX - 1) { sSavePath[i++] = '/'; }
@@ -89,6 +88,9 @@ void Practice_Sd_Init(void) {
     sSdAvailable = iodev_sd_was_ok();
     if (sSdAvailable) {
         f_mount(&sFatfsWork, "", 1);
+        f_mkdir(SD_ROOT);
+        f_mkdir(SD_APP);
+        f_mkdir(SD_DIR);
     }
     slot_manager_set_sd_scratch(Practice_Save_ScratchBase(), MAX_STATE_SIZE);
 }
@@ -100,11 +102,8 @@ bool Practice_Sd_IsActive(void) {
 void Practice_Sd_StartSave(void) {
     if (!sSdAvailable || gPracticeSaveDisabled) {
         Practice_Hud_ShowStatus("NO SD CART", 255, 180, 80);
-        osSyncPrintf("[sd_save] blocked: avail=%d saveDisabled=%d\n",
-                     (int)sSdAvailable, (int)gPracticeSaveDisabled);
         return;
     }
-    osSyncPrintf("[sd_save] opening OSK\n");
     osk_open("SD SAVE NAME:", "", OSK_MAX_TEXT,
               on_save_name_confirmed, on_save_canceled, NULL);
 }
@@ -112,11 +111,8 @@ void Practice_Sd_StartSave(void) {
 void Practice_Sd_StartLoad(void) {
     if (!sSdAvailable || gPracticeSaveDisabled) {
         Practice_Hud_ShowStatus("NO SD CART", 255, 180, 80);
-        osSyncPrintf("[sd_load] blocked: avail=%d saveDisabled=%d\n",
-                     (int)sSdAvailable, (int)gPracticeSaveDisabled);
         return;
     }
-    osSyncPrintf("[sd_load] opening file browser\n");
     if (file_browser_open(FB_LOAD, SD_DIR, SD_EXT,
                           on_load_file_selected, on_load_canceled, NULL) != 0) {
         Practice_Hud_ShowStatus("SD OPEN ERR", 255, 120, 80);

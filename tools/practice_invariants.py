@@ -1156,6 +1156,20 @@ def check_practice_sd_wired():
         errors.append("Practice_Sd_Draw not called from practice_main.c (check_practice_sd_wired)")
 
 
+def check_sd_root_namespace():
+    src = read("src/practice/practice_sd.c")
+    if '"/sageraces"' not in src:
+        errors.append(
+            'SD_ROOT must be "/sageraces" — all SD paths share this namespace '
+            "(check_sd_root_namespace)"
+        )
+    if '"/sf64-practice"' in src or '"/sf64practice"' in src:
+        errors.append(
+            "Old /sf64-practice path found in practice_sd.c — update to /sageraces/sf64 "
+            "(check_sd_root_namespace)"
+        )
+
+
 def check_sd_fatfs_mounted():
     src = read("src/practice/practice_sd.c")
     if "f_mount" not in src:
@@ -1230,6 +1244,7 @@ def main():
     check_osk_declared()
     check_file_browser_declared()
     check_practice_sd_wired()
+    check_sd_root_namespace()
     check_sd_fatfs_mounted()
     check_sd_save_implemented()
     check_sd_load_implemented()
