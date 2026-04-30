@@ -1,0 +1,23 @@
+docs/superpowers/plans/HW_VERIFY_phase7.md
+  95613f2c64085e19 1-52
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "e75b4a2cff250195aa33287e6f70cbbea76a05fb",
+  "prompts": {
+    "95613f2c64085e19": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "224369b3-e592-401f-a83d-8a72aedf562f",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 52,
+      "total_deletions": 0,
+      "accepted_lines": 2267,
+      "overriden_lines": 0
+    }
+  }
+}
