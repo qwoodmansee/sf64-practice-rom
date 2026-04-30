@@ -1,0 +1,38 @@
+tools/sc64dev
+  c759cbc794342bdd 2,5-12,14-18,20-21,24,29-31,33-36,38,40,45-46,48-51,53-62,66-80,83-92,94-99,101-111,113-116,118-124,126-130,132-206,208-209
+CLAUDE.md
+  c759cbc794342bdd 184-190
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "11ed0932491493c0465b70dc2ddd0d6924707c3f",
+  "prompts": {
+    "2da98fa66485cc34": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "5e29900d-e877-4dfc-9562-0331816be895",
+        "model": "claude-haiku-4-5-20251001"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 2,
+      "overriden_lines": 0
+    },
+    "c759cbc794342bdd": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f1a8be27-b591-4652-8a9c-215282889780",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 7,
+      "total_deletions": 6,
+      "accepted_lines": 212,
+      "overriden_lines": 0
+    }
+  }
+}
