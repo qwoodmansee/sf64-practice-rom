@@ -166,7 +166,7 @@ void Practice_Minimap_Draw(void) {
         if (Minimap_FloatValid(&cx) && Minimap_FloatValid(&cz)) {
             sx = Minimap_ToScreenX(cx, halfSize);
             sy = Minimap_ToScreenZ(cz, halfSize);
-            Minimap_DrawTriangle(sx, sy, cyaw, 0, 220, 255);
+            Minimap_DrawTriangle(sx, sy, -cyaw, 0, 220, 255);
         }
     }
 }
