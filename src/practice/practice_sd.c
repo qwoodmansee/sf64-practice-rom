@@ -6,6 +6,7 @@
  */
 #ifdef PRACTICE_ROM
 #include "practice.h"
+#include "practice_save_config.h"
 #include "ui/osk.h"
 #include "ui/file_browser.h"
 #include "iodev/iodev.h"
@@ -76,6 +77,7 @@ static void on_load_canceled(void *ud) {
 
 void Practice_Sd_Init(void) {
     sSdAvailable = (iodev_detect() != IODEV_NONE);
+    slot_manager_set_sd_scratch(Practice_Save_ScratchBase(), MAX_STATE_SIZE);
 }
 
 bool Practice_Sd_IsActive(void) {
