@@ -2,17 +2,13 @@
 # Star Fox 64 Practice ROM — SummerCart64 dev loop.
 #
 # Usage:
-#   sc64dev               REPL: pick a worktree, then [b]uild+upload / [u]pload / [q]uit
-#   sc64dev .             REPL on current worktree (cwd)
-#   sc64dev <branch>      REPL on the worktree whose branch matches <branch>
-#   sc64dev <path>        REPL on the worktree at <path>
-#   sc64dev build         one-shot: make practice
-#   sc64dev upload        one-shot: upload only
-#   sc64dev all           one-shot: build + upload
+#   sc64dev               REPL: numbered worktree list, press N to build+upload
+#   sc64dev build         one-shot: make practice (current worktree)
+#   sc64dev all           one-shot: build + upload (current worktree)
 #   sc64dev help          show this message
 #
 # Env (optional):
-#   SF64_REPO_ROOT     repo/worktree to use (skips discovery)
+#   SF64_REPO_ROOT     repo/worktree to use (skips discovery, one-shot subcommands only)
 #   SF64_ROM           .z64 path (default: <wt>/build/starfox64.us.rev1.uncompressed.z64)
 #   SC64_DEPLOYER      sc64deployer binary (default: from PATH)
 #   SF64_MAKE_JOBS     make -j (default: 4)
@@ -63,53 +59,6 @@ worktree_label() {
   fi
 }
 
-resolve_wt_arg() {
-  local arg="$1"
-  if [[ "$arg" == "." ]]; then
-    git -C "$PWD" rev-parse --show-toplevel 2>/dev/null && return 0
-    return 1
-  fi
-  if [[ -d "$arg" ]]; then
-    (cd "$arg" && git rev-parse --show-toplevel 2>/dev/null) && return 0
-    return 1
-  fi
-  git -C "$MAIN_REPO" worktree list --porcelain 2>/dev/null \
-    | awk -v want="$arg" '
-        /^worktree / { p = substr($0, 10) }
-        /^branch /   { b = $2; sub("refs/heads/", "", b);
-                       if (b == want) { print p; exit } }'
-}
-
-pick_worktree() {
-  local -a paths branches
-  local p="" b="" line
-  while IFS= read -r line; do
-    case "$line" in
-      "worktree "*) p="${line#worktree }" ;;
-      "branch "*)   b="${line#branch refs/heads/}"; paths+=("$p"); branches+=("$b") ;;
-      "")           ;;
-    esac
-  done < <(git -C "$MAIN_REPO" worktree list --porcelain 2>/dev/null)
-
-  if (( ${#paths[@]} == 0 )); then
-    die "no worktrees under $MAIN_REPO"
-  fi
-  if (( ${#paths[@]} == 1 )); then
-    echo "${paths[0]}"; return 0
-  fi
-
-  echo "worktrees:" >&2
-  local i
-  for (( i=0; i<${#paths[@]}; i++ )); do
-    printf "  %d) %s\n" "$((i+1))" "${branches[i]}" >&2
-  done
-  local pick
-  read -r -p "> " pick
-  [[ "$pick" =~ ^[0-9]+$ ]] && (( pick >= 1 && pick <= ${#paths[@]} )) \
-    || die "bad choice"
-  echo "${paths[$((pick-1))]}"
-}
-
 run_build() {
   local wt="$1"
   (cd "$wt" && make practice "-j${SF64_MAKE_JOBS}")
@@ -134,36 +83,51 @@ read_key() {
 }
 
 repl() {
-  local wt="$1"
-  local rom="${SF64_ROM:-$wt/$DEFAULT_ROM_REL}"
-  local label
-  label="$(worktree_label "$wt")"
-  echo "sc64dev [$label]  [b]uild+upload  [u]pload  [q]uit"
+  local -a paths branches
+  local p="" b="" line
+  while IFS= read -r line; do
+    case "$line" in
+      "worktree "*) p="${line#worktree }" ; b="" ;;
+      "branch "*)   b="${line#branch refs/heads/}" ;;
+      "")
+        if [[ -n "$p" ]]; then
+          paths+=("$p")
+          branches+=("${b:-$(worktree_label "$p")}")
+          p="" ; b=""
+        fi
+        ;;
+    esac
+  done < <(git -C "$MAIN_REPO" worktree list --porcelain 2>/dev/null)
+  # flush last entry if porcelain output lacks trailing blank line
+  if [[ -n "$p" ]]; then
+    paths+=("$p")
+    branches+=("${b:-$(worktree_label "$p")}")
+  fi
+
+  (( ${#paths[@]} > 0 )) || die "no worktrees under $MAIN_REPO"
+
   while true; do
+    local i
+    for (( i=0; i<${#paths[@]}; i++ )); do
+      printf "  %d) %s\n" "$((i+1))" "${branches[i]}"
+    done
+    printf "  q) quit\n"
     printf "> "
     read_key
     local key="$REPLY"
-    case "$key" in
-      b)
-        echo "b"
-        if run_build "$wt" && run_upload "$rom"; then
-          echo "ok — reset console"
-        fi
-        ;;
-      u)
-        echo "u"
-        if run_upload "$rom"; then
-          echo "ok — reset console"
-        fi
-        ;;
-      q|$'\003'|$'\004'|"")
-        echo "q"
-        break
-        ;;
-      *)
-        echo "?  [b]uild+upload [u]pload [q]uit"
-        ;;
-    esac
+    if [[ "$key" =~ ^[1-9]$ ]] && (( key >= 1 && key <= ${#paths[@]} )); then
+      echo "$key"
+      local wt="${paths[$((key-1))]}"
+      local rom="${SF64_ROM:-$wt/$DEFAULT_ROM_REL}"
+      if run_build "$wt" && run_upload "$rom"; then
+        echo "ok — reset console"
+      fi
+    elif [[ "$key" == "q" || "$key" == $'\003' || "$key" == $'\004' || "$key" == "" ]]; then
+      echo "q"
+      break
+    else
+      echo "?  press 1-${#paths[@]}, q to quit"
+    fi
   done
 }
 
@@ -179,12 +143,6 @@ case "$cmd" in
     run_build "$REPO"
     exit 0
     ;;
-  upload)
-    REPO="$(resolve_repo_root)"
-    ROM="${SF64_ROM:-${REPO}/${DEFAULT_ROM_REL}}"
-    run_upload "$ROM"
-    exit 0
-    ;;
   all)
     REPO="$(resolve_repo_root)"
     ROM="${SF64_ROM:-${REPO}/${DEFAULT_ROM_REL}}"
@@ -197,13 +155,10 @@ case "$cmd" in
     usage
     exit 0
     ;;
+  "")
+    repl
+    ;;
+  *)
+    die "unknown command '$cmd' (try: sc64dev help)"
+    ;;
 esac
-
-if [[ -n "$cmd" ]]; then
-  WT="$(resolve_wt_arg "$cmd" || true)"
-  [[ -n "$WT" ]] || die "no worktree matched '$cmd'"
-else
-  WT="$(pick_worktree)"
-fi
-
-repl "$WT"
