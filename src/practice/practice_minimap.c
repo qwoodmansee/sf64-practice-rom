@@ -129,7 +129,7 @@ void Practice_Minimap_Draw(void) {
             case AI360_SLIPPY: Minimap_DrawTriangle(sx, sy, actor->obj.rot.y,  60, 220,  60); break;
             case AI360_PEPPY:  Minimap_DrawTriangle(sx, sy, actor->obj.rot.y, 220,  60,  60); break;
             case AI360_KATT:   Minimap_DrawTriangle(sx, sy, actor->obj.rot.y, 255, 100, 200); break;
-            case AI360_BILL:   Minimap_DrawTriangle(sx, sy, actor->obj.rot.y,  60, 220,  60); break;
+            case AI360_BILL:   Minimap_DrawTriangle(sx, sy, actor->obj.rot.y,   0,  80,   0); break;
             case AI360_WOLF:
             case AI360_LEON:
             case AI360_PIGMA:
