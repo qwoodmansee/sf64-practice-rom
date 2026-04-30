@@ -2,7 +2,7 @@
 
 #ifdef PRACTICE_ROM
 
-#define INPUT_DISP_X 200
+#define INPUT_DISP_X 6
 #define INPUT_DISP_Y 200
 
 static void Practice_InputDisplay_DrawStick(s32 cx, s32 cy, s32 radius, s8 stickX, s8 stickY) {

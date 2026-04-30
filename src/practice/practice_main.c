@@ -22,7 +22,7 @@ void Practice_Init(void) {
     gPracticeConfig.falcoAlive = true;
     gPracticeConfig.slippyAlive = true;
     gPracticeConfig.peppyAlive = true;
-    gPracticeConfig.showInputDisplay = false;
+    gPracticeConfig.showInputDisplay = true;
     gPracticeConfig.skipCutscenes = true;
     gPracticeConfig.showHudOverlay = true;
     gPracticeConfig.showLagFrames = true;

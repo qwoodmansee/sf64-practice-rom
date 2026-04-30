@@ -28,7 +28,7 @@ H.assert_eq(H.config_field("slippyAlive"), 1, "slippyAlive = true")
 H.assert_eq(H.config_field("peppyAlive"), 1, "peppyAlive = true")
 
 -- Display defaults
-H.assert_eq(H.config_field("showInputDisplay"), 0, "showInputDisplay = false")
+H.assert_eq(H.config_field("showInputDisplay"), 1, "showInputDisplay = true")
 H.assert_eq(H.config_field("skipCutscenes"), 1, "skipCutscenes = true")
 H.assert_eq(H.config_field("showHudOverlay"), 1, "showHudOverlay = true")
 H.assert_eq(H.config_field("showLagFrames"), 1, "showLagFrames = true")
