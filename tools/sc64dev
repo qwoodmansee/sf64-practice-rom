@@ -2,24 +2,29 @@
 # Star Fox 64 Practice ROM — SummerCart64 dev loop.
 #
 # Usage:
-#   sc64dev               REPL: numbered worktree list, press N to build+upload
+#   sc64dev               REPL: start SC64 server, numbered worktrees, press N to build+upload
 #   sc64dev build         one-shot: make practice (current worktree)
-#   sc64dev all           one-shot: build + upload (current worktree)
+#   sc64dev all           one-shot: build + upload (routes through server if one is running)
 #   sc64dev help          show this message
 #
+# The REPL starts sc64deployer server on SC64_SERVER_ADDR so the IS-Viewer
+# debug session and uploads share the cart without conflicts. On first launch,
+# restart your debug session using the address printed at startup:
+#   sc64deployer -r 127.0.0.1:9064 debug --isv 0x03FF0000
+#
 # Env (optional):
-#   SF64_REPO_ROOT     repo/worktree to use (skips discovery, one-shot subcommands only)
+#   SC64_SERVER_ADDR   server listen/connect address (default: 127.0.0.1:9064)
+#   SF64_REPO_ROOT     repo/worktree to use (skips discovery, one-shot only)
 #   SF64_ROM           .z64 path (default: <wt>/build/starfox64.us.rev1.uncompressed.z64)
 #   SC64_DEPLOYER      sc64deployer binary (default: from PATH)
 #   SF64_MAKE_JOBS     make -j (default: 4)
-#
-# Upload flags: --direct --reboot (boot mode = ROM (direct), deployer requests reset).
 
 set -euo pipefail
 
 MAIN_REPO="${HOME}/code/sf64-practice-rom"
 SC64_DEPLOYER="${SC64_DEPLOYER:-sc64deployer}"
 SF64_MAKE_JOBS="${SF64_MAKE_JOBS:-4}"
+SC64_SERVER_ADDR="${SC64_SERVER_ADDR:-127.0.0.1:9064}"
 DEFAULT_ROM_REL="build/starfox64.us.rev1.uncompressed.z64"
 
 die() { echo "sc64dev: $*" >&2; exit 1; }
@@ -64,12 +69,27 @@ run_build() {
   (cd "$wt" && make practice "-j${SF64_MAKE_JOBS}")
 }
 
+# run_upload <rom> [remote-addr]
+# Omit remote-addr to connect directly (bypasses server).
 run_upload() {
   local rom="$1"
+  local remote="${2:-}"
   command -v "$SC64_DEPLOYER" >/dev/null 2>&1 \
     || die "'$SC64_DEPLOYER' not on PATH"
   [[ -f "$rom" ]] || die "ROM not found: $rom"
-  "$SC64_DEPLOYER" upload --direct --reboot "$rom"
+  if [[ -n "$remote" ]]; then
+    "$SC64_DEPLOYER" -r "$remote" upload --direct --reboot "$rom"
+  else
+    "$SC64_DEPLOYER" upload --direct --reboot "$rom"
+  fi
+}
+
+# Returns 0 if something is listening on the server address.
+server_ready() {
+  local addr="${1:-$SC64_SERVER_ADDR}"
+  local host="${addr%%:*}"
+  local port="${addr##*:}"
+  (echo >/dev/tcp/"$host"/"$port") 2>/dev/null
 }
 
 # Single-keystroke read, portable across bash/zsh.
@@ -106,6 +126,28 @@ repl() {
 
   (( ${#paths[@]} > 0 )) || die "no worktrees under $MAIN_REPO"
 
+  # Start server, or reuse one already running.
+  local server_pid=""
+  if server_ready "$SC64_SERVER_ADDR"; then
+    echo "sc64dev: server already running at $SC64_SERVER_ADDR"
+  else
+    "$SC64_DEPLOYER" server "$SC64_SERVER_ADDR" &
+    server_pid=$!
+    local i
+    for (( i=0; i<10; i++ )); do
+      sleep 0.2
+      server_ready "$SC64_SERVER_ADDR" && break
+    done
+    if ! server_ready "$SC64_SERVER_ADDR"; then
+      kill "$server_pid" 2>/dev/null || true
+      die "server failed to start — kill any direct debug session first, then retry"
+    fi
+    trap "kill ${server_pid} 2>/dev/null; trap - EXIT" EXIT
+  fi
+
+  echo "debug cmd: $SC64_DEPLOYER -r $SC64_SERVER_ADDR debug --isv 0x03FF0000"
+  echo ""
+
   while true; do
     local i
     for (( i=0; i<${#paths[@]}; i++ )); do
@@ -119,7 +161,7 @@ repl() {
       echo "$key"
       local wt="${paths[$((key-1))]}"
       local rom="${SF64_ROM:-$wt/$DEFAULT_ROM_REL}"
-      if run_build "$wt" && run_upload "$rom"; then
+      if run_build "$wt" && run_upload "$rom" "$SC64_SERVER_ADDR"; then
         echo "ok — reset console"
       fi
     elif [[ "$key" == "q" || "$key" == $'\003' || "$key" == $'\004' || "$key" == "" ]]; then
@@ -147,7 +189,11 @@ case "$cmd" in
     REPO="$(resolve_repo_root)"
     ROM="${SF64_ROM:-${REPO}/${DEFAULT_ROM_REL}}"
     run_build "$REPO"
-    run_upload "$ROM"
+    if server_ready "$SC64_SERVER_ADDR"; then
+      run_upload "$ROM" "$SC64_SERVER_ADDR"
+    else
+      run_upload "$ROM"
+    fi
     echo "ok — reset console"
     exit 0
     ;;
