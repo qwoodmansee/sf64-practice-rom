@@ -1,0 +1,27 @@
+src/practice/practice_save.c
+  ee0e9b370810d89d 60-62,65-71,1556-1560,1562-1571
+docs/superpowers/issues/2026-04-29-audio-restart-wedge.md
+  ee0e9b370810d89d 167-185
+src/practice/practice_level.c
+  ee0e9b370810d89d 353-375,377-379,388-407
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "d55a80f7581b4bc7f29ccd5c2487806ef6717d3e",
+  "prompts": {
+    "ee0e9b370810d89d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "33e48a5e-4aa6-48ce-ab2d-acc7ec482337",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 148,
+      "overriden_lines": 0
+    }
+  }
+}
