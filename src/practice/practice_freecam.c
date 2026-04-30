@@ -41,6 +41,12 @@ void Practice_FreeCam_Exit(void) {
     sActive = false;
 }
 
+void Practice_FreeCam_GetMapPos(f32* x, f32* z, f32* yaw_deg) {
+    *x = sEye.x;
+    *z = sEye.z;
+    *yaw_deg = sYaw;
+}
+
 void Practice_FreeCam_GetView(Vec3f* eye, Vec3f* at) {
     f32 cosPitch = COS_DEG(sPitch);
     eye->x = sEye.x;

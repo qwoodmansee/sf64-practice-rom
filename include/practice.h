@@ -190,6 +190,7 @@ bool Practice_FreeCam_OverlayVisible(void);
 void Practice_FreeCam_Enter(void);
 void Practice_FreeCam_Exit(void);
 void Practice_FreeCam_GetView(Vec3f* eye, Vec3f* at);
+void Practice_FreeCam_GetMapPos(f32* x, f32* z, f32* yaw_deg);
 void Practice_FreeCam_Update(void);
 void Practice_FreeCam_Draw(void);
 

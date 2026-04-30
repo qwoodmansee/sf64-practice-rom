@@ -158,6 +158,17 @@ void Practice_Minimap_Draw(void) {
                                  255, 220, 0);
         }
     }
+
+    /* Free cam position: cyan triangle pointing in camera yaw direction */
+    if (Practice_FreeCam_IsActive()) {
+        f32 cx, cz, cyaw;
+        Practice_FreeCam_GetMapPos(&cx, &cz, &cyaw);
+        if (Minimap_FloatValid(&cx) && Minimap_FloatValid(&cz)) {
+            sx = Minimap_ToScreenX(cx, halfSize);
+            sy = Minimap_ToScreenZ(cz, halfSize);
+            Minimap_DrawTriangle(sx, sy, cyaw, 0, 220, 255);
+        }
+    }
 }
 
 #endif
