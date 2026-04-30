@@ -1,0 +1,25 @@
+src/engine/fox_std_lib.c
+  95613f2c64085e19 824
+tools/practice_invariants.py
+  95613f2c64085e19 1061
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "dedbc41ecd3d09de787726030da1597c3bbda054",
+  "prompts": {
+    "95613f2c64085e19": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "224369b3-e592-401f-a83d-8a72aedf562f",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 2,
+      "total_deletions": 2,
+      "accepted_lines": 2217,
+      "overriden_lines": 0
+    }
+  }
+}
