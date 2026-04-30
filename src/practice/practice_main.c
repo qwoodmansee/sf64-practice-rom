@@ -62,9 +62,15 @@ void Practice_Init(void) {
      * and follow docs/superpowers/plans/HW_VERIFY_phase2.md. */
     Practice_TestFatfs();
 #endif
+    osSyncPrintf("[init] Practice_Init returning\n");
 }
 
 void Practice_Update(void) {
+    static s32 sUpdateCount = 0;
+    if (sUpdateCount < 3) {
+        osSyncPrintf("[update] frame %d\n", (int)sUpdateCount);
+        sUpdateCount++;
+    }
     if (Practice_Sd_IsActive()) {
         Practice_Sd_Update();
         return;
