@@ -17,9 +17,10 @@ end, 300, "boot")
 H.assert_true(ok, "Booted to level select")
 
 -- Loadout defaults
-H.assert_eq(H.config_field("laserStrength"), 0, "laserStrength = LASERS_SINGLE (0)")
+H.assert_eq(H.config_field("laserStrength"), 2, "laserStrength = LASERS_HYPER (2)")
 H.assert_eq(H.config_field("bombCount"), 3, "bombCount = 3")
 H.assert_eq(H.config_field("lifeCount"), 2, "lifeCount = 2")
+H.assert_eq(H.config_field("goldRingCount"), 0, "goldRingCount = 0")
 
 -- Team defaults
 H.assert_eq(H.config_field("falcoAlive"), 1, "falcoAlive = true")

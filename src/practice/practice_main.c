@@ -116,6 +116,7 @@ void Practice_ApplyStartConditions(void) {
     gLaserStrength[gPlayerNum] = gPracticeConfig.laserStrength;
     gBombCount[gPlayerNum] = gPracticeConfig.bombCount;
     gLifeCount[gPlayerNum] = gPracticeConfig.lifeCount;
+    gGoldRingCount[gPlayerNum] = gPracticeConfig.goldRingCount;
 
     gPlayer[0].arwing.rightWingState = gPracticeConfig.rightWingState;
     gPlayer[0].arwing.leftWingState = gPracticeConfig.leftWingState;
