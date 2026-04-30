@@ -164,7 +164,25 @@ if processed when `Audio_ProcessSeqCmds` runs.
 **Verify by**: add a print of `gSeqPlayers[SEQ_PLAYER_BGM].enabled` after
 launch.
 
-## Suggested next session plan
+## Fix applied 2026-04-30 (H3 — deferred rescue play)
+
+`Practice_QueueBgmRescue(seqId, delayFrames)` defined in `practice_save.c`.
+Called from `Practice_LaunchLevel` when `levelPacked == sBgmLastSpecPacked`
+(same-spec launch detected). Sets `gPracticeBgmPending = true`,
+`gPracticeBgmPendingSeqId`, `gPracticeBgmPendingDelay = 3`.
+
+`Practice_Save_Tick` counts down `gPracticeBgmPendingDelay` each `PLAY_UPDATE`
+frame (while `Audio_HandleReset() == 0`), then fires `AUDIO_PLAY_BGM`. The
+3-frame countdown ensures the rescue fires after `Play_Init`'s own attempt and
+any in-flight `isWaitingForFonts` font load has cleared.
+
+`sBgmLastSpecPacked` is now also updated at the end of `Practice_LaunchLevel`
+so subsequent same-level restarts are also detected.
+
+**Hardware verification needed**: boot, launch a level whose level-select BGM
+was already playing, verify BGM starts. Also test RESTART from radial menu.
+
+## Suggested next session plan (if fix does not hold on hardware)
 
 1. Build a diagnostic ROM with `PRACTICE_SAVE_TRACE=1` + extra prints in
    `Practice_LaunchLevel` (before and after `Audio_SetAudioSpec`, with values
@@ -173,8 +191,6 @@ launch.
 3. Match the trace against H1-H4. Whichever hypothesis matches the hardware
    behavior is the one to fix.
 4. Apply the targeted fix. Re-test.
-5. Once restart audio is reliable, re-test Phase 5 cross-scene load — same
-   underlying mechanism likely fixes the intermittent BGM there too.
 
 ## Out of scope (do not touch in this fix)
 

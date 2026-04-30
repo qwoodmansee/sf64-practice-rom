@@ -57,9 +57,18 @@ s32                    gPracticeCrossLoadSlot;
 s32                    gPracticeCrossLoadStartFrame;
 
 /* Deferred BGM apply: snapshot apply queues here, Practice_Save_Tick fires
- * the actual AUDIO_PLAY_BGM once Audio_HandleReset() returns AUDIORESET_READY. */
+ * the actual AUDIO_PLAY_BGM once Audio_HandleReset() returns AUDIORESET_READY.
+ * gPracticeBgmPendingDelay > 0: count down PLAY_UPDATE frames before firing
+ * (used by same-spec level launches to clear any in-flight isWaitingForFonts). */
 bool gPracticeBgmPending;
 u16  gPracticeBgmPendingSeqId;
+s32  gPracticeBgmPendingDelay;
+
+void Practice_QueueBgmRescue(u16 seqId, s32 delayFrames) {
+    gPracticeBgmPending      = true;
+    gPracticeBgmPendingSeqId = seqId;
+    gPracticeBgmPendingDelay = delayFrames;
+}
 
 /* 6 s @ 60 fps. Long enough for any scene's setup we've measured, short
  * enough to bail before the user thinks the practice ROM hung. */
@@ -1544,12 +1553,22 @@ void Practice_Save_Tick(void) {
     s32 rr;
     s32 elapsed;
 
-    /* Drain any deferred BGM from a recently completed load apply. Done
-     * outside the cross-load state check because same-scene loads also
-     * queue here -- see Snapshot_ApplyToGame's audio reapply note. */
+    /* Drain any deferred BGM from a recently completed load apply or
+     * same-spec level launch. Done outside the cross-load state check because
+     * same-scene loads also queue here.
+     * gPracticeBgmPendingDelay > 0: count down PLAY_UPDATE frames so the BGM
+     * fires after Play_Init's own attempt and any in-flight font loads settle. */
     if (gPracticeBgmPending && Audio_HandleReset() == 0) {
-        AUDIO_PLAY_BGM(gPracticeBgmPendingSeqId);
-        gPracticeBgmPending = false;
+        if (gPracticeBgmPendingDelay > 0) {
+            if (gPlayState == PLAY_UPDATE) {
+                gPracticeBgmPendingDelay--;
+            }
+        } else {
+            osSyncPrintf("[bgm_dbg] rescue fire seqId=0x%04X ps=%d\n",
+                         (u32)gPracticeBgmPendingSeqId, (s32)gPlayState);
+            AUDIO_PLAY_BGM(gPracticeBgmPendingSeqId);
+            gPracticeBgmPending = false;
+        }
     }
 
     if (gPracticeCrossLoadState != XLOAD_AWAIT_SCENE_LOAD) {
