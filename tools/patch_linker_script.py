@@ -35,6 +35,7 @@ PRACTICE_OBJS = [
     "practice_freecam",
     "practice_slot_test",  # Phase 3: in-ROM slot_manager fake-state smoke test
     "practice_test_fatfs",  # Phase 2: gated by IODEV_DIAG_FATFS, otherwise empty .o
+    "practice_sd",          # Phase 6: OSK + file browser rendering and glue
 ]
 
 # Order matters: each entry's predecessor must precede it in the list,
@@ -64,6 +65,13 @@ LIB_FATFS_OBJS = [
     "ffunicode",     # Phase 2: FatFs Unicode tables (mostly empty for cp437)
     "ff_libc",       # Phase 2: memset/memcmp shims for FatFs
     "diskio",        # Phase 2: FatFs<->iodev glue
+]
+
+# lib/ui/* objects. Anchored on the last LIB_FATFS entry; each subsequent
+# entry anchors on the previous LIB_UI entry.
+LIB_UI_OBJS = [
+    "osk",          # Phase 6: on-screen keyboard state machine
+    "file_browser", # Phase 6: SD file picker state machine
 ]
 
 ANCHOR = "build/src/engine/fox_save.o"
@@ -161,7 +169,7 @@ def patch():
     has_practice = "practice_main" in content
 
     if not has_practice:
-        # Fully unpatched: inject practice + lib/iodev + lib-top + lib/fatfs after fox_save.o.
+        # Fully unpatched: inject practice + lib/iodev + lib-top + lib/fatfs + lib/ui after fox_save.o.
         for section in [".text", ".data", ".rodata", ".bss"]:
             anchor_line = f"{ANCHOR}({section});"
             practice_block = "\n".join(
@@ -180,16 +188,22 @@ def patch():
                 f"        build/lib/fatfs/{obj}.o({section});"
                 for obj in LIB_FATFS_OBJS
             )
+            ui_block = "\n".join(
+                f"        build/lib/ui/{obj}.o({section});"
+                for obj in LIB_UI_OBJS
+            )
             blocks = [practice_block, iodev_block]
             if top_block:
                 blocks.append(top_block)
             if fatfs_block:
                 blocks.append(fatfs_block)
+            if ui_block:
+                blocks.append(ui_block)
             injection = "\n".join(blocks)
             content = _replace_after_anchor(content, anchor_line, injection)
         with open(LINKER_SCRIPT, "w") as f:
             f.write(content)
-        print(f"Patched {LINKER_SCRIPT}: practice + lib/iodev + lib-top + lib/fatfs (full).")
+        print(f"Patched {LINKER_SCRIPT}: practice + lib/iodev + lib-top + lib/fatfs + lib/ui (full).")
         return
 
     # Practice already patched. Walk PRACTICE_OBJS first, then LIB_IODEV_OBJS,
@@ -268,6 +282,28 @@ def patch():
         for section in [".text", ".data", ".rodata", ".bss"]:
             anchor_line = f"{predecessor}.o({section});"
             injection = f"        build/lib/fatfs/{obj}.o({section});"
+            content = _replace_after_anchor(content, anchor_line, injection)
+        inject_count += 1
+
+    # lib/ui/* — anchored on the last LIB_FATFS entry (or last LIB_TOP entry
+    # if LIB_FATFS_OBJS is empty). Each subsequent entry anchors on the
+    # previous LIB_UI entry.
+    if LIB_FATFS_OBJS:
+        last_fatfs_predecessor = f"build/lib/fatfs/{LIB_FATFS_OBJS[-1]}"
+    elif LIB_TOP_OBJS:
+        last_fatfs_predecessor = f"build/lib/{LIB_TOP_OBJS[-1]}"
+    else:
+        last_fatfs_predecessor = f"build/lib/iodev/{last_iodev_obj}"
+    for i, obj in enumerate(LIB_UI_OBJS):
+        if f"build/lib/ui/{obj}.o" in content:
+            continue
+        if i == 0:
+            predecessor = last_fatfs_predecessor
+        else:
+            predecessor = f"build/lib/ui/{LIB_UI_OBJS[i - 1]}"
+        for section in [".text", ".data", ".rodata", ".bss"]:
+            anchor_line = f"{predecessor}.o({section});"
+            injection = f"        build/lib/ui/{obj}.o({section});"
             content = _replace_after_anchor(content, anchor_line, injection)
         inject_count += 1
 

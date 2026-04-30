@@ -53,6 +53,7 @@ void Practice_Init(void) {
 
     Practice_SlotTest_Run();
     Practice_Save_Init();
+    Practice_Sd_Init();
     practice_overlay_prime_build_ids();
     Practice_HeapAudit_Boot();
 
@@ -64,6 +65,10 @@ void Practice_Init(void) {
 }
 
 void Practice_Update(void) {
+    if (Practice_Sd_IsActive()) {
+        Practice_Sd_Update();
+        return;
+    }
     Practice_HeapAudit_PerFrame();
     Practice_Save_Tick();
 
@@ -109,6 +114,7 @@ void Practice_Draw(void) {
             } else if (gPracticeMenuState != PMENU_CLOSED) {
                 Practice_Menu_Draw();
             }
+            Practice_Sd_Draw();
             break;
     }
 }

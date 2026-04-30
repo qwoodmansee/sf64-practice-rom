@@ -203,6 +203,14 @@ void Practice_CycleSlot(s32 delta);
  * immediately when no transition is pending. Called from Practice_Update. */
 void Practice_Save_Tick(void);
 
+/* Phase 6: SD OSK + file browser glue */
+void Practice_Sd_Init(void);
+void Practice_Sd_Update(void);
+void Practice_Sd_Draw(void);
+bool Practice_Sd_IsActive(void);
+void Practice_Sd_StartSave(void);
+void Practice_Sd_StartLoad(void);
+
 /* Per-slot metadata captured at save time. */
 typedef struct PracticeSlotMeta {
     bool    valid;
