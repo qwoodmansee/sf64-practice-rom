@@ -843,9 +843,9 @@ u8* sSmallCharTex[] = { NULL,           aSmallText_A, aSmallText_B,         aSma
                         aSmallText_o_,  aSmallText_p, aSmallText_q,         aSmallText_r,     aSmallText_s,
                         aSmallText_T,   aSmallText_U, aSmallText_V,         aSmallText_W,     aSmallText_X,
                         aSmallText_Y,   aSmallText_Z, aSmallTextExclamMark, aSmallText_COLON, aSmallText_HYPHEN,
-                        aSmallText_DOT, aSmallText_0, aSmallText_1,         aSmallText_2,     aSmallText_3,
-                        aSmallText_4,   aSmallText_5, aSmallText_6,         aSmallText_7,     aSmallText_8,
-                        aSmallText_9 };
+                        aSmallText_DOT, NULL,         aSmallText_0,         aSmallText_1,     aSmallText_2,
+                        aSmallText_3,   aSmallText_4, aSmallText_5,         aSmallText_6,     aSmallText_7,
+                        aSmallText_8,   aSmallText_9 };
 
 void Graphics_DisplayLargeText(s32 xPos, s32 yPos, f32 xScale, f32 yScale, char* text) {
     u32 charIndex;
@@ -1134,7 +1134,7 @@ void Graphics_DisplaySmallText(s32 xPos, s32 yPos, f32 xScale, f32 yScale, char*
         if ((var_t0 < ARRAY_COUNT(sSmallChars)) && (sSmallChars[var_t0] == text[0])) {
             if (sSmallCharTex[var_t0] != NULL) {
                 width = 8;
-                if (var_t0 > 30) {
+                if (var_t0 > 31) {
                     width = 16;
                 }
                 Lib_TextureRect_IA8(&gMasterDisp, sSmallCharTex[var_t0], width, 8, xPosCurrent, yPos, xScale, yScale);

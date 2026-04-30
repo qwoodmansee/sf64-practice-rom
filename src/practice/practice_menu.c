@@ -171,6 +171,17 @@ void Practice_Menu_Update(void) {
         sStartHoldTimer = 0;
     }
 
+    /* Z = SD save/load shortcuts when radial is open at depth 0 */
+    /* Must come before B_BUTTON check so Z+B is caught here, not by the close-menu path */
+    if (sMenuDepth == 0 && (press->button & Z_TRIG)) {
+        if (press->button & B_BUTTON) {
+            Practice_Sd_StartLoad();
+        } else {
+            Practice_Sd_StartSave();
+        }
+        return;
+    }
+
     if (press->button & B_BUTTON) {
         if (sMenuDepth > 0) {
             sMenuDepth--;
@@ -183,15 +194,6 @@ void Practice_Menu_Update(void) {
 
     def = &sMenuDefs[sMenuDepth];
     sHovered[sMenuDepth] = def->getSlice(hold->stick_x, hold->stick_y);
-
-    /* Z = SD save/load shortcuts when radial is open at depth 0 */
-    if (sMenuDepth == 0 && (press->button & Z_TRIG)) {
-        if (press->button & B_BUTTON) {
-            Practice_Sd_StartLoad();
-        } else {
-            Practice_Sd_StartSave();
-        }
-    }
 
     if ((press->button & A_BUTTON) && (sHovered[sMenuDepth] != SLICE_NONE)) {
         if (sMenuDepth == 0) {
