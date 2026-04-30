@@ -1058,7 +1058,7 @@ def check_practice_text_glyphs():
     `[A-Z 0-9 space ! : - .]`; lowercase, '<', '>', '^', 'v', '/', etc. all
     render as blanks. This catches the input-display class of bug where
     direction arrows were silently invisible."""
-    allowed = set("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 !:-.")
+    allowed = set("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 !:-._")
     # Match Practice_DrawText, Practice_DrawTextColor, Practice_DrawTextOutline
     # call. Capture any "..." literal inside the call up to the matching ).
     # We find calls greedily across newlines, then scan each call site for

@@ -821,7 +821,7 @@ void Graphics_DisplaySmallNumber(s32 xPos, s32 yPos, s32 number) {
     Lib_TextureRect_IA8(&gMasterDisp, sSmallNumberTex[number / place], 16, 8, xPos, yPos, 1.0f, 1.0f);
 }
 
-char sSmallChars[] = " ABCDEFGHIJKLMNOPQRSTUVWXYZ!:-.0123456789";
+char sSmallChars[] = " ABCDEFGHIJKLMNOPQRSTUVWXYZ!:-._0123456789";
 char sLargeChars[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ. 0123456789st-";
 u8 sLargeCharWidths[] = { 15, 14, 14, 13, 13, 13, 14, 14, 5,  12, 14, 12, 16, 14, 15, 13, 16, 14, 13, 13, 13,
                           16, 17, 17, 16, 13, 5,  16, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 10, 9,  14, 0 };
