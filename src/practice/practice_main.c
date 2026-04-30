@@ -66,11 +66,6 @@ void Practice_Init(void) {
 }
 
 void Practice_Update(void) {
-    static s32 sUpdateCount = 0;
-    if (sUpdateCount < 3) {
-        osSyncPrintf("[update] frame %d\n", (int)sUpdateCount);
-        sUpdateCount++;
-    }
     if (Practice_Sd_IsActive()) {
         Practice_Sd_Update();
         return;

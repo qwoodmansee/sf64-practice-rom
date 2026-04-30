@@ -1156,6 +1156,20 @@ def check_practice_sd_wired():
         errors.append("Practice_Sd_Draw not called from practice_main.c (check_practice_sd_wired)")
 
 
+def check_sd_fatfs_mounted():
+    src = read("src/practice/practice_sd.c")
+    if "f_mount" not in src:
+        errors.append(
+            "practice_sd.c does not call f_mount — FatFs needs a work area before "
+            "any file operation (check_sd_fatfs_mounted)"
+        )
+    if "sFatfsWork" not in src:
+        errors.append(
+            "practice_sd.c missing static FATFS sFatfsWork work area "
+            "(check_sd_fatfs_mounted)"
+        )
+
+
 def check_sd_save_implemented():
     src = read("lib/slot_manager.c")
     if "f_open" not in src:
@@ -1216,6 +1230,7 @@ def main():
     check_osk_declared()
     check_file_browser_declared()
     check_practice_sd_wired()
+    check_sd_fatfs_mounted()
     check_sd_save_implemented()
     check_sd_load_implemented()
 

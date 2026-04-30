@@ -17,6 +17,7 @@
 #define SD_EXT      ".SF64ST"
 #define SD_PATH_MAX (FB_PATH_MAX)
 
+static FATFS sFatfsWork;
 static bool sSdAvailable = false;
 static char sSavePath[SD_PATH_MAX];
 
@@ -82,9 +83,17 @@ static void on_load_canceled(void *ud) {
 }
 
 void Practice_Sd_Init(void) {
+    /* Explicitly close OSK and file browser in case BSS zero-init didn't
+     * cover the Phase 6 globals (osk.o/file_browser.o added late to BSS). */
+    osk_close();
+    file_browser_close();
+
     /* iodev_sd_init() was already called in Practice_Init(); use the cached
      * result so we don't re-issue SC64_CMD_SD_CARD_OP which can stall ~6s. */
     sSdAvailable = iodev_sd_was_ok();
+    if (sSdAvailable) {
+        f_mount(&sFatfsWork, "", 1);
+    }
     osSyncPrintf("[sd] Practice_Sd_Init: sd_was_ok=%d\n", sSdAvailable);
     slot_manager_set_sd_scratch(Practice_Save_ScratchBase(), MAX_STATE_SIZE);
 }
