@@ -1,0 +1,35 @@
+src/practice/practice_logo_tex.c
+  4a9b97c4a13f65fa 1-271
+tools/patch_linker_script.py
+  4a9b97c4a13f65fa 37
+include/practice.h
+  4a9b97c4a13f65fa 165-167
+src/practice/practice_level.c
+  4a9b97c4a13f65fa 238
+tools/practice_invariants.py
+  4a9b97c4a13f65fa 1190-1211,1245
+.claude/skills/verify-hit64-logo/SKILL.md
+  4a9b97c4a13f65fa 1-76
+tools/gen_hit64_logo.py
+  4a9b97c4a13f65fa 1-95
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "136c239d4c8178065f29874225be105c59d5152c",
+  "prompts": {
+    "4a9b97c4a13f65fa": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9a384a81-409e-4876-bb37-17085793ddba",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 604,
+      "total_deletions": 134,
+      "accepted_lines": 470,
+      "overriden_lines": 0
+    }
+  }
+}
