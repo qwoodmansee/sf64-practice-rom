@@ -1231,6 +1231,29 @@ def check_hit64_logo():
         error(f"{INCLUDE_PRACTICE}: Practice_Logo_Draw not declared")
 
 
+def check_build_info():
+    """Build hash header is generated and included in the level-select draw path."""
+    gen_script = os.path.join("tools", "gen_build_info.py")
+    if not os.path.exists(gen_script):
+        error(f"{gen_script}: gen_build_info.py generator script missing")
+
+    makefile_src = read(MAKEFILE)
+    if "gen_build_info.py" not in makefile_src:
+        error(f"{MAKEFILE}: gen_build_info.py not invoked from Makefile")
+    if "gen-build-info" not in makefile_src:
+        error(f"{MAKEFILE}: gen-build-info target missing")
+
+    level_src = read(PRACTICE_LEVEL)
+    if "practice_build_info.h" not in level_src:
+        error(f"{PRACTICE_LEVEL}: practice_build_info.h not included")
+    if "PRACTICE_BUILD_HASH" not in level_src:
+        error(f"{PRACTICE_LEVEL}: PRACTICE_BUILD_HASH not drawn in LevelSelect_Draw")
+
+    gitignore = read(".gitignore")
+    if "practice_build_info.h" not in gitignore:
+        error(".gitignore: practice_build_info.h not gitignored (generated file)")
+
+
 def main():
     check_config_inits()
     check_function_definitions()
@@ -1266,6 +1289,7 @@ def main():
     check_practice_text_glyphs()
     check_hit64_logo()
     check_owl_logo()
+    check_build_info()
 
     if errors:
         print("Practice ROM invariant check FAILED:")
