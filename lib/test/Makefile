@@ -17,7 +17,7 @@ INCLUDES = -I.. -I.
 
 TEST_DISKIO_IMG = /tmp/test_diskio.img
 
-TESTS = test_sd_crc test_serial test_slot_manager test_crc32 test_diskio test_fatfs_smoke test_osk test_file_browser
+TESTS = test_sd_crc test_serial test_slot_manager test_crc32 test_diskio test_fatfs_smoke test_osk test_file_browser test_slot_manager_sd
 
 all: run-all
 
@@ -57,6 +57,14 @@ test_fatfs_smoke: test_fatfs_smoke.c iodev_mock.c ../fatfs/diskio.c ../fatfs/ff.
 		../fatfs/diskio.c ../fatfs/ff.c ../fatfs/ffunicode.c \
 		-o $@
 
+# SD round-trip: uses diskio_ram.c instead of diskio.c / iodev_mock.c
+test_slot_manager_sd: test_slot_manager_sd.c ../slot_manager.c diskio_ram.c \
+                      ../fatfs/ff.c ../fatfs/ffunicode.c ../fatfs/ff_libc.c
+	$(CC) $(CFLAGS) $(INCLUDES) -DPRACTICE_ROM -DSLOT_MANAGER_USE_FATFS=1 -I.. \
+		test_slot_manager_sd.c ../slot_manager.c diskio_ram.c \
+		../fatfs/ff.c ../fatfs/ffunicode.c ../fatfs/ff_libc.c \
+		-o $@
+
 # Auto-create a fresh 64 MiB FAT32 test image. macOS uses newfs_msdos
 # (built-in); Linux uses mkfs.fat from dosfstools (apt-get install dosfstools).
 $(TEST_DISKIO_IMG):
@@ -77,7 +85,7 @@ run-all: $(TESTS)
 	@for t in $(TESTS); do \
 		echo "===> $$t"; \
 		case "$$t" in \
-		  test_sd_crc|test_serial|test_slot_manager|test_crc32|test_osk|test_file_browser) ./$$t || exit 1 ;; \
+		  test_sd_crc|test_serial|test_slot_manager|test_crc32|test_osk|test_file_browser|test_slot_manager_sd) ./$$t || exit 1 ;; \
 		  *) \
 		    rm -f $(TEST_DISKIO_IMG); \
 		    $(MAKE) -s $(TEST_DISKIO_IMG); \
