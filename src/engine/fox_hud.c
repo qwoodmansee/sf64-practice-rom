@@ -1719,8 +1719,14 @@ void HUD_PauseScreen_Update(void) {
                 }
 
                 if ((gCurrentLevel != LEVEL_VENOM_ANDROSS) && (gCurrentLevel != LEVEL_TRAINING)) {
+#ifdef PRACTICE_ROM
+                    if (!(gPracticeConfig.showPauseMinimap && gLevelMode == LEVELMODE_ALL_RANGE)) {
+#endif
                     HUD_TeammateStatus_Draw();
                     HUD_TeamDownWrench_Draw(0);
+#ifdef PRACTICE_ROM
+                    }
+#endif
                 }
                 break;
 

@@ -46,6 +46,7 @@ typedef struct PracticeConfig {
     bool showSpawnScenery;
     bool expertMode;
     bool longHealth;
+    bool showPauseMinimap;
 } PracticeConfig;
 
 typedef enum PracticeSubMenu {
@@ -170,6 +171,9 @@ void Practice_Hud_Draw(void);
 /* practice_input_display.c */
 void Practice_InputDisplay_Draw(void);
 
+/* practice_minimap.c */
+void Practice_Minimap_Draw(void);
+
 /* practice_hitbox.c */
 void Practice_Hitbox_Draw(void);
 
@@ -183,6 +187,11 @@ void Practice_FreeCam_Update(void);
 void Practice_FreeCam_Draw(void);
 
 /* practice_save.c */
+/* Queue a deferred AUDIO_PLAY_BGM(seqId) that fires `delayFrames` PLAY_UPDATE
+ * frames after Audio_HandleReset() returns 0. Use delayFrames=0 to fire as
+ * soon as audio is ready (same-scene load). Use delayFrames=3 for same-spec
+ * level launches so in-flight isWaitingForFonts clears before we play. */
+void Practice_QueueBgmRescue(u16 seqId, s32 delayFrames);
 void Practice_SaveState(void);
 void Practice_LoadState(void);
 /* s32 0/1 — avoids Clang CC_CHECK bool vs libc/stdbool quirks on some hosts */

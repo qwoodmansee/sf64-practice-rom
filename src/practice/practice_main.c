@@ -42,6 +42,7 @@ void Practice_Init(void) {
     gPracticeConfig.showSpawnScenery = false;
     gPracticeConfig.expertMode = false;
     gPracticeConfig.longHealth = false;
+    gPracticeConfig.showPauseMinimap = true;
 
     osSyncPrintf("=== PRACTICE ROM boot @ %s %s ===\n", __DATE__, __TIME__);
 
@@ -104,6 +105,7 @@ void Practice_Draw(void) {
                     Practice_InputDisplay_Draw();
                 }
             }
+            Practice_Minimap_Draw();
             if (Practice_FreeCam_IsActive()) {
                 Practice_FreeCam_Draw();
             } else if (gPracticeMenuState != PMENU_CLOSED) {
@@ -141,6 +143,8 @@ void Practice_ApplyStartConditions(void) {
     gExpertMode = gPracticeConfig.expertMode;
 
     if (gPracticeConfig.skipCutscenes) {
+        osSyncPrintf("[bgm_dbg] ApplyStart lvl=%d gBgmSeqId=0x%04X\n",
+                     (s32)gCurrentLevel, (u32)gBgmSeqId);
         switch (gCurrentLevel) {
             case LEVEL_CORNERIA:  AUDIO_PLAY_BGM(NA_BGM_STAGE_CO); break;
             case LEVEL_METEO:     AUDIO_PLAY_BGM(NA_BGM_STAGE_ME); break;

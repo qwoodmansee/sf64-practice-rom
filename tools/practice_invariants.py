@@ -21,6 +21,7 @@ PRACTICE_LEVEL = os.path.join("src", "practice", "practice_level.c")
 FOX_GAME = "src/engine/fox_game.c"
 FOX_PLAY = "src/engine/fox_play.c"
 FOX_DISPLAY = "src/engine/fox_display.c"
+FOX_HUD = "src/engine/fox_hud.c"
 MAKEFILE = "Makefile"
 PATCHER_PACKAGE = "tools/patcher/package.json"
 PATCHER_CREATE_RELEASE = "tools/patcher/src/create-release.ts"
@@ -94,6 +95,7 @@ def check_engine_hooks():
         (FOX_DISPLAY, "Practice_Hitbox_Draw", "Practice_Hitbox_Draw() must be called from fox_display.c"),
         (FOX_DISPLAY, "Practice_FreeCam_IsActive", "Practice_FreeCam_IsActive() hook must exist in fox_display.c"),
         (FOX_DISPLAY, "Practice_FreeCam_GetView", "Practice_FreeCam_GetView() hook must exist in fox_display.c"),
+        (FOX_HUD, "showPauseMinimap", "showPauseMinimap minimap/portrait suppression hook must exist in fox_hud.c"),
     ]
     for filepath, symbol, msg in hooks:
         src = read(filepath)
@@ -1136,6 +1138,55 @@ def check_sys_memory_practice_bump_getter():
         )
 
 
+def check_deferred_bgm_rescue():
+    """Same-spec level launches must queue a deferred BGM rescue play.
+
+    When Practice_LaunchLevel fires Audio_SetAudioSpec with the same spec
+    already active, SEQCMD_RESET_AUDIO_HEAP only stops BGM without a heap
+    reset. Play_Init's AUDIO_PLAY_BGM may be silently dropped if the audio
+    engine's isWaitingForFonts flag is still set from the level-select preview.
+    The fix: queue gPracticeBgmPending in Practice_LaunchLevel for same-spec
+    launches and count down gPracticeBgmPendingDelay PLAY_UPDATE frames before
+    firing in Practice_Save_Tick.
+    """
+    level_src = read(PRACTICE_LEVEL)
+    save_src  = read(PRACTICE_SAVE_C)
+
+    if "Practice_QueueBgmRescue(" not in level_src:
+        error(
+            f"{PRACTICE_LEVEL}: Practice_LaunchLevel must call Practice_QueueBgmRescue "
+            "for same-spec rescue (check_deferred_bgm_rescue)"
+        )
+    if "void Practice_QueueBgmRescue(" not in save_src:
+        error(
+            f"{PRACTICE_SAVE_C}: Practice_QueueBgmRescue definition missing "
+            "(check_deferred_bgm_rescue)"
+        )
+    if "gPracticeBgmPendingDelay" not in save_src:
+        error(
+            f"{PRACTICE_SAVE_C}: gPracticeBgmPendingDelay must be defined "
+            "(check_deferred_bgm_rescue)"
+        )
+    tick_match = re.search(
+        r"void\s+Practice_Save_Tick\s*\([^)]*\)\s*\{(.*?)^\}",
+        save_src, re.DOTALL | re.MULTILINE,
+    )
+    if tick_match:
+        tick_body = tick_match.group(1)
+        if "gPracticeBgmPendingDelay" not in tick_body:
+            error(
+                f"{PRACTICE_SAVE_C}: Practice_Save_Tick must count down "
+                "gPracticeBgmPendingDelay (check_deferred_bgm_rescue)"
+            )
+        if "PLAY_UPDATE" not in tick_body:
+            error(
+                f"{PRACTICE_SAVE_C}: Practice_Save_Tick delay countdown must "
+                "gate on PLAY_UPDATE (check_deferred_bgm_rescue)"
+            )
+    else:
+        error(f"{PRACTICE_SAVE_C}: could not locate Practice_Save_Tick body")
+
+
 def main():
     check_config_inits()
     check_function_definitions()
@@ -1163,6 +1214,7 @@ def main():
     check_overlay_build_id_no_rom_read()
     check_overlay_build_id_eager_init()
     check_audio_spec_for_level_single_source()
+    check_deferred_bgm_rescue()
     check_phase5_state_machine_lifecycle()
     check_phase3_ram_detection()
     check_practice_pool_placement()

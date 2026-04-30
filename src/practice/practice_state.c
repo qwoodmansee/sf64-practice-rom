@@ -21,6 +21,7 @@ typedef enum LoadoutOption {
 typedef enum DisplayOption {
     DOPT_SKIP_CUTSCENES,
     DOPT_INPUT_DISPLAY,
+    DOPT_MINIMAP,
     DOPT_STATS_MENU,
     DOPT_VIS_MENU,
     DOPT_BACK,
@@ -248,6 +249,9 @@ static void StateMenu_UpdateDisplay(u16 buttons) {
             case DOPT_INPUT_DISPLAY:
                 gPracticeConfig.showInputDisplay ^= true;
                 break;
+            case DOPT_MINIMAP:
+                gPracticeConfig.showPauseMinimap ^= true;
+                break;
         }
     }
 }
@@ -470,6 +474,11 @@ static void StateMenu_DrawDisplay(void) {
                 Practice_DrawTextColor(120, y, gPracticeConfig.showInputDisplay ? "ON" : "OFF",
                     gPracticeConfig.showInputDisplay ? 0 : 255, gPracticeConfig.showInputDisplay ? 255 : 100, 0);
                 break;
+            case DOPT_MINIMAP:
+                Practice_DrawText(54, y, "MINIMAP:");
+                Practice_DrawTextColor(120, y, gPracticeConfig.showPauseMinimap ? "ON" : "OFF",
+                    gPracticeConfig.showPauseMinimap ? 0 : 255, gPracticeConfig.showPauseMinimap ? 255 : 100, 0);
+                break;
             case DOPT_STATS_MENU:
                 Practice_DrawTextColor(54, y, "STATS...", 200, 200, 255);
                 break;
@@ -614,8 +623,8 @@ void Practice_StateMenu_Draw(void) {
             break;
         case PSUBMENU_DISPLAY:
             title = "DISPLAY";
-            boxHeight = 96;
-            helpY = 128;
+            boxHeight = 110;
+            helpY = 142;
             break;
         case PSUBMENU_STATS:
             title = "STATS";

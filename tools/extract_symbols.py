@@ -58,6 +58,10 @@ SYMBOLS = [
     "gPracticeCrossLoadState",
     "gPracticeCrossLoadSlot",
     "gPracticeCrossLoadStartFrame",
+    # Deferred BGM rescue (same-spec level launch fix).
+    "gPracticeBgmPending",
+    "gPracticeBgmPendingSeqId",
+    "gPracticeBgmPendingDelay",
     "gPracticeSlotMeta",
     "gGameFrameCount",
     "gNextLevel",
@@ -136,6 +140,7 @@ CONFIG_OFFSETS = {
     "showSpawnScenery": 0x64,
     "expertMode":       0x68,
     "longHealth":       0x6C,
+    "showPauseMinimap": 0x70,
 }
 
 # Player struct field offsets (include/sf64player.h Player)
