@@ -270,13 +270,15 @@ void slot_manager_set_sd_scratch(void *buf, uint32_t buf_size) {
 #ifdef SLOT_MANAGER_USE_FATFS
 static int tmp_path_from(const char *path, char *tmp, uint32_t tmp_size) {
     uint32_t i;
-    for (i = 0; path[i] && i + 4 < tmp_size; i++) tmp[i] = path[i];
+    if (tmp_size < 6) return -1;
+    for (i = 0; path[i] && i < tmp_size - 5; i++) tmp[i] = path[i];
+    if (path[i] != '\0') return -1;  /* path was too long */
     tmp[i++] = '.';
     tmp[i++] = 't';
     tmp[i++] = 'm';
     tmp[i++] = 'p';
     tmp[i]   = '\0';
-    return (i >= tmp_size) ? -1 : 0;
+    return 0;
 }
 #endif
 
