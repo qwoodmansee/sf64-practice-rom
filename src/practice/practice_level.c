@@ -235,6 +235,7 @@ void Practice_LevelSelect_Draw(void) {
     const char* laserStr;
 
     Practice_DrawBox(16, 16, 288, 208, 0, 0, 0, 180);
+    Practice_Logo_Draw(238.0f, 14.0f);
 
     Practice_DrawTextColor(20, 20, "SF64 PRACTICE ROM", 0, 255, 128);
     Practice_DrawTextColor(20, 30, "SELECT LEVEL", 200, 200, 200);

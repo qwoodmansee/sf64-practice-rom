@@ -1187,6 +1187,28 @@ def check_deferred_bgm_rescue():
         error(f"{PRACTICE_SAVE_C}: could not locate Practice_Save_Tick body")
 
 
+def check_hit64_logo():
+    """HIT64 logo texture is wired into the level-select draw path correctly."""
+    logo_c = os.path.join(SRC_PRACTICE, "practice_logo_tex.c")
+    src = read(logo_c)
+    if "sPracticeLogoTex" not in src:
+        error(f"{logo_c}: sPracticeLogoTex array missing")
+    if "Practice_Logo_Draw" not in src:
+        error(f"{logo_c}: Practice_Logo_Draw function missing")
+    if "RCP_SetupDL_76" not in src:
+        error(f"{logo_c}: missing RCP_SetupDL_76 setup before texture draw")
+    if "Lib_TextureRect_RGBA16" not in src:
+        error(f"{logo_c}: missing Lib_TextureRect_RGBA16 call")
+
+    level_src = read(PRACTICE_LEVEL)
+    if "Practice_Logo_Draw" not in level_src:
+        error(f"{PRACTICE_LEVEL}: Practice_Logo_Draw not called from LevelSelect_Draw")
+
+    h_src = read(INCLUDE_PRACTICE)
+    if "Practice_Logo_Draw" not in h_src:
+        error(f"{INCLUDE_PRACTICE}: Practice_Logo_Draw not declared")
+
+
 def main():
     check_config_inits()
     check_function_definitions()
@@ -1220,6 +1242,7 @@ def main():
     check_practice_pool_placement()
     check_practice_pool_no_overlay_overlap()
     check_practice_text_glyphs()
+    check_hit64_logo()
 
     if errors:
         print("Practice ROM invariant check FAILED:")

@@ -162,6 +162,9 @@ void Practice_Menu_Close(void);
 void Practice_Menu_Update(void);
 void Practice_Menu_Draw(void);
 
+/* practice_logo_tex.c */
+void Practice_Logo_Draw(f32 x, f32 y);
+
 /* practice_hud.c */
 void Practice_Hud_Reset(void);
 void Practice_Hud_ShowStatus(const char* text, u8 r, u8 g, u8 b);
