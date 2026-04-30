@@ -1,0 +1,25 @@
+lib/test/test_file_browser.c
+  95613f2c64085e19 1-97
+lib/test/Makefile
+  95613f2c64085e19 20,39-47,80
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "f8f412330ad27240c304a49bde8298a5fd0a7b5d",
+  "prompts": {
+    "95613f2c64085e19": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "224369b3-e592-401f-a83d-8a72aedf562f",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 115,
+      "total_deletions": 9,
+      "accepted_lines": 2323,
+      "overriden_lines": 0
+    }
+  }
+}
