@@ -498,7 +498,10 @@ assets:
 mod:
 	@$(TORCH) modding import code $(BASEROM_UNCOMPRESSED)
 
-practice:
+gen-build-info: FORCE
+	@$(PYTHON) tools/gen_build_info.py
+
+practice: gen-build-info
 	@$(PYTHON) tools/patch_linker_script.py
 	$(MAKE) PRACTICE_ROM=1 IODEV_DIAG_FATFS=$(IODEV_DIAG_FATFS)
 
@@ -603,4 +606,6 @@ build/src/libultra/libc/ll.o: src/libultra/libc/ll.c
 # Print target for debugging
 print-% : ; $(info $* is a $(flavor $*) variable set to [$($*)]) @true
 
-.PHONY: all uncompressed compressed clean init extract expected format checkformat decompress compress assets context disasm toolchain practice practice-compressed practice-patch lib-test
+FORCE:
+
+.PHONY: all uncompressed compressed clean init extract expected format checkformat decompress compress assets context disasm toolchain practice practice-compressed practice-patch lib-test gen-build-info

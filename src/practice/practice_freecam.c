@@ -18,19 +18,17 @@ bool Practice_FreeCam_IsActive(void) {
 }
 
 void Practice_FreeCam_Enter(void) {
-    f32 dx, dy, dz, horizDist;
+    f32 dx, dz;
 
     sEye.x = gPlayCamEye.x;
     sEye.y = gPlayCamEye.y;
     sEye.z = gPlayCamEye.z;
 
     dx = gPlayCamAt.x - gPlayCamEye.x;
-    dy = gPlayCamAt.y - gPlayCamEye.y;
     dz = gPlayCamAt.z - gPlayCamEye.z;
-    horizDist = sqrtf(dx * dx + dz * dz);
 
     sYaw = Math_RadToDeg(Math_Atan2F(dx, -dz));
-    sPitch = Math_RadToDeg(Math_Atan2F(dy, horizDist));
+    sPitch = 0.0f;
     sOverlayVisible = true;
     sActive = true;
 }
@@ -41,6 +39,12 @@ bool Practice_FreeCam_OverlayVisible(void) {
 
 void Practice_FreeCam_Exit(void) {
     sActive = false;
+}
+
+void Practice_FreeCam_GetMapPos(f32* x, f32* z, f32* yaw_deg) {
+    *x = sEye.x;
+    *z = sEye.z;
+    *yaw_deg = sYaw;
 }
 
 void Practice_FreeCam_GetView(Vec3f* eye, Vec3f* at) {

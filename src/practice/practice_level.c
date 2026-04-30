@@ -1,4 +1,5 @@
 #include "practice.h"
+#include "practice_build_info.h"
 
 #ifdef PRACTICE_ROM
 
@@ -235,9 +236,16 @@ void Practice_LevelSelect_Draw(void) {
     const char* laserStr;
 
     Practice_DrawBox(16, 16, 288, 208, 0, 0, 0, 180);
+    Practice_Owl_Draw(231.0f, 14.0f);
+    Practice_DrawTextColor(219, 48, "UPDATES:", 160, 160, 160);
+    Practice_DrawText(196, 57, "SAGERACES.COM");
+    Practice_Logo_Draw(219.0f, 69.0f);
+    Practice_DrawTextColor(196, 104, "LEADERBOARDS:", 160, 160, 160);
+    Practice_DrawText(212, 113, "HIT64.NET");
 
     Practice_DrawTextColor(20, 20, "SF64 PRACTICE ROM", 0, 255, 128);
     Practice_DrawTextColor(20, 30, "SELECT LEVEL", 200, 200, 200);
+    Practice_DrawTextColor(163, 30, PRACTICE_BUILD_HASH, 90, 90, 90);
 
     startIdx = sSelectedLevel - (visibleCount / 2);
     if (startIdx < 0) {
@@ -290,7 +298,15 @@ void Practice_LevelSelect_Draw(void) {
     Practice_DrawText(208, 204, "LIVES:");
     Practice_DrawNumber(264, 204, gPracticeConfig.lifeCount);
 
-    Practice_DrawTextColor(20, 215, "A:GO  B:EXP  START:LOAD  LR:BGM", 150, 150, 150);
+    Practice_DrawButtonPill(20,  215, 10, "A",     0, 100, 220);
+    Practice_DrawTextColor( 32,  216, ":GO  ",    150, 150, 150);
+    Practice_DrawButtonPill(68,  215, 10, "B",     0, 160,   0);
+    Practice_DrawTextColor( 80,  216, ":EXP  ",   150, 150, 150);
+    Practice_DrawButtonPill(124, 215, 44, "START", 200,  30,  30);
+    Practice_DrawTextColor( 170, 216, ":LOAD  ",  150, 150, 150);
+    Practice_DrawButtonPill(222, 215, 10, "L",     100, 100, 100);
+    Practice_DrawButtonPill(234, 215, 10, "R",     100, 100, 100);
+    Practice_DrawTextColor( 246, 216, ":BGM",     150, 150, 150);
 
     if (Practice_StateMenuIsOpen()) {
         Practice_StateMenu_Draw();
@@ -350,7 +366,33 @@ u16 Practice_AudioSpecForLevel(LevelId levelId) {
     return (u16)(((u16)sfx << 8) | (u16)spec);
 }
 
+static u16 Practice_BgmIdForLevel(LevelId levelId) {
+    switch (levelId) {
+        case LEVEL_CORNERIA:  return NA_BGM_STAGE_CO;
+        case LEVEL_METEO:     return NA_BGM_STAGE_ME;
+        case LEVEL_SECTOR_Y:  return NA_BGM_STAGE_SY;
+        case LEVEL_FORTUNA:   return NA_BGM_STAGE_FO;
+        case LEVEL_KATINA:    return NA_BGM_STAGE_KA;
+        case LEVEL_AQUAS:     return NA_BGM_STAGE_AQ;
+        case LEVEL_SECTOR_X:  return NA_BGM_STAGE_SX;
+        case LEVEL_SOLAR:     return NA_BGM_STAGE_SO;
+        case LEVEL_ZONESS:    return NA_BGM_STAGE_ZO;
+        case LEVEL_TITANIA:   return NA_BGM_STAGE_TI;
+        case LEVEL_MACBETH:   return NA_BGM_STAGE_MA;
+        case LEVEL_SECTOR_Z:  return NA_BGM_STAGE_SZ;
+        case LEVEL_BOLSE:     return NA_BGM_STAGE_BO;
+        case LEVEL_AREA_6:    return NA_BGM_STAGE_A6;
+        case LEVEL_VENOM_1:
+        case LEVEL_VENOM_2:   return NA_BGM_STAGE_VE1;
+        case LEVEL_TRAINING:  return NA_BGM_TRAINING;
+        default:              return (u16)SEQ_ID_NONE;
+    }
+}
+
 void Practice_LaunchLevel(LevelId levelId, s32 phase, f32 checkpointProgress) {
+    u16 levelPacked = Practice_AudioSpecForLevel(levelId);
+    u16 bgmId;
+
     sBgmPlaying = false;
     sBgmPlayPending = false;
 
@@ -359,9 +401,26 @@ void Practice_LaunchLevel(LevelId levelId, s32 phase, f32 checkpointProgress) {
     gClearPlayerInfo = true;
     gPracticeCheckpointProgress = checkpointProgress;
 
-    // Map_LevelStart_AudioSpecSetup lives in the menu overlay and is only callable from
-    // GSTATE_MAP. Replicate its logic here so audio banks load correctly on any restart.
-    Audio_SetAudioSpec(0, Practice_AudioSpecForLevel(levelId));
+    /* Map_LevelStart_AudioSpecSetup lives in the menu overlay and is only callable
+     * from GSTATE_MAP. Replicate its logic here so audio banks load correctly. */
+    Audio_SetAudioSpec(0, levelPacked);
+
+    /* Same-spec launch: SEQCMD_RESET_AUDIO_HEAP only stops BGM without a heap
+     * reset, so Play_Init's AUDIO_PLAY_BGM may be silently dropped if
+     * isWaitingForFonts is set from the level-select preview. Queue a rescue
+     * play that fires 3 PLAY_UPDATE frames after Play_Init completes, giving
+     * any in-flight font load time to clear. Also covers same-spec restarts. */
+    osSyncPrintf("[bgm_dbg] launch lvl=%d lp=0x%04X ls=0x%04X\n",
+                 (s32)levelId, (u32)levelPacked, (u32)sBgmLastSpecPacked);
+    if (levelPacked == sBgmLastSpecPacked) {
+        bgmId = Practice_BgmIdForLevel(levelId);
+        osSyncPrintf("[bgm_dbg] same-spec bgmId=0x%04X\n", (u32)bgmId);
+        if (bgmId != (u16)SEQ_ID_NONE) {
+            Practice_QueueBgmRescue(bgmId, 3);
+        }
+    }
+    /* Track current spec so subsequent restarts to the same level are detected. */
+    sBgmLastSpecPacked = levelPacked;
 
     gNextGameState = GSTATE_PLAY;
     gDrawMode = DRAW_NONE;

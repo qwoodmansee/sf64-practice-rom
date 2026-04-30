@@ -46,6 +46,7 @@ typedef struct PracticeConfig {
     bool showSpawnScenery;
     bool expertMode;
     bool longHealth;
+    bool showPauseMinimap;
 } PracticeConfig;
 
 typedef enum PracticeSubMenu {
@@ -123,6 +124,7 @@ void Practice_DrawNumber(s32 x, s32 y, s32 value);
 void Practice_DrawFloat(s32 x, s32 y, f32 value, s32 decimals);
 void Practice_DrawTextOutline(s32 x, s32 y, const char* text, u8 r, u8 g, u8 b);
 void Practice_DrawCursor(s32 x, s32 y);
+void Practice_DrawButtonPill(s32 x, s32 y, s32 w, const char* label, u8 r, u8 g, u8 b);
 
 /* practice_input.c */
 bool Practice_InputTriggered(PracticeAction action);
@@ -161,6 +163,12 @@ void Practice_Menu_Close(void);
 void Practice_Menu_Update(void);
 void Practice_Menu_Draw(void);
 
+/* practice_logo_tex.c */
+void Practice_Logo_Draw(f32 x, f32 y);
+
+/* practice_owl_tex.c */
+void Practice_Owl_Draw(f32 x, f32 y);
+
 /* practice_hud.c */
 void Practice_Hud_Reset(void);
 void Practice_Hud_ShowStatus(const char* text, u8 r, u8 g, u8 b);
@@ -169,6 +177,9 @@ void Practice_Hud_Draw(void);
 
 /* practice_input_display.c */
 void Practice_InputDisplay_Draw(void);
+
+/* practice_minimap.c */
+void Practice_Minimap_Draw(void);
 
 /* practice_hitbox.c */
 void Practice_Hitbox_Draw(void);
@@ -179,10 +190,16 @@ bool Practice_FreeCam_OverlayVisible(void);
 void Practice_FreeCam_Enter(void);
 void Practice_FreeCam_Exit(void);
 void Practice_FreeCam_GetView(Vec3f* eye, Vec3f* at);
+void Practice_FreeCam_GetMapPos(f32* x, f32* z, f32* yaw_deg);
 void Practice_FreeCam_Update(void);
 void Practice_FreeCam_Draw(void);
 
 /* practice_save.c */
+/* Queue a deferred AUDIO_PLAY_BGM(seqId) that fires `delayFrames` PLAY_UPDATE
+ * frames after Audio_HandleReset() returns 0. Use delayFrames=0 to fire as
+ * soon as audio is ready (same-scene load). Use delayFrames=3 for same-spec
+ * level launches so in-flight isWaitingForFonts clears before we play. */
+void Practice_QueueBgmRescue(u16 seqId, s32 delayFrames);
 void Practice_SaveState(void);
 void Practice_LoadState(void);
 /* s32 0/1 — avoids Clang CC_CHECK bool vs libc/stdbool quirks on some hosts */

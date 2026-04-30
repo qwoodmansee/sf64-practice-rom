@@ -32,7 +32,10 @@ PRACTICE_OBJS = [
     "practice_input_display",
     "practice_hud",
     "practice_hitbox",
+    "practice_minimap",
     "practice_freecam",
+    "practice_logo_tex",
+    "practice_owl_tex",
     "practice_slot_test",  # Phase 3: in-ROM slot_manager fake-state smoke test
     "practice_test_fatfs",  # Phase 2: gated by IODEV_DIAG_FATFS, otherwise empty .o
     "practice_sd",          # Phase 6: OSK + file browser rendering and glue

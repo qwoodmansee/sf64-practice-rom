@@ -47,5 +47,6 @@ H.assert_eq(H.config_field("showHitboxFlash"), 0, "showHitboxFlash = false")
 H.assert_eq(H.config_field("showSpawnZones"), 0, "showSpawnZones = false")
 H.assert_eq(H.config_field("expertMode"), 0, "expertMode = false")
 H.assert_eq(H.config_field("longHealth"), 0, "longHealth = false")
+H.assert_eq(H.config_field("showPauseMinimap"), 1, "showPauseMinimap = true")
 
 H.finish()
