@@ -20,6 +20,7 @@ typedef struct PracticeConfig {
     LaserStrength laserStrength;
     s32 bombCount;
     s32 lifeCount;
+    s32 goldRingCount;
     u8 rightWingState;
     u8 leftWingState;
     bool falcoAlive;

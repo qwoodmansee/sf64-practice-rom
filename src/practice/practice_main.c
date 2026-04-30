@@ -16,6 +16,7 @@ void Practice_Init(void) {
     gPracticeConfig.laserStrength = LASERS_HYPER;
     gPracticeConfig.bombCount = 3;
     gPracticeConfig.lifeCount = 2;
+    gPracticeConfig.goldRingCount = 0;
     gPracticeConfig.rightWingState = WINGSTATE_INTACT;
     gPracticeConfig.leftWingState = WINGSTATE_INTACT;
     gPracticeConfig.falcoAlive = true;

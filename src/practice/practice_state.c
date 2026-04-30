@@ -6,6 +6,7 @@ typedef enum LoadoutOption {
     LOPT_LASERS,
     LOPT_BOMBS,
     LOPT_LIVES,
+    LOPT_GOLD_RINGS,
     LOPT_RIGHT_WING,
     LOPT_LEFT_WING,
     LOPT_FALCO,
@@ -86,6 +87,7 @@ static void StateMenu_ApplyLoadoutLive(void) {
     gLaserStrength[gPlayerNum] = gPracticeConfig.laserStrength;
     gBombCount[gPlayerNum] = gPracticeConfig.bombCount;
     gLifeCount[gPlayerNum] = gPracticeConfig.lifeCount;
+    gGoldRingCount[gPlayerNum] = gPracticeConfig.goldRingCount;
 
     if ((gGameState == GSTATE_PLAY) && (gPlayState == PLAY_UPDATE)) {
         gPlayer[0].arwing.rightWingState = gPracticeConfig.rightWingState;
@@ -128,6 +130,12 @@ static void StateMenu_UpdateLoadout(u16 buttons) {
                 gPracticeConfig.lifeCount++;
                 if (gPracticeConfig.lifeCount > 99) {
                     gPracticeConfig.lifeCount = 1;
+                }
+                break;
+            case LOPT_GOLD_RINGS:
+                gPracticeConfig.goldRingCount++;
+                if (gPracticeConfig.goldRingCount > 2) {
+                    gPracticeConfig.goldRingCount = 0;
                 }
                 break;
             case LOPT_RIGHT_WING:
@@ -176,6 +184,13 @@ static void StateMenu_UpdateLoadout(u16 buttons) {
                 gPracticeConfig.lifeCount--;
                 if (gPracticeConfig.lifeCount < 1) {
                     gPracticeConfig.lifeCount = 99;
+                }
+                break;
+            case LOPT_GOLD_RINGS:
+                if (gPracticeConfig.goldRingCount == 0) {
+                    gPracticeConfig.goldRingCount = 2;
+                } else {
+                    gPracticeConfig.goldRingCount--;
                 }
                 break;
             case LOPT_RIGHT_WING:
@@ -375,6 +390,10 @@ static void StateMenu_DrawLoadout(void) {
             case LOPT_LIVES:
                 Practice_DrawText(54, y, "LIVES:");
                 Practice_DrawNumber(120, y, gPracticeConfig.lifeCount);
+                break;
+            case LOPT_GOLD_RINGS:
+                Practice_DrawText(54, y, "RINGS:");
+                Practice_DrawNumber(120, y, gPracticeConfig.goldRingCount);
                 break;
             case LOPT_RIGHT_WING:
                 Practice_DrawText(54, y, "R WING:");
