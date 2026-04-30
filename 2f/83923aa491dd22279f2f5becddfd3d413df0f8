@@ -1,0 +1,23 @@
+src/practice/practice_minimap.c
+  ee0e9b370810d89d 137-140,144
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "2f83923aa491dd22279f2f5becddfd3d413df0f8",
+  "prompts": {
+    "ee0e9b370810d89d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "33e48a5e-4aa6-48ce-ab2d-acc7ec482337",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 5,
+      "total_deletions": 6,
+      "accepted_lines": 5,
+      "overriden_lines": 0
+    }
+  }
+}
