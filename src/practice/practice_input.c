@@ -8,7 +8,7 @@ typedef struct PracticeBinding {
 } PracticeBinding;
 
 static PracticeBinding sPracticeBindings[PACTION_MAX] = {
-    { R_TRIG, R_JPAD },  /* PACTION_OPEN_MENU:   R + D-Pad Right */
+    { Z_TRIG, R_JPAD },  /* PACTION_OPEN_MENU:   Z + D-Pad Right */
     { L_TRIG, L_JPAD },  /* PACTION_SAVE_POS:    L + D-Pad Left */
     { L_TRIG, R_JPAD },  /* PACTION_RESTORE_POS: L + D-Pad Right */
 };
