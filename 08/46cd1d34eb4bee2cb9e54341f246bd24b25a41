@@ -1,0 +1,33 @@
+tools/patch_linker_script.py
+  4a9b97c4a13f65fa 38
+include/practice.h
+  4a9b97c4a13f65fa 168-170
+src/practice/practice_level.c
+  4a9b97c4a13f65fa 238
+src/practice/practice_owl_tex.c
+  4a9b97c4a13f65fa 1-143
+tools/gen_owl_logo.py
+  4a9b97c4a13f65fa 1-108
+tools/practice_invariants.py
+  4a9b97c4a13f65fa 1190-1211,1268
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "0846cd1d34eb4bee2cb9e54341f246bd24b25a41",
+  "prompts": {
+    "4a9b97c4a13f65fa": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9a384a81-409e-4876-bb37-17085793ddba",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 279,
+      "total_deletions": 0,
+      "accepted_lines": 279,
+      "overriden_lines": 0
+    }
+  }
+}
