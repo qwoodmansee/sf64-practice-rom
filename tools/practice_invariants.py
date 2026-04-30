@@ -1156,6 +1156,31 @@ def check_practice_sd_wired():
         errors.append("Practice_Sd_Draw not called from practice_main.c (check_practice_sd_wired)")
 
 
+def check_sd_save_implemented():
+    src = read("lib/slot_manager.c")
+    if "f_open" not in src:
+        errors.append(
+            "slot_manager_save_sd_named appears to still be a stub (no f_open call) "
+            "(check_sd_save_implemented)"
+        )
+    if "f_rename" not in src:
+        errors.append(
+            "slot_manager_save_sd_named missing atomic rename (check_sd_save_implemented)"
+        )
+
+def check_sd_load_implemented():
+    src = read("lib/slot_manager.c")
+    if "f_read" not in src:
+        errors.append(
+            "slot_manager_load_sd_named appears to still be a stub (no f_read call) "
+            "(check_sd_load_implemented)"
+        )
+    if "f_size" not in src:
+        errors.append(
+            "slot_manager_load_sd_named missing f_size sanity check "
+            "(check_sd_load_implemented)"
+        )
+
 def main():
     check_config_inits()
     check_function_definitions()
@@ -1191,6 +1216,8 @@ def main():
     check_osk_declared()
     check_file_browser_declared()
     check_practice_sd_wired()
+    check_sd_save_implemented()
+    check_sd_load_implemented()
 
     if errors:
         print("Practice ROM invariant check FAILED:")
