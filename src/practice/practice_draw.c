@@ -137,4 +137,13 @@ void Practice_DrawCursor(s32 x, s32 y) {
     Practice_DrawTextColor(x, y, "-", 255, 255, 0);
 }
 
+/* Draws a controller button badge: pill shape (two overlapping boxes for rounded corners)
+ * with the label drawn in white on top. w=10 for single-char, wider for multi-char labels.
+ * Badge height is always 10px; label is drawn at (x+1, y+1). */
+void Practice_DrawButtonPill(s32 x, s32 y, s32 w, const char* label, u8 r, u8 g, u8 b) {
+    Practice_DrawBox(x + 1, y, w - 2, 10, r, g, b, 255);
+    Practice_DrawBox(x, y + 1, w, 8, r, g, b, 255);
+    Practice_DrawTextColor(x + 1, y + 1, label, 255, 255, 255);
+}
+
 #endif

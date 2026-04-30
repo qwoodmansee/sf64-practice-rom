@@ -298,7 +298,15 @@ void Practice_LevelSelect_Draw(void) {
     Practice_DrawText(208, 204, "LIVES:");
     Practice_DrawNumber(264, 204, gPracticeConfig.lifeCount);
 
-    Practice_DrawTextColor(20, 215, "A:GO  B:EXP  START:LOAD  LR:BGM", 150, 150, 150);
+    Practice_DrawButtonPill(20,  215, 10, "A",     0, 100, 220);
+    Practice_DrawTextColor( 32,  216, ":GO  ",    150, 150, 150);
+    Practice_DrawButtonPill(68,  215, 10, "B",     0, 160,   0);
+    Practice_DrawTextColor( 80,  216, ":EXP  ",   150, 150, 150);
+    Practice_DrawButtonPill(124, 215, 44, "START", 200,  30,  30);
+    Practice_DrawTextColor( 170, 216, ":LOAD  ",  150, 150, 150);
+    Practice_DrawButtonPill(222, 215, 10, "L",     100, 100, 100);
+    Practice_DrawButtonPill(234, 215, 10, "R",     100, 100, 100);
+    Practice_DrawTextColor( 246, 216, ":BGM",     150, 150, 150);
 
     if (Practice_StateMenuIsOpen()) {
         Practice_StateMenu_Draw();

@@ -124,6 +124,7 @@ void Practice_DrawNumber(s32 x, s32 y, s32 value);
 void Practice_DrawFloat(s32 x, s32 y, f32 value, s32 decimals);
 void Practice_DrawTextOutline(s32 x, s32 y, const char* text, u8 r, u8 g, u8 b);
 void Practice_DrawCursor(s32 x, s32 y);
+void Practice_DrawButtonPill(s32 x, s32 y, s32 w, const char* label, u8 r, u8 g, u8 b);
 
 /* practice_input.c */
 bool Practice_InputTriggered(PracticeAction action);
