@@ -1136,6 +1136,26 @@ def check_sys_memory_practice_bump_getter():
         )
 
 
+def check_osk_declared():
+    header = read("lib/ui/osk.h")
+    if "osk_open" not in header:
+        errors.append("lib/ui/osk.h missing osk_open declaration (check_osk_declared)")
+
+
+def check_file_browser_declared():
+    header = read("lib/ui/file_browser.h")
+    if "file_browser_open" not in header:
+        errors.append("lib/ui/file_browser.h missing file_browser_open (check_file_browser_declared)")
+
+
+def check_practice_sd_wired():
+    main_src = read("src/practice/practice_main.c")
+    if "Practice_Sd_Update" not in main_src:
+        errors.append("Practice_Sd_Update not called from practice_main.c (check_practice_sd_wired)")
+    if "Practice_Sd_Draw" not in main_src:
+        errors.append("Practice_Sd_Draw not called from practice_main.c (check_practice_sd_wired)")
+
+
 def main():
     check_config_inits()
     check_function_definitions()
@@ -1168,6 +1188,9 @@ def main():
     check_practice_pool_placement()
     check_practice_pool_no_overlay_overlap()
     check_practice_text_glyphs()
+    check_osk_declared()
+    check_file_browser_declared()
+    check_practice_sd_wired()
 
     if errors:
         print("Practice ROM invariant check FAILED:")
