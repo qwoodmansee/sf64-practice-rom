@@ -1,0 +1,23 @@
+tools/sc64dev
+  95613f2c64085e19 5-7,11,86-108,110-114,118-130,158-163
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "c9a471007f381e601bee16eb16b0ec9a687ac881",
+  "prompts": {
+    "95613f2c64085e19": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "224369b3-e592-401f-a83d-8a72aedf562f",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 51,
+      "total_deletions": 96,
+      "accepted_lines": 2269,
+      "overriden_lines": 0
+    }
+  }
+}
