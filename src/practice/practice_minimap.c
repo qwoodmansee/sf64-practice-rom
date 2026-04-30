@@ -133,9 +133,16 @@ void Practice_Minimap_Draw(void) {
             case AI360_WOLF:
             case AI360_LEON:
             case AI360_PIGMA:
-            case AI360_ANDREW:
-            case AI360_ENEMY:  Minimap_DrawTriangle(sx, sy, actor->obj.rot.y, 255, 120,   0); break;
-            default: break;
+            case AI360_ANDREW: Minimap_DrawTriangle(sx, sy, actor->obj.rot.y, 255, 120,   0); break;
+            default:
+                /* Generic enemy pool (aiType 10-99). animFrame == 1 marks
+                 * Cornerian Fighter allies - Actor_Despawn skips scoring them
+                 * with the same check. Skip allies; draw actual enemies orange. */
+                if ((actor->aiType >= AI360_ENEMY) && (actor->aiType < AI360_GREAT_FOX) &&
+                    (actor->animFrame != 1)) {
+                    Minimap_DrawTriangle(sx, sy, actor->obj.rot.y, 255, 120, 0);
+                }
+                break;
         }
     }
 
