@@ -1,0 +1,38 @@
+lib/ui/osk.c
+  95613f2c64085e19 1-124
+lib/ui/osk.h
+  95613f2c64085e19 1-14,16-59
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "e04e6e154ff1328543d650ad7680d03361f21051",
+  "prompts": {
+    "95613f2c64085e19": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "224369b3-e592-401f-a83d-8a72aedf562f",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 958,
+      "total_deletions": 9,
+      "accepted_lines": 2397,
+      "overriden_lines": 1
+    },
+    "95d1241bddd7ebc2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3b7f163f-fa31-451a-bcb4-be86a44fa691",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 0,
+      "overriden_lines": 0
+    }
+  }
+}
