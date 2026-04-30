@@ -1,130 +1,209 @@
 #!/usr/bin/env bash
-# Star Fox 64 Practice ROM — build + flash to SummerCart64 (sc64deployer).
-#
-# Works from any directory inside a clone or git worktree: finds the repo root
-# by locating a Makefile with a "practice:" target (same layout as main repo).
+# Star Fox 64 Practice ROM — SummerCart64 dev loop.
 #
 # Usage:
-#   ./tools/sc64dev              # make practice -j4 + upload
-#   ./tools/sc64dev build        # make only
-#   ./tools/sc64dev upload       # upload only (ROM must exist)
-#   SF64_MAKE_JOBS=8 ./tools/sc64dev
-#   PRACTICE_SAVE_TRACE=1 ./tools/sc64dev   # extra make vars via environment
+#   sc64dev               REPL: pick a worktree, then [b]uild+upload / [u]pload / [q]uit
+#   sc64dev .             REPL on current worktree (cwd)
+#   sc64dev <branch>      REPL on the worktree whose branch matches <branch>
+#   sc64dev <path>        REPL on the worktree at <path>
+#   sc64dev build         one-shot: make practice
+#   sc64dev upload        one-shot: upload only
+#   sc64dev all           one-shot: build + upload
+#   sc64dev help          show this message
 #
-# Optional environment:
-#   SF64_REPO_ROOT     — repo root (skip auto-discovery)
-#   SF64_ROM           — path to .z64 to upload (default: build/starfox64.us.rev1.uncompressed.z64)
-#   SC64_DEPLOYER      — sc64deployer binary (default: sc64deployer on PATH)
-#   SF64_MAKE_JOBS     — parallel jobs (default: 4)
+# Env (optional):
+#   SF64_REPO_ROOT     repo/worktree to use (skips discovery)
+#   SF64_ROM           .z64 path (default: <wt>/build/starfox64.us.rev1.uncompressed.z64)
+#   SC64_DEPLOYER      sc64deployer binary (default: from PATH)
+#   SF64_MAKE_JOBS     make -j (default: 4)
 #
+# Upload flags: --direct --reboot (boot mode = ROM (direct), deployer requests reset).
+
 set -euo pipefail
 
+MAIN_REPO="${HOME}/code/sf64-practice-rom"
 SC64_DEPLOYER="${SC64_DEPLOYER:-sc64deployer}"
 SF64_MAKE_JOBS="${SF64_MAKE_JOBS:-4}"
 DEFAULT_ROM_REL="build/starfox64.us.rev1.uncompressed.z64"
 
+die() { echo "sc64dev: $*" >&2; exit 1; }
+
+# Walk up from $1 looking for a Makefile that defines a `practice:` target.
 find_practice_repo() {
-  local start="$1"
-  local d="$start"
-  while true; do
-    if [[ -f "${d}/Makefile" ]] && grep -q '^practice:' "${d}/Makefile" 2>/dev/null; then
-      echo "$d"
-      return 0
+  local d="$1"
+  while [[ -n "$d" && "$d" != "/" ]]; do
+    if [[ -f "$d/Makefile" ]] && grep -q '^practice:' "$d/Makefile" 2>/dev/null; then
+      echo "$d"; return 0
     fi
-    local parent
-    parent="$(dirname "$d")"
-    if [[ "$parent" == "$d" ]]; then
-      return 1
-    fi
-    d="$parent"
+    d="$(dirname "$d")"
   done
+  return 1
 }
 
 resolve_repo_root() {
   if [[ -n "${SF64_REPO_ROOT:-}" ]]; then
-    if [[ ! -f "${SF64_REPO_ROOT}/Makefile" ]]; then
-      echo "sc64dev: SF64_REPO_ROOT is set but ${SF64_REPO_ROOT}/Makefile is missing." >&2
-      exit 1
-    fi
-    echo "${SF64_REPO_ROOT}"
-    return 0
+    [[ -f "${SF64_REPO_ROOT}/Makefile" ]] || die "SF64_REPO_ROOT '$SF64_REPO_ROOT' has no Makefile"
+    echo "${SF64_REPO_ROOT}"; return 0
+  fi
+  local r
+  r="$(find_practice_repo "$PWD" 2>/dev/null || true)"
+  if [[ -z "$r" ]]; then
+    r="$(find_practice_repo "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" 2>/dev/null || true)"
+  fi
+  [[ -n "$r" ]] || die "no SF64 practice repo found from cwd or script dir"
+  echo "$r"
+}
+
+worktree_label() {
+  local p="$1"
+  if [[ "$p" == "$MAIN_REPO" ]]; then
+    echo "main"
+  else
+    basename "$p"
+  fi
+}
+
+resolve_wt_arg() {
+  local arg="$1"
+  if [[ "$arg" == "." ]]; then
+    git -C "$PWD" rev-parse --show-toplevel 2>/dev/null && return 0
+    return 1
+  fi
+  if [[ -d "$arg" ]]; then
+    (cd "$arg" && git rev-parse --show-toplevel 2>/dev/null) && return 0
+    return 1
+  fi
+  git -C "$MAIN_REPO" worktree list --porcelain 2>/dev/null \
+    | awk -v want="$arg" '
+        /^worktree / { p = substr($0, 10) }
+        /^branch /   { b = $2; sub("refs/heads/", "", b);
+                       if (b == want) { print p; exit } }'
+}
+
+pick_worktree() {
+  local -a paths branches
+  local p="" b="" line
+  while IFS= read -r line; do
+    case "$line" in
+      "worktree "*) p="${line#worktree }" ;;
+      "branch "*)   b="${line#branch refs/heads/}"; paths+=("$p"); branches+=("$b") ;;
+      "")           ;;
+    esac
+  done < <(git -C "$MAIN_REPO" worktree list --porcelain 2>/dev/null)
+
+  if (( ${#paths[@]} == 0 )); then
+    die "no worktrees under $MAIN_REPO"
+  fi
+  if (( ${#paths[@]} == 1 )); then
+    echo "${paths[0]}"; return 0
   fi
 
-  local root=""
-  root="$(find_practice_repo "${PWD}" 2>/dev/null || true)"
-  if [[ -z "$root" ]]; then
-    local script_dir
-    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    root="$(find_practice_repo "${script_dir}" 2>/dev/null || true)"
+  echo "worktrees:" >&2
+  local i
+  for (( i=0; i<${#paths[@]}; i++ )); do
+    printf "  %d) %s\n" "$((i+1))" "${branches[i]}" >&2
+  done
+  local pick
+  read -r -p "> " pick
+  [[ "$pick" =~ ^[0-9]+$ ]] && (( pick >= 1 && pick <= ${#paths[@]} )) \
+    || die "bad choice"
+  echo "${paths[$((pick-1))]}"
+}
+
+run_build() {
+  local wt="$1"
+  (cd "$wt" && make practice "-j${SF64_MAKE_JOBS}")
+}
+
+run_upload() {
+  local rom="$1"
+  command -v "$SC64_DEPLOYER" >/dev/null 2>&1 \
+    || die "'$SC64_DEPLOYER' not on PATH"
+  [[ -f "$rom" ]] || die "ROM not found: $rom"
+  "$SC64_DEPLOYER" upload --direct --reboot "$rom"
+}
+
+# Single-keystroke read, portable across bash/zsh.
+read_key() {
+  local k
+  if read -rsn1 k 2>/dev/null; then
+    REPLY="$k"; return 0
   fi
-  if [[ -z "$root" ]]; then
-    echo "sc64dev: could not find this project's Makefile (with a practice: target)." >&2
-    echo "  cd into the Star Fox 64 practice repo (or a worktree), or set:" >&2
-    echo "    export SF64_REPO_ROOT=/absolute/path/to/starfox64-practice-repo" >&2
-    exit 1
-  fi
-  echo "$root"
+  read -sk1 k
+  REPLY="$k"
+}
+
+repl() {
+  local wt="$1"
+  local rom="${SF64_ROM:-$wt/$DEFAULT_ROM_REL}"
+  local label
+  label="$(worktree_label "$wt")"
+  echo "sc64dev [$label]  [b]uild+upload  [u]pload  [q]uit"
+  while true; do
+    printf "> "
+    read_key
+    local key="$REPLY"
+    case "$key" in
+      b)
+        echo "b"
+        if run_build "$wt" && run_upload "$rom"; then
+          echo "ok — reset console"
+        fi
+        ;;
+      u)
+        echo "u"
+        if run_upload "$rom"; then
+          echo "ok — reset console"
+        fi
+        ;;
+      q|$'\003'|$'\004'|"")
+        echo "q"
+        break
+        ;;
+      *)
+        echo "?  [b]uild+upload [u]pload [q]uit"
+        ;;
+    esac
+  done
 }
 
 usage() {
-  cat <<'EOF'
-Star Fox 64 Practice ROM — sc64dev (build + SummerCart64 upload)
-
-  ./tools/sc64dev [command]
-
-  command:
-    (default)   make practice then upload uncompressed practice ROM
-    all         same as default
-    build       make practice only
-    upload      sc64deployer upload only (ROM must already exist)
-
-  Environment (optional):
-    SF64_REPO_ROOT     repo root if not auto-detected from cwd
-    SF64_ROM           .z64 path to upload (default: build/starfox64.us.rev1.uncompressed.z64)
-    SC64_DEPLOYER      deployer binary (default: sc64deployer on PATH)
-    SF64_MAKE_JOBS     make -j jobs (default: 4)
-
-  Extra make flags: pass via environment, e.g.
-    PRACTICE_SAVE_TRACE=1 ./tools/sc64dev build
-EOF
-  exit 0
+  sed -n '2,/^set -euo/p' "$0" | sed -e 's/^# \{0,1\}//' -e '/^set -euo/d'
 }
 
-cmd="${1:-all}"
-if [[ "$cmd" == "-h" || "$cmd" == "--help" || "$cmd" == help ]]; then
-  usage
-fi
+cmd="${1:-}"
 
-if [[ "$cmd" == build || "$cmd" == upload || "$cmd" == all ]]; then
-  :
+case "$cmd" in
+  build)
+    REPO="$(resolve_repo_root)"
+    run_build "$REPO"
+    exit 0
+    ;;
+  upload)
+    REPO="$(resolve_repo_root)"
+    ROM="${SF64_ROM:-${REPO}/${DEFAULT_ROM_REL}}"
+    run_upload "$ROM"
+    exit 0
+    ;;
+  all)
+    REPO="$(resolve_repo_root)"
+    ROM="${SF64_ROM:-${REPO}/${DEFAULT_ROM_REL}}"
+    run_build "$REPO"
+    run_upload "$ROM"
+    echo "ok — reset console"
+    exit 0
+    ;;
+  -h|--help|help)
+    usage
+    exit 0
+    ;;
+esac
+
+if [[ -n "$cmd" ]]; then
+  WT="$(resolve_wt_arg "$cmd" || true)"
+  [[ -n "$WT" ]] || die "no worktree matched '$cmd'"
 else
-  echo "sc64dev: unknown command '$cmd' (use: build | upload | all | help)" >&2
-  exit 1
+  WT="$(pick_worktree)"
 fi
 
-REPO="$(resolve_repo_root)"
-ROM="${SF64_ROM:-${REPO}/${DEFAULT_ROM_REL}}"
-
-echo "sc64dev: repo  = ${REPO}"
-echo "sc64dev: rom   = ${ROM}"
-
-if [[ "$cmd" == build || "$cmd" == all ]]; then
-  echo "sc64dev: make practice -j${SF64_MAKE_JOBS} ..."
-  (cd "$REPO" && make practice "-j${SF64_MAKE_JOBS}")
-fi
-
-if [[ "$cmd" == upload || "$cmd" == all ]]; then
-  if ! command -v "$SC64_DEPLOYER" >/dev/null 2>&1; then
-    echo "sc64dev: '$SC64_DEPLOYER' not found on PATH." >&2
-    echo "  Install SummerCart64 deployer or set SC64_DEPLOYER to the full path." >&2
-    exit 1
-  fi
-  echo "sc64dev: tool  = $(command -v "$SC64_DEPLOYER")"
-  if [[ ! -f "$ROM" ]]; then
-    echo "sc64dev: ROM not found: ${ROM}" >&2
-    exit 1
-  fi
-  echo "sc64dev: uploading ..."
-  "$SC64_DEPLOYER" upload "$ROM"
-  echo "sc64dev: done. Press physical N64 reset if IS-Viewer or boot state looks stale."
-fi
+repl "$WT"
