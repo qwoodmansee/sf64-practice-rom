@@ -17,7 +17,7 @@ INCLUDES = -I.. -I.
 
 TEST_DISKIO_IMG = /tmp/test_diskio.img
 
-TESTS = test_sd_crc test_serial test_slot_manager test_crc32 test_diskio test_fatfs_smoke test_osk
+TESTS = test_sd_crc test_serial test_slot_manager test_crc32 test_diskio test_fatfs_smoke test_osk test_file_browser
 
 all: run-all
 
@@ -35,6 +35,15 @@ test_crc32: test_crc32.c ../crc32.c ../crc32.h ../lib_types.h
 
 test_osk: test_osk.c ../ui/osk.c ../ui/osk.h ../lib_types.h
 	$(CC) $(CFLAGS) $(INCLUDES) -DPRACTICE_ROM test_osk.c ../ui/osk.c -o $@
+
+test_file_browser: test_file_browser.c ../ui/file_browser.c ../ui/osk.c \
+                   ../fatfs/diskio.c ../fatfs/ff.c ../fatfs/ffunicode.c \
+                   iodev_mock.c
+	$(CC) $(CFLAGS) $(INCLUDES) -DPRACTICE_ROM \
+		test_file_browser.c ../ui/file_browser.c ../ui/osk.c \
+		../fatfs/diskio.c ../fatfs/ff.c ../fatfs/ffunicode.c \
+		iodev_mock.c \
+		-o $@
 
 test_diskio: test_diskio.c iodev_mock.c ../fatfs/diskio.c ../fatfs/ff.c ../fatfs/ffunicode.c
 	$(CC) $(CFLAGS) $(INCLUDES) \
@@ -68,7 +77,7 @@ run-all: $(TESTS)
 	@for t in $(TESTS); do \
 		echo "===> $$t"; \
 		case "$$t" in \
-		  test_sd_crc|test_serial|test_slot_manager|test_crc32|test_osk) ./$$t || exit 1 ;; \
+		  test_sd_crc|test_serial|test_slot_manager|test_crc32|test_osk|test_file_browser) ./$$t || exit 1 ;; \
 		  *) \
 		    rm -f $(TEST_DISKIO_IMG); \
 		    $(MAKE) -s $(TEST_DISKIO_IMG); \
