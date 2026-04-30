@@ -89,6 +89,7 @@ void osk_update(uint8_t pressed) {
 
     /* START = confirm */
     if (pressed & OSK_BTN_START) {
+        if (gOsk.text_len == 0) return;
         gOsk.open = false;
         if (gOsk.confirm) gOsk.confirm(gOsk.text, gOsk.ud);
         return;
@@ -110,6 +111,7 @@ void osk_update(uint8_t pressed) {
             return;
         }
         if (ch == OSK_CHAR_OK) {
+            if (gOsk.text_len == 0) return;
             gOsk.open = false;
             if (gOsk.confirm) gOsk.confirm(gOsk.text, gOsk.ud);
             return;
