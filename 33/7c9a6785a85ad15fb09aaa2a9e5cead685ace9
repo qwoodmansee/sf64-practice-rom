@@ -1,0 +1,27 @@
+include/practice.h
+  2da98fa66485cc34 23
+src/practice/practice_state.c
+  2da98fa66485cc34 9,90,135-140,189-195,394-397
+src/practice/practice_main.c
+  2da98fa66485cc34 19
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "337c9a6785a85ad15fb09aaa2a9e5cead685ace9",
+  "prompts": {
+    "2da98fa66485cc34": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "5e29900d-e877-4dfc-9562-0331816be895",
+        "model": "claude-haiku-4-5-20251001"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 21,
+      "total_deletions": 0,
+      "accepted_lines": 23,
+      "overriden_lines": 0
+    }
+  }
+}
