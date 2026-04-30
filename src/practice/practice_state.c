@@ -7,6 +7,7 @@ typedef enum LoadoutOption {
     LOPT_BOMBS,
     LOPT_LIVES,
     LOPT_GOLD_RINGS,
+    LOPT_HEALTH,
     LOPT_RIGHT_WING,
     LOPT_LEFT_WING,
     LOPT_FALCO,
@@ -58,6 +59,7 @@ static PracticeSubMenu sActiveSubMenu;
 
 static const char* sLaserNames[] = { "SINGLE", "TWIN", "HYPER" };
 static const char* sWingNames[] = { "NONE", "BROKEN", "INTACT" };
+static const char* sHealthNames[] = { "SHORT", "LONG" };
 
 bool Practice_StateMenuIsOpen(void) {
     return sStateMenuOpen;
@@ -88,10 +90,16 @@ static void StateMenu_ApplyLoadoutLive(void) {
     gBombCount[gPlayerNum] = gPracticeConfig.bombCount;
     gLifeCount[gPlayerNum] = gPracticeConfig.lifeCount;
     gGoldRingCount[gPlayerNum] = gPracticeConfig.goldRingCount;
+    if (gPracticeConfig.longHealth && gGoldRingCount[gPlayerNum] < 3) {
+        gGoldRingCount[gPlayerNum] = 3;
+    }
 
     if ((gGameState == GSTATE_PLAY) && (gPlayState == PLAY_UPDATE)) {
         gPlayer[0].arwing.rightWingState = gPracticeConfig.rightWingState;
         gPlayer[0].arwing.leftWingState = gPracticeConfig.leftWingState;
+        if (gPracticeConfig.longHealth) {
+            gPlayer[0].shields = Play_GetMaxShields();
+        }
     }
 
     if (!gPracticeConfig.falcoAlive) {
@@ -137,6 +145,9 @@ static void StateMenu_UpdateLoadout(u16 buttons) {
                 if (gPracticeConfig.goldRingCount > 2) {
                     gPracticeConfig.goldRingCount = 0;
                 }
+                break;
+            case LOPT_HEALTH:
+                gPracticeConfig.longHealth ^= true;
                 break;
             case LOPT_RIGHT_WING:
                 gPracticeConfig.rightWingState++;
@@ -192,6 +203,9 @@ static void StateMenu_UpdateLoadout(u16 buttons) {
                 } else {
                     gPracticeConfig.goldRingCount--;
                 }
+                break;
+            case LOPT_HEALTH:
+                gPracticeConfig.longHealth ^= true;
                 break;
             case LOPT_RIGHT_WING:
                 if (gPracticeConfig.rightWingState == WINGSTATE_NONE) {
@@ -395,6 +409,10 @@ static void StateMenu_DrawLoadout(void) {
                 Practice_DrawText(54, y, "RINGS:");
                 Practice_DrawNumber(120, y, gPracticeConfig.goldRingCount);
                 break;
+            case LOPT_HEALTH:
+                Practice_DrawText(54, y, "HEALTH:");
+                Practice_DrawTextColor(120, y, sHealthNames[gPracticeConfig.longHealth], 255, 255, 0);
+                break;
             case LOPT_RIGHT_WING:
                 Practice_DrawText(54, y, "R WING:");
                 Practice_DrawTextColor(120, y, sWingNames[gPracticeConfig.rightWingState], 255, 255, 0);
@@ -591,8 +609,8 @@ void Practice_StateMenu_Draw(void) {
     switch (sActiveSubMenu) {
         case PSUBMENU_LOADOUT:
             title = "LOADOUT";
-            boxHeight = 179;
-            helpY = 210;
+            boxHeight = 193;
+            helpY = 224;
             break;
         case PSUBMENU_DISPLAY:
             title = "DISPLAY";

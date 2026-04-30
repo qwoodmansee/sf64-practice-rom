@@ -45,6 +45,7 @@ typedef struct PracticeConfig {
     bool showSpawnItems;
     bool showSpawnScenery;
     bool expertMode;
+    bool longHealth;
 } PracticeConfig;
 
 typedef enum PracticeSubMenu {

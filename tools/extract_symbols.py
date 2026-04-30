@@ -135,6 +135,7 @@ CONFIG_OFFSETS = {
     "showSpawnItems":   0x60,
     "showSpawnScenery": 0x64,
     "expertMode":       0x68,
+    "longHealth":       0x6C,
 }
 
 # Player struct field offsets (include/sf64player.h Player)

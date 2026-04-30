@@ -41,6 +41,7 @@ void Practice_Init(void) {
     gPracticeConfig.showSpawnItems = true;
     gPracticeConfig.showSpawnScenery = false;
     gPracticeConfig.expertMode = false;
+    gPracticeConfig.longHealth = false;
 
     osSyncPrintf("=== PRACTICE ROM boot @ %s %s ===\n", __DATE__, __TIME__);
 
@@ -117,9 +118,15 @@ void Practice_ApplyStartConditions(void) {
     gBombCount[gPlayerNum] = gPracticeConfig.bombCount;
     gLifeCount[gPlayerNum] = gPracticeConfig.lifeCount;
     gGoldRingCount[gPlayerNum] = gPracticeConfig.goldRingCount;
+    if (gPracticeConfig.longHealth && gGoldRingCount[gPlayerNum] < 3) {
+        gGoldRingCount[gPlayerNum] = 3;
+    }
 
     gPlayer[0].arwing.rightWingState = gPracticeConfig.rightWingState;
     gPlayer[0].arwing.leftWingState = gPracticeConfig.leftWingState;
+    if (gPracticeConfig.longHealth) {
+        gPlayer[0].shields = Play_GetMaxShields();
+    }
 
     if (!gPracticeConfig.falcoAlive) {
         gTeamShields[TEAM_ID_FALCO] = 0;
