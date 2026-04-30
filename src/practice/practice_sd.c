@@ -13,7 +13,7 @@
 #include "fatfs/ff.h"
 #include "slot_manager.h"
 
-#define SD_ROOT     "/sageraces"
+#define SD_ROOT     "0:/SAGERACE"
 #define SD_APP      SD_ROOT "/sf64"
 #define SD_DIR      SD_APP  "/states"
 #define SD_EXT      ".SF64ST"
@@ -22,17 +22,24 @@
 static FATFS sFatfsWork;
 static bool sSdAvailable = false;
 static char sSavePath[SD_PATH_MAX];
+static char sSdStatus[48];
 
 /* Acquire the SC64 SD hardware lock before any FatFs operation and force
  * a lazy re-mount so FatFs discards its cached FAT state (host may have
  * modified the card while the lock was released). Pair with sd_op_end(). */
 static void sd_op_begin(void) {
     iodev_sd_acquire();
-    f_mount(&sFatfsWork, "", 0);
+    f_mount(&sFatfsWork, "0:", 0);
 }
 
 static void sd_op_end(void) {
+    f_unmount("0:");
     iodev_sd_release();
+}
+
+static FRESULT sd_remount(void) {
+    f_unmount("0:");
+    return f_mount(&sFatfsWork, "0:", 1);
 }
 
 /* N64 button -> OSK_BTN_* translation */
@@ -52,6 +59,13 @@ static u8 osk_buttons_from_n64(void) {
 
 static void on_save_name_confirmed(const char *name, void *ud) {
     int res, i, j;
+    FRESULT mountRes, rootRes, appRes, dirRes;
+    FRESULT rootStat, appStat, dirStat;
+    FILINFO finfo;
+    FIL fp;
+    UINT bw;
+    FRESULT markerRes;
+    static const char markerText[] = "sd diag\n";
     (void)ud;
     i = 0;
     for (j = 0; SD_DIR[j] && i < SD_PATH_MAX - 1; j++) { sSavePath[i++] = SD_DIR[j]; }
@@ -60,13 +74,36 @@ static void on_save_name_confirmed(const char *name, void *ud) {
     for (j = 0; SD_EXT[j] && i < SD_PATH_MAX - 1; j++) { sSavePath[i++] = SD_EXT[j]; }
     sSavePath[i] = '\0';
 
-    sd_op_begin();
-    res = slot_manager_save_sd_named(sSavePath);
+    iodev_sd_acquire();
+    mountRes = f_mount(&sFatfsWork, "0:", 1);
+    markerRes = f_open(&fp, "0:/SDMKDIAG.TXT", FA_WRITE | FA_CREATE_ALWAYS);
+    bw = 0;
+    if (markerRes == FR_OK) {
+        markerRes = f_write(&fp, markerText, (UINT)(sizeof(markerText) - 1), &bw);
+        f_close(&fp);
+    }
+    rootRes = f_mkdir(SD_ROOT);
+    rootStat = f_stat(SD_ROOT, &finfo);
+    mountRes = sd_remount();
+    appRes = f_mkdir(SD_APP);
+    appStat = f_stat(SD_APP, &finfo);
+    mountRes = sd_remount();
+    dirRes = f_mkdir(SD_DIR);
+    dirStat = f_stat(SD_DIR, &finfo);
+    mountRes = sd_remount();
+    res = SLOT_MANAGER_ERR_NO_STORAGE;
     sd_op_end();
+    osSyncPrintf("[practice_sd] save mount=%d marker=%d/%u mkdir=%d/%d/%d stat=%d/%d/%d save=%d\n",
+                 (int)mountRes, (int)markerRes, (unsigned)bw,
+                 (int)rootRes, (int)appRes, (int)dirRes,
+                 (int)rootStat, (int)appStat, (int)dirStat, res);
     if (res == SLOT_MANAGER_OK) {
         Practice_Hud_ShowStatus("SD SAVE OK", 80, 255, 120);
     } else {
-        Practice_Hud_ShowStatus("SD SAVE FAIL", 255, 120, 80);
+        sprintf(sSdStatus, "M%d W%d R%d/%d A%d/%d D%d/%d S%d",
+                (int)mountRes, (int)markerRes, (int)rootRes, (int)rootStat,
+                (int)appRes, (int)appStat, (int)dirRes, (int)dirStat, res);
+        Practice_Hud_ShowStatus(sSdStatus, 255, 120, 80);
     }
 }
 
@@ -103,13 +140,15 @@ void Practice_Sd_Init(void) {
      * result so we don't re-issue SC64_CMD_SD_CARD_OP which can stall ~6s. */
     sSdAvailable = iodev_sd_was_ok();
     if (sSdAvailable) {
-        f_mount(&sFatfsWork, "", 1);
+        f_mount(&sFatfsWork, "0:", 1);
         f_mkdir(SD_ROOT);
+        sd_remount();
         f_mkdir(SD_APP);
+        sd_remount();
         f_mkdir(SD_DIR);
         /* Release the SD lock so the host (sc64deployer / WebDAV) can access
          * the card while the ROM is idle. Each save/load re-acquires it. */
-        iodev_sd_release();
+        sd_op_end();
     }
     slot_manager_set_sd_scratch(Practice_Save_ScratchBase(), MAX_STATE_SIZE);
 }

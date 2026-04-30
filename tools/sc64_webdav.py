@@ -4,13 +4,25 @@ SC64 WebDAV server — mounts the SummerCart64 SD card as a drive in macOS Finde
 No external dependencies required.
 
 Usage:
-    python3 tools/sc64_webdav.py
-    python3 tools/sc64_webdav.py --remote localhost:9064   # via sc64dev server
+    python3 tools/sc64_webdav.py --remote localhost:9064   # via sc64dev server (RECOMMENDED)
+    python3 tools/sc64_webdav.py                           # direct USB (sc64dev must not be running)
     python3 tools/sc64_webdav.py --port 8765
 
 Mount in Finder:
     Go > Connect to Server (⌘K) > http://localhost:8765
     Click Connect (no username/password needed)
+
+IMPORTANT — sc64deployer server is single-client:
+    When using --remote, the IS-Viewer debug session (sc64deployer debug --isv ...)
+    MUST NOT be running — it holds the server connection and blocks all other clients.
+    Workflow:
+      1. sc64dev          (starts server, leave the REPL open)
+      2. (do NOT start the IS-Viewer debug session)
+      3. python3 tools/sc64_webdav.py --remote localhost:9064
+      4. Finder ⌘K → http://localhost:8765
+
+    To use IS-Viewer debug at the same time, stop WebDAV first (Ctrl-C),
+    then restart the debug session, then stop debug before restarting WebDAV.
 
 Env:
     SC64_DEPLOYER   sc64deployer binary path (default: sc64deployer)
@@ -19,9 +31,11 @@ Env:
 import concurrent.futures
 import http.server
 import os
+import posixpath
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import xml.etree.ElementTree as ET
 from urllib.parse import unquote, urlparse
@@ -29,6 +43,7 @@ from urllib.parse import unquote, urlparse
 DEFAULT_PORT = 8765
 SC64 = os.environ.get("SC64_DEPLOYER", "sc64deployer")
 _remote = []   # e.g. ["-r", "localhost:9064"]
+_sd_lock = threading.Lock()
 
 
 # ---------------------------------------------------------------------------
@@ -36,41 +51,107 @@ _remote = []   # e.g. ["-r", "localhost:9064"]
 # ---------------------------------------------------------------------------
 
 def _sd(*args):
-    return subprocess.run([SC64] + _remote + ["sd"] + list(args),
-                          capture_output=True, text=True)
+    with _sd_lock:
+        return subprocess.run([SC64] + _remote + ["sd"] + list(args),
+                              input="y\n", capture_output=True, text=True)
+
+
+def _parse_size(text):
+    units = {
+        "B": 1,
+        "K": 1024,
+        "M": 1024 * 1024,
+        "G": 1024 * 1024 * 1024,
+    }
+    text = text.strip()
+    if not text or text == "----":
+        return 0
+    try:
+        return int(text)
+    except ValueError:
+        pass
+    suffix = text[-1].upper()
+    if suffix in units:
+        try:
+            return int(float(text[:-1]) * units[suffix])
+        except ValueError:
+            return 0
+    return 0
+
+
+def _parse_sd_record(line):
+    """Parse one `sc64deployer sd ls/stat` line.
+
+    Example records:
+      d ---- 2025-11-30 11:49:06 | /ROMs
+      f 1.3M 2025-11-30 11:43:18 | sc64menu.n64
+
+    The powered-on warning prompt can be prefixed to the first record when we
+    auto-confirm it, so this intentionally keys off the final `| path` field.
+    """
+    if "|" not in line:
+        return None
+    meta, path = line.rsplit("|", 1)
+    fields = meta.strip().split()
+    kind = None
+    for field in reversed(fields):
+        if field in ("d", "f"):
+            kind = field
+            break
+    if kind is None:
+        return None
+    try:
+        size_index = fields.index(kind) + 1
+        size = _parse_size(fields[size_index])
+    except (ValueError, IndexError):
+        size = 0
+    path = path.strip()
+    name = os.path.basename(path.rstrip("/"))
+    return {"is_dir": kind == "d", "size": size, "path": path, "name": name}
+
+
+def _sd_stat(path):
+    if not path or path == "/":
+        return {"is_dir": True, "size": 0, "path": "/", "name": ""}
+    r = _sd("stat", path)
+    if r.returncode != 0:
+        return None
+    for line in (r.stdout + "\n" + r.stderr).splitlines():
+        rec = _parse_sd_record(line)
+        if rec is not None:
+            return rec
+    return None
 
 
 def sd_isdir(path):
-    if not path or path == "/":
-        return True
-    return _sd("ls", path).returncode == 0
+    rec = _sd_stat(path)
+    return bool(rec and rec["is_dir"])
 
 
 def sd_exists(path):
-    if not path or path == "/":
-        return True
-    return _sd("stat", path).returncode == 0
+    return _sd_stat(path) is not None
 
 
 def sd_size(path):
-    r = _sd("stat", path)
-    if r.returncode != 0:
-        return 0
-    for tok in r.stdout.split():
-        try:
-            v = int(tok)
-            if v >= 0:
-                return v
-        except ValueError:
-            pass
-    return 0
+    rec = _sd_stat(path)
+    return rec["size"] if rec else 0
 
 
 def sd_ls(path):
     r = _sd("ls", path or "/")
+    print(f"  [ls {path!r}] rc={r.returncode} out={r.stdout!r} err={r.stderr!r}", flush=True)
     if r.returncode != 0:
         return []
-    return [l.strip() for l in r.stdout.splitlines() if l.strip()]
+    names = []
+    for line in (r.stdout + "\n" + r.stderr).splitlines():
+        rec = _parse_sd_record(line)
+        if rec is not None and rec["name"]:
+            names.append(rec["name"])
+    return names
+
+
+def sd_join(parent, name):
+    return "/" + posixpath.join(parent.strip("/"), name).strip("/")
 
 
 # ---------------------------------------------------------------------------
@@ -145,7 +226,10 @@ class _DAVHandler(http.server.BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         if body:
-            self.wfile.write(body)
+            try:
+                self.wfile.write(body)
+            except BrokenPipeError:
+                pass
 
     def _send_xml(self, body, status=207):
         self._send(status, {"Content-Type": "application/xml; charset=utf-8"}, body)
@@ -186,7 +270,7 @@ class _DAVHandler(http.server.BaseHTTPRequestHandler):
             names = [n for n in sd_ls(sd) if not _is_apple_junk("/" + n)]
 
             def _classify(name):
-                child_sd = sd.rstrip("/") + "/" + name
+                child_sd = sd_join(sd, name)
                 child_is_dir = sd_isdir(child_sd)
                 size = 0 if child_is_dir else sd_size(child_sd)
                 child_href = href.rstrip("/") + "/" + name + ("/" if child_is_dir else "")
@@ -214,11 +298,14 @@ class _DAVHandler(http.server.BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(size))
             self.end_headers()
             with open(tmp, "rb") as f:
-                while True:
-                    chunk = f.read(65536)
-                    if not chunk:
-                        break
-                    self.wfile.write(chunk)
+                try:
+                    while True:
+                        chunk = f.read(65536)
+                        if not chunk:
+                            break
+                        self.wfile.write(chunk)
+                except BrokenPipeError:
+                    pass
         finally:
             if os.path.exists(tmp):
                 os.unlink(tmp)

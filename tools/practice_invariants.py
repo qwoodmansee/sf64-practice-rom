@@ -1158,9 +1158,9 @@ def check_practice_sd_wired():
 
 def check_sd_root_namespace():
     src = read("src/practice/practice_sd.c")
-    if '"/sageraces"' not in src:
+    if '"/sageraces"' not in src and '"0:/sageraces"' not in src and '"0:/SAGERACE"' not in src:
         errors.append(
-            'SD_ROOT must be "/sageraces" — all SD paths share this namespace '
+            'SD_ROOT must be "/sageraces", "0:/sageraces", or "0:/SAGERACE" — all SD paths share this namespace '
             "(check_sd_root_namespace)"
         )
     if '"/sf64-practice"' in src or '"/sf64practice"' in src:

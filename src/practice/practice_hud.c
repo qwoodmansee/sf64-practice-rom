@@ -130,8 +130,8 @@ void Practice_Hud_Draw(void) {
     }
 
     if ((sStatusTimer > 0) && (sStatusText != NULL)) {
-        Practice_DrawBox(118, 36, 84, 14, 0, 0, 0, 170);
-        Practice_DrawTextColor(124, 39, sStatusText, sStatusR, sStatusG, sStatusB);
+        Practice_DrawBox(74, 36, 172, 14, 0, 0, 0, 170);
+        Practice_DrawTextColor(80, 39, sStatusText, sStatusR, sStatusG, sStatusB);
     }
 
     if (!gPracticeConfig.showHudOverlay) {
