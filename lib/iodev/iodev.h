@@ -25,8 +25,14 @@ iodev_id_t iodev_detect(void);
 
 /* Initializes the SD card on the active flashcart.
  * Must be called once after iodev_detect() returns non-NONE.
- * Returns IODEV_OK on success, negative error code otherwise. */
+ * Returns IODEV_OK on success, negative error code otherwise.
+ * Result is cached; iodev_sd_was_ok() reads it without re-hitting hardware. */
 iodev_result_t iodev_sd_init(void);
+
+/* Returns non-zero if the most-recent iodev_sd_init() returned IODEV_OK.
+ * Returns 0 if sd_init was never called or returned an error.
+ * diskio.c uses this to avoid re-issuing the SD_OP_INIT command on every f_open. */
+int iodev_sd_was_ok(void);
 
 /* Read `count` 512-byte sectors starting at `lba` into `buf`.
  * `buf` must be 8-byte aligned (DMA requirement) and `count * 512` bytes long. */

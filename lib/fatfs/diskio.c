@@ -68,15 +68,13 @@ DSTATUS disk_status(BYTE pdrv) {
 }
 
 DSTATUS disk_initialize(BYTE pdrv) {
-    iodev_result_t r;
-
     if (pdrv != VOL_SD) return STA_NOINIT | STA_NODISK;
+    if (sFatfsDiskInited) return 0;
 
-    /* iodev_detect is idempotent; Practice_Init already called it at boot.
-     * iodev_sd_init is also idempotent on the SC64 backend. */
-    r = iodev_sd_init();
-    if (r != IODEV_OK) {
-        sFatfsDiskInited = 0;
+    /* Use the cached result from Practice_Init's iodev_sd_init() call.
+     * Avoids re-issuing SC64_CMD_SD_CARD_OP / SD_OP_INIT on every f_open,
+     * which can stall the game thread for up to 6 seconds on a failing card. */
+    if (!iodev_sd_was_ok()) {
         return STA_NOINIT;
     }
     sFatfsDiskInited = 1;

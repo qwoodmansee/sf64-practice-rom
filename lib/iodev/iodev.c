@@ -15,6 +15,15 @@
  * linker map (tests and debug tools). */
 const iodev_backend_t *gIodevActive = 0;
 
+/* Cached result of the most-recent iodev_sd_init() call.
+ * -99 = never called; 0 = IODEV_OK (success); negative = error code.
+ * diskio.c reads this to avoid re-issuing SD_OP_INIT on every f_open. */
+static int sIodevSdInitResult = -99;
+
+int iodev_sd_was_ok(void) {
+    return (sIodevSdInitResult == IODEV_OK);
+}
+
 iodev_id_t iodev_detect(void) {
     /* Probe order: SC64 first, then ED64, fallback to stub.
      * First-match-wins; SC64's SCv2 IDENT magic and ED64's REG_EDID magic
@@ -43,7 +52,8 @@ iodev_id_t iodev_detect(void) {
 
 iodev_result_t iodev_sd_init(void) {
     if (!gIodevActive) iodev_detect();
-    return gIodevActive->sd_init();
+    sIodevSdInitResult = gIodevActive->sd_init();
+    return sIodevSdInitResult;
 }
 
 iodev_result_t iodev_sd_read_sectors(uint32_t lba, uint32_t count, void *buf) {

@@ -38,7 +38,10 @@ static u8 osk_buttons_from_n64(void) {
 static void on_save_name_confirmed(const char *name, void *ud) {
     int res, i, j;
     (void)ud;
+    osSyncPrintf("[sd_save] confirmed: name='%s'\n", name);
+    osSyncPrintf("[sd_save] mkdir %s\n", SD_DIR);
     f_mkdir(SD_DIR);
+    osSyncPrintf("[sd_save] mkdir done, building path\n");
     i = 0;
     for (j = 0; SD_DIR[j] && i < SD_PATH_MAX - 1; j++) { sSavePath[i++] = SD_DIR[j]; }
     if (i < SD_PATH_MAX - 1) { sSavePath[i++] = '/'; }
@@ -46,7 +49,10 @@ static void on_save_name_confirmed(const char *name, void *ud) {
     for (j = 0; SD_EXT[j] && i < SD_PATH_MAX - 1; j++) { sSavePath[i++] = SD_EXT[j]; }
     sSavePath[i] = '\0';
 
+    osSyncPrintf("[sd_save] path='%s'\n", sSavePath);
+    osSyncPrintf("[sd_save] calling slot_manager_save_sd_named\n");
     res = slot_manager_save_sd_named(sSavePath);
+    osSyncPrintf("[sd_save] result=%d\n", res);
     if (res == SLOT_MANAGER_OK) {
         Practice_Hud_ShowStatus("SD SAVE OK", 80, 255, 120);
     } else {
@@ -76,7 +82,10 @@ static void on_load_canceled(void *ud) {
 }
 
 void Practice_Sd_Init(void) {
-    sSdAvailable = (iodev_detect() != IODEV_NONE);
+    /* iodev_sd_init() was already called in Practice_Init(); use the cached
+     * result so we don't re-issue SC64_CMD_SD_CARD_OP which can stall ~6s. */
+    sSdAvailable = iodev_sd_was_ok();
+    osSyncPrintf("[sd] Practice_Sd_Init: sd_was_ok=%d\n", sSdAvailable);
     slot_manager_set_sd_scratch(Practice_Save_ScratchBase(), MAX_STATE_SIZE);
 }
 
@@ -85,19 +94,25 @@ bool Practice_Sd_IsActive(void) {
 }
 
 void Practice_Sd_StartSave(void) {
-    if (!sSdAvailable) {
+    if (!sSdAvailable || gPracticeSaveDisabled) {
         Practice_Hud_ShowStatus("NO SD CART", 255, 180, 80);
+        osSyncPrintf("[sd_save] blocked: avail=%d saveDisabled=%d\n",
+                     (int)sSdAvailable, (int)gPracticeSaveDisabled);
         return;
     }
+    osSyncPrintf("[sd_save] opening OSK\n");
     osk_open("SD SAVE NAME:", "", OSK_MAX_TEXT,
               on_save_name_confirmed, on_save_canceled, NULL);
 }
 
 void Practice_Sd_StartLoad(void) {
-    if (!sSdAvailable) {
+    if (!sSdAvailable || gPracticeSaveDisabled) {
         Practice_Hud_ShowStatus("NO SD CART", 255, 180, 80);
+        osSyncPrintf("[sd_load] blocked: avail=%d saveDisabled=%d\n",
+                     (int)sSdAvailable, (int)gPracticeSaveDisabled);
         return;
     }
+    osSyncPrintf("[sd_load] opening file browser\n");
     if (file_browser_open(FB_LOAD, SD_DIR, SD_EXT,
                           on_load_file_selected, on_load_canceled, NULL) != 0) {
         Practice_Hud_ShowStatus("SD OPEN ERR", 255, 120, 80);
