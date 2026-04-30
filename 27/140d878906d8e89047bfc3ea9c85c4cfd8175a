@@ -1,0 +1,23 @@
+src/practice/practice_sd.c
+  95613f2c64085e19 9,80
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "27140d878906d8e89047bfc3ea9c85c4cfd8175a",
+  "prompts": {
+    "95613f2c64085e19": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "224369b3-e592-401f-a83d-8a72aedf562f",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 2219,
+      "overriden_lines": 0
+    }
+  }
+}
