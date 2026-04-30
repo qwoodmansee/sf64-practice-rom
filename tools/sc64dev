@@ -131,14 +131,14 @@ repl() {
   if server_ready "$SC64_SERVER_ADDR"; then
     echo "sc64dev: server already running at $SC64_SERVER_ADDR"
   else
-    "$SC64_DEPLOYER" server "$SC64_SERVER_ADDR" &
+    "$SC64_DEPLOYER" server "$SC64_SERVER_ADDR" >/dev/null 2>&1 &
     server_pid=$!
-    local i
+    local i ready=0
     for (( i=0; i<10; i++ )); do
       sleep 0.2
-      server_ready "$SC64_SERVER_ADDR" && break
+      if server_ready "$SC64_SERVER_ADDR"; then ready=1; break; fi
     done
-    if ! server_ready "$SC64_SERVER_ADDR"; then
+    if (( !ready )); then
       kill "$server_pid" 2>/dev/null || true
       die "server failed to start — kill any direct debug session first, then retry"
     fi
