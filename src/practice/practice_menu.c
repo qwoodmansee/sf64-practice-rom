@@ -184,6 +184,15 @@ void Practice_Menu_Update(void) {
     def = &sMenuDefs[sMenuDepth];
     sHovered[sMenuDepth] = def->getSlice(hold->stick_x, hold->stick_y);
 
+    /* Z = SD save/load shortcuts when radial is open at depth 0 */
+    if (sMenuDepth == 0 && (press->button & Z_TRIG)) {
+        if (press->button & B_BUTTON) {
+            Practice_Sd_StartLoad();
+        } else {
+            Practice_Sd_StartSave();
+        }
+    }
+
     if ((press->button & A_BUTTON) && (sHovered[sMenuDepth] != SLICE_NONE)) {
         if (sMenuDepth == 0) {
             switch (sHovered[0]) {
@@ -367,7 +376,7 @@ void Practice_Menu_Draw(void) {
     if (sMenuDepth > 0) {
         Practice_DrawTextColor(56, 198, "STICK:SELECT  A:GO  B:BACK", 150, 150, 150);
     } else {
-        Practice_DrawTextColor(52, 198, "L:R SLOT STICK:A B:CLOSE", 150, 150, 150);
+        Practice_DrawTextColor(40, 198, "L:R B:CLOSE Z:SD SAVE ZB:SD LOAD", 150, 150, 150);
     }
 
     if (Practice_StateMenuIsOpen()) {
