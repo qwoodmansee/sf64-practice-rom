@@ -23,7 +23,8 @@ SRC_SVG   = os.path.join(REPO_ROOT, "owl-400.svg")
 OUT_C     = os.path.join(REPO_ROOT, "src", "practice", "practice_owl_tex.c")
 TEX_W, TEX_H = 32, 32
 BLUE_HEX  = "#3399FF"
-ALPHA_THRESHOLD = 64  # pixels with alpha <= this → transparent
+SUPERSAMPLE = 256     # render SVG at this size then downscale — thinner strokes
+ALPHA_THRESHOLD = 128 # threshold after LANCZOS downscale; 128 gives clean thin edges
 
 def main():
     if not os.path.exists(SRC_SVG):
@@ -36,6 +37,9 @@ def main():
     # Patch fill to blue
     import re
     blue_svg = re.sub(r'fill="[^"]*"', f'fill="{BLUE_HEX}"', svg)
+    # Override SVG width/height so magick scales to fill the canvas
+    blue_svg = re.sub(r'width="\d+px"',  f'width="{SUPERSAMPLE}px"',  blue_svg)
+    blue_svg = re.sub(r'height="\d+px"', f'height="{SUPERSAMPLE}px"', blue_svg)
 
     tmp_svg = tempfile.NamedTemporaryFile(suffix=".svg", delete=False, mode="w")
     tmp_svg.write(blue_svg)
@@ -45,16 +49,17 @@ def main():
     tmp_png.close()
 
     try:
+        # Render at SUPERSAMPLE size then downscale with LANCZOS for thinner strokes
         result = subprocess.run(
-            ["magick", "-background", "none", "-size", f"{TEX_W}x{TEX_H}",
-             tmp_svg.name, "-resize", f"{TEX_W}x{TEX_H}", tmp_png.name],
+            ["magick", "-background", "none", tmp_svg.name,
+             "-resize", f"{SUPERSAMPLE}x{SUPERSAMPLE}", tmp_png.name],
             capture_output=True, text=True
         )
         if result.returncode != 0:
             print(f"magick failed: {result.stderr}", file=sys.stderr)
             sys.exit(1)
 
-        img    = Image.open(tmp_png.name).convert("RGBA")
+        img    = Image.open(tmp_png.name).convert("RGBA").resize((TEX_W, TEX_H), Image.Resampling.LANCZOS)
         pixels = np.array(img)
     finally:
         os.unlink(tmp_svg.name)

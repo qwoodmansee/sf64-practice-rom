@@ -235,8 +235,12 @@ void Practice_LevelSelect_Draw(void) {
     const char* laserStr;
 
     Practice_DrawBox(16, 16, 288, 208, 0, 0, 0, 180);
-    Practice_Owl_Draw(198.0f, 14.0f);
-    Practice_Logo_Draw(238.0f, 14.0f);
+    Practice_Owl_Draw(231.0f, 14.0f);
+    Practice_DrawTextColor(219, 48, "UPDATES:", 160, 160, 160);
+    Practice_DrawText(196, 57, "SAGERACES.COM");
+    Practice_Logo_Draw(219.0f, 69.0f);
+    Practice_DrawTextColor(196, 104, "LEADERBOARDS:", 160, 160, 160);
+    Practice_DrawText(212, 113, "HIT64.NET");
 
     Practice_DrawTextColor(20, 20, "SF64 PRACTICE ROM", 0, 255, 128);
     Practice_DrawTextColor(20, 30, "SELECT LEVEL", 200, 200, 200);
