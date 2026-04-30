@@ -13,7 +13,7 @@ void Practice_Init(void) {
     Practice_LevelSelect_OnEnter();
     gPracticeMenuState = PMENU_CLOSED;
 
-    gPracticeConfig.laserStrength = LASERS_SINGLE;
+    gPracticeConfig.laserStrength = LASERS_HYPER;
     gPracticeConfig.bombCount = 3;
     gPracticeConfig.lifeCount = 2;
     gPracticeConfig.rightWingState = WINGSTATE_INTACT;
