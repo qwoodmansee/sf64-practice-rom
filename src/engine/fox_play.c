@@ -4553,7 +4553,8 @@ void Player_Setup(Player* playerx) {
 #ifdef PRACTICE_ROM
     if (gLevelMode == LEVELMODE_ON_RAILS && gPracticeCheckpointProgress > 0.0f) {
         s32 ckIdx = 0;
-        while (gLevelObjects[ckIdx].id > OBJ_INVALID && gLevelObjects[ckIdx].zPos1 <= gPracticeCheckpointProgress) {
+        while ((gLevelObjects != NULL) && (ckIdx < 10000) && (gLevelObjects[ckIdx].id > OBJ_INVALID) &&
+               (gLevelObjects[ckIdx].zPos1 <= gPracticeCheckpointProgress)) {
             ckIdx++;
         }
         gSavedObjectLoadIndex = ckIdx;
