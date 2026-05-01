@@ -64,6 +64,25 @@ bool gPracticeBgmPending;
 u16  gPracticeBgmPendingSeqId;
 s32  gPracticeBgmPendingDelay;
 
+/* SD-path cross-scene load state.  Set in Practice_Load_Cb when the snapshot
+ * cannot be applied to the current scene; fired by Practice_Save_Tick once the
+ * target scene reaches PLAY_UPDATE.  Overlay/segment pointers reference the
+ * slot-manager's RAM storage buffer (slot 0) which survives until then. */
+static bool        sSdCrossPending;
+static LevelId     sSdCrossLevel;
+static s32         sSdCrossPhase;
+static s32         sSdCrossStartFrame;
+static const u8   *sSdCrossOvSrc;
+static u32         sSdCrossOvLen;
+static u32         sSdCrossOvBuildId;
+static u32         sSdCrossOvVram;
+static bool        sSdCrossHaveSegs;
+static u32         sSdCrossSegs[16];
+
+bool Practice_Sd_LoadIsPending(void) {
+    return sSdCrossPending;
+}
+
 void Practice_QueueBgmRescue(u16 seqId, s32 delayFrames) {
     gPracticeBgmPending      = true;
     gPracticeBgmPendingSeqId = seqId;
@@ -669,6 +688,8 @@ static int Practice_Load_Cb(const void *buf, uint32_t size) {
     bool have_overlay_meta;
     u32 segments_copy[16];
     bool have_segments;
+    u16 tlv_level_id;
+    s16 tlv_level_phase;
 
     tlv_ov_build_id = 0;
     tlv_ov_vram_u32 = 0;
@@ -676,6 +697,8 @@ static int Practice_Load_Cb(const void *buf, uint32_t size) {
     overlay_len = 0;
     have_overlay_meta = false;
     have_segments = false;
+    tlv_level_id   = 0;
+    tlv_level_phase = 0;
 
     bzero(sn, sizeof(*sn));
     bzero(segments_copy, sizeof(segments_copy));
@@ -712,12 +735,14 @@ static int Practice_Load_Cb(const void *buf, uint32_t size) {
                 if (len != sizeof(u16)) {
                     return -1;
                 }
+                bcopy((void *)data, &tlv_level_id, sizeof(tlv_level_id));
                 break;
 
             case TAG_LEVEL_PHASE:
                 if (len != sizeof(s16)) {
                     return -1;
                 }
+                bcopy((void *)data, &tlv_level_phase, sizeof(tlv_level_phase));
                 break;
 
             case TAG_OVERLAY_BUILD_ID:
@@ -1153,6 +1178,29 @@ static int Practice_Load_Cb(const void *buf, uint32_t size) {
 #endif
     (void)have_overlay_meta;
 
+    /* Guard: only apply immediately when the right scene is live.  Any other
+     * state (title screen, wrong level, mid-transition) defers to
+     * Practice_Save_Tick via the SD cross-scene state. */
+    if (!((gGameState == GSTATE_PLAY) &&
+          (gPlayState == PLAY_UPDATE) &&
+          (gPlayer != NULL) &&
+          ((LevelId)gCurrentLevel == (LevelId)tlv_level_id))) {
+        sSdCrossPending    = true;
+        sSdCrossLevel      = (LevelId)tlv_level_id;
+        sSdCrossPhase      = (s32)tlv_level_phase;
+        sSdCrossStartFrame = gGameFrameCount;
+        sSdCrossOvSrc      = overlay_src;
+        sSdCrossOvLen      = overlay_len;
+        sSdCrossOvBuildId  = tlv_ov_build_id;
+        sSdCrossOvVram     = tlv_ov_vram_u32;
+        sSdCrossHaveSegs   = have_segments;
+        if (have_segments) {
+            bcopy(segments_copy, sSdCrossSegs, sizeof(sSdCrossSegs));
+        }
+        practice_overlay_request_load(sSdCrossLevel, sSdCrossPhase);
+        return 0;
+    }
+
     SAVE_TR_STAGE("load before overlay restore");
     if ((overlay_src != NULL) && (overlay_len > 0)) {
         void *dst;
@@ -1549,6 +1597,31 @@ const PracticeSlotMeta* Practice_GetSlotMeta(s32 slot) {
     return &gPracticeSlotMeta[slot];
 }
 
+static void sd_cross_apply_now(void) {
+    void    *dst;
+    u32      ds;
+    u32      cur_va;
+    u32      cur_bld;
+
+    if ((sSdCrossOvSrc != NULL) && (sSdCrossOvLen > 0)) {
+        if (practice_overlay_get_region(gCurrentLevel, &dst, &ds) == 0) {
+            cur_va  = (u32)(uintptr_t)dst;
+            cur_bld = practice_overlay_build_id(gCurrentLevel);
+            if ((sSdCrossOvBuildId == cur_bld) &&
+                (sSdCrossOvVram    == cur_va)  &&
+                (sSdCrossOvLen     == ds)) {
+                bcopy((void *)sSdCrossOvSrc, dst, ds);
+            }
+        }
+    }
+    if (sSdCrossHaveSegs) {
+        bcopy(sSdCrossSegs, gSegments, sizeof(gSegments));
+    }
+    Snapshot_ApplyToGame(Practice_SaveScratch());
+    sSdCrossPending = false;
+    Practice_Hud_ShowStatus("SD LOAD OK", 80, 255, 120);
+}
+
 void Practice_Save_Tick(void) {
     s32 rr;
     s32 elapsed;
@@ -1612,6 +1685,25 @@ void Practice_Save_Tick(void) {
         osSyncPrintf("[save_tr] xscene TIMEOUT slot=%d elapsed=%d\n",
                      gPracticeCrossLoadSlot, elapsed);
 #endif
+    }
+
+    /* SD-path cross-scene: apply once the target scene is running. */
+    if (sSdCrossPending) {
+        if (gPracticeSaveDisabled) {
+            sSdCrossPending = false;
+            return;
+        }
+        if ((gGameState == GSTATE_PLAY) &&
+            (gPlayState == PLAY_UPDATE) &&
+            (gPlayer != NULL) &&
+            ((LevelId)gCurrentLevel == sSdCrossLevel)) {
+            sd_cross_apply_now();
+            return;
+        }
+        if ((gGameFrameCount - sSdCrossStartFrame) > PRACTICE_XLOAD_TIMEOUT_FRAMES) {
+            sSdCrossPending = false;
+            Practice_Hud_ShowStatus("SD XLD T/O", 255, 120, 80);
+        }
     }
 }
 

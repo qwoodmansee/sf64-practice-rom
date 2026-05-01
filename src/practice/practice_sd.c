@@ -13,7 +13,7 @@
 #include "fatfs/ff.h"
 #include "slot_manager.h"
 
-#define SD_ROOT     "0:/SAGERACE"
+#define SD_ROOT     "0:/sageraces"
 #define SD_APP      SD_ROOT "/sf64"
 #define SD_DIR      SD_APP  "/states"
 #define SD_EXT      ".SF64ST"
@@ -24,22 +24,17 @@ static bool sSdAvailable = false;
 static char sSavePath[SD_PATH_MAX];
 static char sSdStatus[48];
 
-/* Acquire the SC64 SD hardware lock before any FatFs operation and force
- * a lazy re-mount so FatFs discards its cached FAT state (host may have
- * modified the card while the lock was released). Pair with sd_op_end(). */
+/* Lazy-mount FatFs before any operation so it discards cached FAT state.
+ * We do NOT touch the hardware SD lock here: the card stays acquired from
+ * the boot-time iodev_sd_init() call.  Releasing and re-acquiring forces a
+ * full SD_OP_INIT sequence on the SC64 which can stall the game thread for
+ * several seconds. */
 static void sd_op_begin(void) {
-    iodev_sd_acquire();
     f_mount(&sFatfsWork, "0:", 0);
 }
 
 static void sd_op_end(void) {
     f_unmount("0:");
-    iodev_sd_release();
-}
-
-static FRESULT sd_remount(void) {
-    f_unmount("0:");
-    return f_mount(&sFatfsWork, "0:", 1);
 }
 
 /* N64 button -> OSK_BTN_* translation */
@@ -58,52 +53,54 @@ static u8 osk_buttons_from_n64(void) {
 }
 
 static void on_save_name_confirmed(const char *name, void *ud) {
-    int res, i, j;
-    FRESULT mountRes, rootRes, appRes, dirRes;
-    FRESULT rootStat, appStat, dirStat;
+    int res, j;
+    int i = 0;
+    FRESULT rr, ra, rd;
+    FRESULT st1, st2, st3;
     FILINFO finfo;
-    FIL fp;
-    UINT bw;
-    FRESULT markerRes;
-    static const char markerText[] = "sd diag\n";
     (void)ud;
-    i = 0;
+
     for (j = 0; SD_DIR[j] && i < SD_PATH_MAX - 1; j++) { sSavePath[i++] = SD_DIR[j]; }
     if (i < SD_PATH_MAX - 1) { sSavePath[i++] = '/'; }
     for (j = 0; name[j] && i < SD_PATH_MAX - 1; j++) { sSavePath[i++] = name[j]; }
     for (j = 0; SD_EXT[j] && i < SD_PATH_MAX - 1; j++) { sSavePath[i++] = SD_EXT[j]; }
     sSavePath[i] = '\0';
+    osSyncPrintf("[sd] save path=%s\n", sSavePath);
 
-    iodev_sd_acquire();
-    mountRes = f_mount(&sFatfsWork, "0:", 1);
-    markerRes = f_open(&fp, "0:/SDMKDIAG.TXT", FA_WRITE | FA_CREATE_ALWAYS);
-    bw = 0;
-    if (markerRes == FR_OK) {
-        markerRes = f_write(&fp, markerText, (UINT)(sizeof(markerText) - 1), &bw);
-        f_close(&fp);
-    }
-    rootRes = f_mkdir(SD_ROOT);
-    rootStat = f_stat(SD_ROOT, &finfo);
-    mountRes = sd_remount();
-    appRes = f_mkdir(SD_APP);
-    appStat = f_stat(SD_APP, &finfo);
-    mountRes = sd_remount();
-    dirRes = f_mkdir(SD_DIR);
-    dirStat = f_stat(SD_DIR, &finfo);
-    mountRes = sd_remount();
-    res = SLOT_MANAGER_ERR_NO_STORAGE;
+    /* Single acquire+lazy-mount like the load path; no intermediate remounts. */
+    sd_op_begin();
+    rr = f_mkdir(SD_ROOT);
+    ra = f_mkdir(SD_APP);
+    rd = f_mkdir(SD_DIR);
+    osSyncPrintf("[sd] mkdir root=%d app=%d dir=%d (0=ok 8=exist)\n",
+                 (int)rr, (int)ra, (int)rd);
+    st1 = f_stat("0:/sageraces", &finfo);
+    st2 = f_stat("0:/sageraces/sf64", &finfo);
+    st3 = f_stat("0:/sageraces/sf64/states", &finfo);
+    osSyncPrintf("[sd] stat root=%d app=%d dir=%d\n", (int)st1, (int)st2, (int)st3);
+
+    res = slot_manager_save_sd_named(sSavePath);
+    osSyncPrintf("[sd] slot_save=%d\n", res);
     sd_op_end();
-    osSyncPrintf("[practice_sd] save mount=%d marker=%d/%u mkdir=%d/%d/%d stat=%d/%d/%d save=%d\n",
-                 (int)mountRes, (int)markerRes, (unsigned)bw,
-                 (int)rootRes, (int)appRes, (int)dirRes,
-                 (int)rootStat, (int)appStat, (int)dirStat, res);
+
+    Practice_Menu_Close();
     if (res == SLOT_MANAGER_OK) {
         Practice_Hud_ShowStatus("SD SAVE OK", 80, 255, 120);
     } else {
-        sprintf(sSdStatus, "M%d W%d R%d/%d A%d/%d D%d/%d S%d",
-                (int)mountRes, (int)markerRes, (int)rootRes, (int)rootStat,
-                (int)appRes, (int)appStat, (int)dirRes, (int)dirStat, res);
-        Practice_Hud_ShowStatus(sSdStatus, 255, 120, 80);
+        const char *msg;
+        switch (res) {
+            case SLOT_MANAGER_ERR_PARAM:       msg = "SD ERR PARAM";   break;
+            case SLOT_MANAGER_ERR_NO_STORAGE:  msg = "SD NO SCRATCH";  break;
+            case SLOT_MANAGER_ERR_OVERFLOW:    msg = "SD OVERFLOW";    break;
+            case SLOT_MANAGER_ERR_IO_OPEN:     msg = "SD OPEN FAIL";   break;
+            case SLOT_MANAGER_ERR_IO_WRITE:    msg = "SD WRITE FAIL";  break;
+            case SLOT_MANAGER_ERR_IO_RENAME:   msg = "SD RENAME FAIL"; break;
+            default:
+                sprintf(sSdStatus, "SD ERR %d", res);
+                msg = sSdStatus;
+                break;
+        }
+        Practice_Hud_ShowStatus(msg, 255, 120, 80);
     }
 }
 
@@ -114,15 +111,37 @@ static void on_save_canceled(void *ud) {
 
 static void on_load_file_selected(const char *path, void *ud) {
     int res;
+    const char *msg;
     (void)ud;
+    osSyncPrintf("[sd] load path=%s\n", path);
     sd_op_begin();
     res = slot_manager_load_sd_named(path);
     sd_op_end();
+    osSyncPrintf("[sd] slot_load=%d\n", res);
+    Practice_Menu_Close();
     if (res == SLOT_MANAGER_OK) {
-        Practice_Hud_ShowStatus("SD LOAD OK", 80, 255, 120);
-    } else {
-        Practice_Hud_ShowStatus("SD LOAD FAIL", 255, 120, 80);
+        if (Practice_Sd_LoadIsPending()) {
+            Practice_Hud_ShowStatus("XSCENE WAIT", 220, 220, 80);
+        } else {
+            Practice_Hud_ShowStatus("SD LOAD OK", 80, 255, 120);
+        }
+        return;
     }
+    switch (res) {
+        case SLOT_MANAGER_ERR_PARAM:       msg = "LOAD ERR PARAM";  break;
+        case SLOT_MANAGER_ERR_NO_STORAGE:  msg = "LOAD NO SCRATCH"; break;
+        case SLOT_MANAGER_ERR_IO_OPEN:     msg = "LOAD OPEN FAIL";  break;
+        case SLOT_MANAGER_ERR_IO_READ:     msg = "LOAD READ FAIL";  break;
+        case SLOT_MANAGER_ERR_CORRUPT:     msg = "LOAD CORRUPT";    break;
+        case SLOT_MANAGER_ERR_MAGIC:       msg = "LOAD BAD MAGIC";  break;
+        case SLOT_MANAGER_ERR_VERSION:     msg = "LOAD VERSION";    break;
+        case SLOT_MANAGER_ERR_CALLBACK:    msg = "LOAD CB FAIL";    break;
+        default:
+            sprintf(sSdStatus, "LOAD ERR %d", res);
+            msg = sSdStatus;
+            break;
+    }
+    Practice_Hud_ShowStatus(msg, 255, 120, 80);
 }
 
 static void on_load_canceled(void *ud) {
@@ -131,23 +150,16 @@ static void on_load_canceled(void *ud) {
 }
 
 void Practice_Sd_Init(void) {
-    /* Explicitly close OSK and file browser in case BSS zero-init didn't
-     * cover the Phase 6 globals (osk.o/file_browser.o added late to BSS). */
     osk_close();
     file_browser_close();
-
-    /* iodev_sd_init() was already called in Practice_Init(); use the cached
-     * result so we don't re-issue SC64_CMD_SD_CARD_OP which can stall ~6s. */
     sSdAvailable = iodev_sd_was_ok();
     if (sSdAvailable) {
-        f_mount(&sFatfsWork, "0:", 1);
+        /* Create the save directory tree at ROM boot so the first save never
+         * stalls on fresh directory allocation mid-game. */
+        sd_op_begin();
         f_mkdir(SD_ROOT);
-        sd_remount();
         f_mkdir(SD_APP);
-        sd_remount();
         f_mkdir(SD_DIR);
-        /* Release the SD lock so the host (sc64deployer / WebDAV) can access
-         * the card while the ROM is idle. Each save/load re-acquires it. */
         sd_op_end();
     }
     slot_manager_set_sd_scratch(Practice_Save_ScratchBase(), MAX_STATE_SIZE);
@@ -172,15 +184,14 @@ void Practice_Sd_StartLoad(void) {
         Practice_Hud_ShowStatus("NO SD CART", 255, 180, 80);
         return;
     }
-    /* Acquire SD lock for directory listing, then release immediately after.
-     * file_browser_open() reads all entries into RAM; no SD needed during
-     * user navigation. The selection callback re-acquires for the file read. */
     sd_op_begin();
     r = file_browser_open(FB_LOAD, SD_DIR, SD_EXT,
                           on_load_file_selected, on_load_canceled, NULL);
     sd_op_end();
+    osSyncPrintf("[sd] load dir=%s r=%d count=%d\n",
+                 SD_DIR, r, (int)gFileBrowser.count);
     if (r != 0) {
-        Practice_Hud_ShowStatus("SD OPEN ERR", 255, 120, 80);
+        Practice_Hud_ShowStatus("NO SD SAVES", 180, 180, 80);
     }
 }
 
@@ -194,21 +205,22 @@ void Practice_Sd_Update(void) {
 }
 
 /* OSK rendering */
-#define OSK_X0 20
-#define OSK_Y0 64   /* grid top; -20 original put prompt in TV overscan */
-#define OSK_CW 12
-#define OSK_CH 10
+#define OSK_X0 140
+#define OSK_Y0 80   /* grid top; box = Y0-40, bottom = Y0 + rows*CH + ~8 */
+#define OSK_CW 16
+#define OSK_CH 14
 
 static void draw_osk(void) {
     int col, row;
-    s32 bx = OSK_X0 - 4;
-    s32 by = OSK_Y0 - 34;
-    s32 bw = OSK_GRID_COLS * OSK_CW + 8;
-    s32 bh = OSK_GRID_ROWS * OSK_CH + 30;
+    s32 bx    = OSK_X0 - 4;
+    s32 by    = OSK_Y0 - 40;
+    s32 bw    = OSK_GRID_COLS * OSK_CW + 8;
+    s32 bh    = OSK_GRID_ROWS * OSK_CH + 44; /* 40 header + grid + 4 pad; grid ends at by+124 */
+    s32 pillY = by + bh + 4;
 
     Practice_DrawBox(bx, by, bw, bh, 0, 0, 0, 210);
     Practice_DrawTextColor(OSK_X0, by + 4, gOsk.prompt, 0, 255, 128);
-    Practice_DrawText(OSK_X0, by + 14, gOsk.text);
+    Practice_DrawText(OSK_X0, by + 16, gOsk.text);
 
     for (row = 0; row < OSK_GRID_ROWS; row++) {
         for (col = 0; col < OSK_GRID_COLS; col++) {
@@ -232,20 +244,29 @@ static void draw_osk(void) {
             }
         }
     }
-    Practice_DrawTextColor(OSK_X0, by + bh - 8, "A:SELECT B:DEL START:OK Z:CANCEL", 120, 120, 120);
+
+    Practice_DrawButtonPill(20,  pillY, 10, "A",     0, 100, 220);
+    Practice_DrawTextColor( 32,  pillY + 1, ":SEL  ",   150, 150, 150);
+    Practice_DrawButtonPill(74,  pillY, 10, "B",     0, 160,   0);
+    Practice_DrawTextColor( 86,  pillY + 1, ":DEL  ",   150, 150, 150);
+    Practice_DrawButtonPill(128, pillY, 44, "START", 200,  30,  30);
+    Practice_DrawTextColor( 174, pillY + 1, ":OK  ",    150, 150, 150);
+    Practice_DrawButtonPill(209, pillY, 10, "Z",     100, 100, 100);
+    Practice_DrawTextColor( 221, pillY + 1, ":CANCEL",  150, 150, 150);
 }
 
 /* File browser rendering */
 #define FB_X0    20
-#define FB_Y0    40   /* row top; -12 original put header in TV overscan */
+#define FB_Y0    60   /* row top; box = Y0-20 */
 #define FB_ROW_H 10
 
 static void draw_file_browser(void) {
     int i;
-    s32 bx = FB_X0 - 4;
-    s32 by = FB_Y0 - 20;
-    s32 bw = 280;
-    s32 bh = FB_VISIBLE_ROWS * FB_ROW_H + 24;
+    s32 bx    = FB_X0 - 4;
+    s32 by    = FB_Y0 - 20;
+    s32 bw    = 280;
+    s32 bh    = FB_VISIBLE_ROWS * FB_ROW_H + 22; /* rows fit at by+20 to by+162; 2px pad */
+    s32 pillY = by + bh + 4;
 
     Practice_DrawBox(bx, by, bw, bh, 0, 0, 0, 210);
     Practice_DrawTextColor(FB_X0, by + 4, "LOAD FROM SD:", 0, 255, 128);
@@ -263,7 +284,11 @@ static void draw_file_browser(void) {
             Practice_DrawText(FB_X0, y, gFileBrowser.names[entry]);
         }
     }
-    Practice_DrawTextColor(FB_X0, by + bh - 8, "A:SELECT B:CANCEL", 120, 120, 120);
+
+    Practice_DrawButtonPill(20, pillY, 10, "A",  0, 100, 220);
+    Practice_DrawTextColor( 32, pillY + 1, ":SELECT  ", 150, 150, 150);
+    Practice_DrawButtonPill(96, pillY, 10, "B",  0, 160,   0);
+    Practice_DrawTextColor(108, pillY + 1, ":CANCEL",   150, 150, 150);
 }
 
 void Practice_Sd_Draw(void) {

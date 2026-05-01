@@ -1193,9 +1193,12 @@ def check_sd_save_implemented():
             "slot_manager_save_sd_named appears to still be a stub (no f_open call) "
             "(check_sd_save_implemented)"
         )
-    if "f_rename" not in src:
+    # FA_CREATE_ALWAYS writes directly to the final path; f_rename was removed because
+    # SC64's FatFs implementation returns FR_INVALID_NAME on the rename step.
+    if "FA_CREATE_ALWAYS" not in src:
         errors.append(
-            "slot_manager_save_sd_named missing atomic rename (check_sd_save_implemented)"
+            "slot_manager_save_sd_named must use FA_CREATE_ALWAYS for direct-write save "
+            "(check_sd_save_implemented)"
         )
 
 def check_sd_load_implemented():
@@ -1213,22 +1216,19 @@ def check_sd_load_implemented():
 
 
 def check_sd_per_op_release():
-    """practice_sd.c must acquire/release SD lock around each FatFs operation
-    so the host (sc64deployer / WebDAV) can access the card while the ROM is idle."""
+    """practice_sd.c must bracket each FatFs operation with sd_op_begin/sd_op_end
+    (lazy f_mount / f_unmount). iodev_sd_acquire/release are intentionally absent:
+    SD_OP_INIT causes a multi-second hardware stall on SC64 and was confirmed to
+    cause OPEN FAIL errors. The card stays acquired from boot-time iodev_sd_init."""
     src = read("src/practice/practice_sd.c")
-    if "iodev_sd_release" not in src:
-        errors.append(
-            "practice_sd.c does not call iodev_sd_release — SD card will stay locked "
-            "to the N64 indefinitely, blocking host access (check_sd_per_op_release)"
-        )
-    if "iodev_sd_acquire" not in src:
-        errors.append(
-            "practice_sd.c does not call iodev_sd_acquire — save/load will fail after "
-            "the initial release (check_sd_per_op_release)"
-        )
     if "sd_op_begin" not in src or "sd_op_end" not in src:
         errors.append(
             "practice_sd.c missing sd_op_begin/sd_op_end helpers "
+            "(check_sd_per_op_release)"
+        )
+    if "f_mount" not in src:
+        errors.append(
+            "practice_sd.c sd_op_begin must call f_mount for lazy FatFs remount "
             "(check_sd_per_op_release)"
         )
 

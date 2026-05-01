@@ -227,6 +227,7 @@ void Practice_Sd_Draw(void);
 bool Practice_Sd_IsActive(void);
 void Practice_Sd_StartSave(void);
 void Practice_Sd_StartLoad(void);
+bool Practice_Sd_LoadIsPending(void);
 
 /* Per-slot metadata captured at save time. */
 typedef struct PracticeSlotMeta {

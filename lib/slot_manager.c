@@ -267,27 +267,11 @@ void slot_manager_set_sd_scratch(void *buf, uint32_t buf_size) {
     sSlotManager.sd_scratch_size = buf_size;
 }
 
-#ifdef SLOT_MANAGER_USE_FATFS
-static int tmp_path_from(const char *path, char *tmp, uint32_t tmp_size) {
-    uint32_t i;
-    if (tmp_size < 6) return -1;
-    for (i = 0; path[i] && i < tmp_size - 5; i++) tmp[i] = path[i];
-    if (path[i] != '\0') return -1;  /* path was too long */
-    tmp[i++] = '.';
-    tmp[i++] = 't';
-    tmp[i++] = 'm';
-    tmp[i++] = 'p';
-    tmp[i]   = '\0';
-    return 0;
-}
-#endif
-
 int slot_manager_save_sd_named(const char *path) {
 #ifndef SLOT_MANAGER_USE_FATFS
     (void)path;
     return SLOT_MANAGER_ERR_UNSUPPORTED;
 #else
-    char     tmp[FF_MAX_LFN + 5];
     FIL      fp;
     FRESULT  res;
     UINT     written;
@@ -319,24 +303,15 @@ int slot_manager_save_sd_named(const char *path) {
     slot_put_le16(&base[0x06], sSlotManager.state_version);
     slot_put_le32(&base[0x08], total_size);
 
-    if (tmp_path_from(path, tmp, sizeof(tmp)) != 0) return SLOT_MANAGER_ERR_PARAM;
-
-    res = f_open(&fp, tmp, FA_WRITE | FA_CREATE_ALWAYS);
-    if (res != FR_OK) return SLOT_MANAGER_ERR_NO_STORAGE;
+    res = f_open(&fp, path, FA_WRITE | FA_CREATE_ALWAYS);
+    if (res != FR_OK) return SLOT_MANAGER_ERR_IO_OPEN;
 
     res = f_write(&fp, base, total_size, &written);
     f_close(&fp);
 
     if (res != FR_OK || written != total_size) {
-        f_unlink(tmp);
-        return SLOT_MANAGER_ERR_NO_STORAGE;
-    }
-
-    f_unlink(path);
-    res = f_rename(tmp, path);
-    if (res != FR_OK) {
-        f_unlink(tmp);
-        return SLOT_MANAGER_ERR_NO_STORAGE;
+        f_unlink(path);
+        return SLOT_MANAGER_ERR_IO_WRITE;
     }
 
     return SLOT_MANAGER_OK;
@@ -353,6 +328,7 @@ int slot_manager_load_sd_named(const char *path) {
     FSIZE_t  fsize;
     UINT     bytes_read;
     uint8_t *base;
+    uint32_t io_cap;
     uint32_t total_size;
     uint32_t payload_size;
     int      cb_result;
@@ -362,13 +338,26 @@ int slot_manager_load_sd_named(const char *path) {
         sSlotManager.sd_scratch_size < sSlotManager.max_state_size)
         return SLOT_MANAGER_ERR_NO_STORAGE;
 
-    base = sSlotManager.sd_scratch;
+    /* Use the RAM slot pool as the file I/O staging buffer so the load_cb's
+     * bzero(sd_scratch) cannot destroy the TLV payload.  sd_scratch and the
+     * slot pool are separate allocations at different RDRAM addresses.
+     * Overwriting slot 0's bytes is acceptable; we mark the slot invalid. */
+    if (sSlotManager.storage &&
+        sSlotManager.storage_size >= sSlotManager.max_state_size) {
+        base   = sSlotManager.storage;
+        io_cap = sSlotManager.max_state_size;
+        sSlotManager.slot_valid[0] = false;
+        sSlotManager.slot_size[0]  = 0;
+    } else {
+        base   = sSlotManager.sd_scratch;
+        io_cap = sSlotManager.sd_scratch_size;
+    }
 
     res = f_open(&fp, path, FA_READ);
-    if (res != FR_OK) return SLOT_MANAGER_ERR_NO_STORAGE;
+    if (res != FR_OK) return SLOT_MANAGER_ERR_IO_OPEN;
 
     fsize = f_size(&fp);
-    if (fsize < SLOT_MANAGER_HEADER_SIZE || fsize > sSlotManager.sd_scratch_size) {
+    if (fsize < SLOT_MANAGER_HEADER_SIZE || fsize > io_cap) {
         f_close(&fp);
         return SLOT_MANAGER_ERR_CORRUPT;
     }
@@ -376,7 +365,7 @@ int slot_manager_load_sd_named(const char *path) {
     res = f_read(&fp, base, (UINT)fsize, &bytes_read);
     f_close(&fp);
 
-    if (res != FR_OK || bytes_read != (UINT)fsize) return SLOT_MANAGER_ERR_NO_STORAGE;
+    if (res != FR_OK || bytes_read != (UINT)fsize) return SLOT_MANAGER_ERR_IO_READ;
 
     if (base[0x00] != SLOT_MAGIC_0 || base[0x01] != SLOT_MAGIC_1 ||
         base[0x02] != SLOT_MAGIC_2 || base[0x03] != SLOT_MAGIC_3) {

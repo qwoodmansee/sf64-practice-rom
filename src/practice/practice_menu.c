@@ -36,6 +36,7 @@ typedef enum RootSlice {
     RSLICE_LOADOUT,
     RSLICE_DISPLAY,
     RSLICE_CAMERA,
+    RSLICE_SD,
     RSLICE_MAX,
 } RootSlice;
 
@@ -47,6 +48,7 @@ static const RadialEntry sRootEntries[RSLICE_MAX] = {
     { "LOADOUT", "LOADOUT...",      68, 148, 10, 140, 60,  180 },
     { "DISPLAY", "DISPLAY...",      68, 82,  10, 60,  160, 160 },
     { "CAMERA",  "FREE CAMERA",    222, 108, 6,  60,  200, 200 },
+    { "SD",      "SD CARD...",      46, 108, 2,  80,  150, 220 },
 };
 
 static s32 Root_GetSlice(s8 stickX, s8 stickY) {
@@ -66,6 +68,9 @@ static s32 Root_GetSlice(s8 stickX, s8 stickY) {
             return RSLICE_CAMERA;
         }
         return y > 0 ? RSLICE_SAVE : RSLICE_LOAD;
+    }
+    if ((ay * 100) < (ax * 58)) {
+        return RSLICE_SD;
     }
     return y > 0 ? RSLICE_DISPLAY : RSLICE_LOADOUT;
 }
@@ -102,14 +107,41 @@ static s32 Display_GetSlice(s8 stickX, s8 stickY) {
     return y > 0 ? DSLICE_STATS : DSLICE_INPUTS;
 }
 
+// ── SD sub-radial ─────────────────────────────────────────────────────────────
+
+typedef enum SdSlice {
+    SDSLICE_SAVE,
+    SDSLICE_LOAD,
+    SDSLICE_MAX,
+} SdSlice;
+
+static const RadialEntry sSdEntries[SDSLICE_MAX] = {
+    { "SD SAVE", "SAVE TO SD CARD", 136, 55,  7, 60,  160, 80  },
+    { "SD LOAD", "LOAD FROM SD",    136, 175, 7, 60,  80,  180 },
+};
+
+static s32 Sd_GetSlice(s8 stickX, s8 stickY) {
+    s32 x = stickX;
+    s32 y = stickY;
+    s32 ax = x < 0 ? -x : x;
+    s32 ay = y < 0 ? -y : y;
+    if ((ax < RADIAL_DEAD_ZONE) && (ay < RADIAL_DEAD_ZONE)) return SLICE_NONE;
+    return y > 0 ? SDSLICE_SAVE : SDSLICE_LOAD;
+}
+
 // ── Menu stack ────────────────────────────────────────────────────────────────
 
 static const RadialMenuDef sMenuDefs[] = {
-    { sRootEntries,    RSLICE_MAX, Root_GetSlice    },
-    { sDisplayEntries, DSLICE_MAX, Display_GetSlice },
+    { sRootEntries,    RSLICE_MAX,   Root_GetSlice    },
+    { sDisplayEntries, DSLICE_MAX,   Display_GetSlice },
+    { sSdEntries,      SDSLICE_MAX,  Sd_GetSlice      },
 };
+#define MENUDEF_ROOT    0
+#define MENUDEF_DISPLAY 1
+#define MENUDEF_SD      2
 
 static s32 sMenuDepth = 0;
+static s32 sMenuDefIdx[RADIAL_STACK_MAX];
 static s32 sHovered[RADIAL_STACK_MAX];
 static s32 sStartHoldTimer = 0;
 
@@ -117,6 +149,7 @@ void Practice_Menu_Open(void) {
     s32 i;
     gPracticeMenuState = PMENU_OPEN;
     sMenuDepth = 0;
+    sMenuDefIdx[0] = MENUDEF_ROOT;
     for (i = 0; i < RADIAL_STACK_MAX; i++) {
         sHovered[i] = SLICE_NONE;
     }
@@ -127,6 +160,7 @@ void Practice_Menu_OpenFrozen(void) {
     s32 i;
     gPracticeMenuState = PMENU_OPEN_FROZEN;
     sMenuDepth = 0;
+    sMenuDefIdx[0] = MENUDEF_ROOT;
     for (i = 0; i < RADIAL_STACK_MAX; i++) {
         sHovered[i] = SLICE_NONE;
     }
@@ -192,7 +226,7 @@ void Practice_Menu_Update(void) {
         return;
     }
 
-    def = &sMenuDefs[sMenuDepth];
+    def = &sMenuDefs[sMenuDefIdx[sMenuDepth]];
     sHovered[sMenuDepth] = def->getSlice(hold->stick_x, hold->stick_y);
 
     if ((press->button & A_BUTTON) && (sHovered[sMenuDepth] != SLICE_NONE)) {
@@ -223,6 +257,12 @@ void Practice_Menu_Update(void) {
                     break;
                 case RSLICE_DISPLAY:
                     sMenuDepth = 1;
+                    sMenuDefIdx[1] = MENUDEF_DISPLAY;
+                    sHovered[1] = SLICE_NONE;
+                    break;
+                case RSLICE_SD:
+                    sMenuDepth = 1;
+                    sMenuDefIdx[1] = MENUDEF_SD;
                     sHovered[1] = SLICE_NONE;
                     break;
                 case RSLICE_CAMERA:
@@ -234,21 +274,34 @@ void Practice_Menu_Update(void) {
                     break;
             }
         } else if (sMenuDepth == 1) {
-            switch (sHovered[1]) {
-                case DSLICE_SKIP_CUTS:
-                    gPracticeConfig.skipCutscenes ^= true;
-                    break;
-                case DSLICE_INPUTS:
-                    gPracticeConfig.showInputDisplay ^= true;
-                    break;
-                case DSLICE_STATS:
-                    Practice_StateMenu_Open(PSUBMENU_STATS);
-                    break;
-                case DSLICE_VISUALS:
-                    Practice_StateMenu_Open(PSUBMENU_VISUALIZERS);
-                    break;
-                default:
-                    break;
+            if (sMenuDefIdx[1] == MENUDEF_SD) {
+                switch (sHovered[1]) {
+                    case SDSLICE_SAVE:
+                        Practice_Sd_StartSave();
+                        break;
+                    case SDSLICE_LOAD:
+                        Practice_Sd_StartLoad();
+                        break;
+                    default:
+                        break;
+                }
+            } else {
+                switch (sHovered[1]) {
+                    case DSLICE_SKIP_CUTS:
+                        gPracticeConfig.skipCutscenes ^= true;
+                        break;
+                    case DSLICE_INPUTS:
+                        gPracticeConfig.showInputDisplay ^= true;
+                        break;
+                    case DSLICE_STATS:
+                        Practice_StateMenu_Open(PSUBMENU_STATS);
+                        break;
+                    case DSLICE_VISUALS:
+                        Practice_StateMenu_Open(PSUBMENU_VISUALIZERS);
+                        break;
+                    default:
+                        break;
+                }
             }
         }
     }
@@ -305,7 +358,7 @@ static void RadialMenu_DrawLayer(const RadialMenuDef* def, s32 hoveredSlice, boo
 }
 
 void Practice_Menu_Draw(void) {
-    const RadialMenuDef* def = &sMenuDefs[sMenuDepth];
+    const RadialMenuDef* def = &sMenuDefs[sMenuDefIdx[sMenuDepth]];
     s32 hoveredSlice = sHovered[sMenuDepth];
     bool hasSelection = (hoveredSlice != SLICE_NONE);
 
@@ -314,7 +367,7 @@ void Practice_Menu_Draw(void) {
     RadialMenu_DrawLayer(def, hoveredSlice, false);
 
     if (hasSelection) {
-        if (sMenuDepth == 1 && (hoveredSlice == DSLICE_SKIP_CUTS || hoveredSlice == DSLICE_INPUTS)) {
+        if (sMenuDepth == 1 && sMenuDefIdx[1] == MENUDEF_DISPLAY && (hoveredSlice == DSLICE_SKIP_CUTS || hoveredSlice == DSLICE_INPUTS)) {
             bool state = (hoveredSlice == DSLICE_SKIP_CUTS)
                 ? gPracticeConfig.skipCutscenes
                 : gPracticeConfig.showInputDisplay;
@@ -329,7 +382,8 @@ void Practice_Menu_Draw(void) {
                 def->entries[hoveredSlice].desc, 0, 255, 128);
         }
     } else if (sMenuDepth > 0) {
-        Practice_DrawTextColor(RADIAL_CENTER_X - 28, RADIAL_CENTER_Y - 5, "DISPLAY", 0, 255, 128);
+        Practice_DrawTextColor(RADIAL_CENTER_X - 28, RADIAL_CENTER_Y - 5,
+            (sMenuDefIdx[sMenuDepth] == MENUDEF_SD) ? "SD CARD" : "DISPLAY", 0, 255, 128);
     } else {
         s32 slotCount = Practice_GetRamSlotCount();
         s32 active    = Practice_GetActiveSlot();

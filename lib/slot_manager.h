@@ -32,6 +32,10 @@ typedef enum {
      * cross-scene practice_save load when the destination scene fails to
      * reach PLAY_UPDATE within the load deadline. */
     SLOT_MANAGER_ERR_TIMEOUT = -10,
+    SLOT_MANAGER_ERR_IO_OPEN   = -11,
+    SLOT_MANAGER_ERR_IO_WRITE  = -12,
+    SLOT_MANAGER_ERR_IO_RENAME = -13,
+    SLOT_MANAGER_ERR_IO_READ   = -14,
 } slot_manager_result_t;
 
 typedef uint32_t (*save_state_fn)(void *buf, uint32_t buf_size);
