@@ -32,6 +32,7 @@ PRACTICE_OBJS = [
     "practice_input_display",
     "practice_hud",
     "practice_charge_shot",
+    "practice_cheats",
     "practice_hitbox",
     "practice_minimap",
     "practice_freecam",

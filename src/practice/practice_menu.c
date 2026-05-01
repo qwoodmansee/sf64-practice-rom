@@ -120,21 +120,42 @@ static s32 Display_GetSlice(s8 stickX, s8 stickY) {
 
 typedef enum CheatSlice {
     CSLICE_AUTO_SHOT,
+    CSLICE_INF_HP,
+    CSLICE_INF_BOMBS,
+    CSLICE_INF_LIVES,
+    CSLICE_INF_BOOST,
     CSLICE_MAX,
 } CheatSlice;
 
+/* Stick sectors match Display radial; panel hues identify each cheat. */
 static const RadialEntry sCheatsEntries[CSLICE_MAX] = {
-    { "AUTO CS", "AUTO CHARGE SHOT", 132, 108, 7, 200, 80, 80 },
+    /* Small font has no lowercase; shows as AUTO CHARGE SHOT. */
+    { "AUTO CHARGE SHOT", "AUTO CHARGE SHOT", 89, 182, 17, 30, 200, 90 },
+    { "INF HP", "INF HEALTH", 140, 55, 6, 240, 210, 50 },
+    { "INF BOMB", "INF BOMBS", 50, 108, 8, 210, 55, 55 },
+    { "INF LIFE", "INF LIVES", 212, 88, 8, 140, 140, 150 },
+    { "INF BST", "INF BOOST", 238, 168, 7, 110, 210, 250 },
 };
 
 static s32 Cheats_GetSlice(s8 stickX, s8 stickY) {
-    s32 ax = (stickX < 0) ? -stickX : stickX;
-    s32 ay = (stickY < 0) ? -stickY : stickY;
+    s32 x = stickX;
+    s32 y = stickY;
+    s32 ax = (x < 0) ? -x : x;
+    s32 ay = (y < 0) ? -y : y;
 
     if ((ax < RADIAL_DEAD_ZONE) && (ay < RADIAL_DEAD_ZONE)) {
         return SLICE_NONE;
     }
-    return CSLICE_AUTO_SHOT;
+    if (ax > ay) {
+        if (x > 0) {
+            if (y < -10) {
+                return CSLICE_INF_BOOST;
+            }
+            return CSLICE_INF_LIVES;
+        }
+        return CSLICE_INF_BOMBS;
+    }
+    return y > 0 ? CSLICE_INF_HP : CSLICE_AUTO_SHOT;
 }
 
 typedef enum PracticeRadialSub1 {
@@ -300,6 +321,18 @@ void Practice_Menu_Update(void) {
                     case CSLICE_AUTO_SHOT:
                         gPracticeConfig.autoFireChargeShot ^= true;
                         break;
+                    case CSLICE_INF_HP:
+                        gPracticeConfig.infHealth ^= true;
+                        break;
+                    case CSLICE_INF_BOMBS:
+                        gPracticeConfig.infBombs ^= true;
+                        break;
+                    case CSLICE_INF_LIVES:
+                        gPracticeConfig.infLives ^= true;
+                        break;
+                    case CSLICE_INF_BOOST:
+                        gPracticeConfig.infBoost ^= true;
+                        break;
                     default:
                         break;
                 }
@@ -352,8 +385,17 @@ static void RadialMenu_DrawLayer(const RadialMenuDef* def, s32 hoveredSlice, boo
                 pr = 0; pg = 180; pb = 80;
             }
         } else if (!dimmed && def == &sMenuDefs[2]) {
+            /* ON state: brighter tint in the same hue family. */
             if (i == CSLICE_AUTO_SHOT && gPracticeConfig.autoFireChargeShot) {
-                pr = 0; pg = 180; pb = 80;
+                pr = 80; pg = 255; pb = 130;
+            } else if (i == CSLICE_INF_HP && gPracticeConfig.infHealth) {
+                pr = 255; pg = 250; pb = 120;
+            } else if (i == CSLICE_INF_BOMBS && gPracticeConfig.infBombs) {
+                pr = 255; pg = 90; pb = 90;
+            } else if (i == CSLICE_INF_LIVES && gPracticeConfig.infLives) {
+                pr = 210; pg = 210; pb = 225;
+            } else if (i == CSLICE_INF_BOOST && gPracticeConfig.infBoost) {
+                pr = 160; pg = 235; pb = 255;
             }
         }
 
@@ -414,11 +456,40 @@ void Practice_Menu_Draw(void) {
             Practice_DrawTextColor(RADIAL_CENTER_X - 44, RADIAL_CENTER_Y + 4,
                 state ? "ON" : "OFF",
                 state ? 0 : 255, state ? 255 : 100, 0);
-        } else if (sMenuDepth == 1 && sRadialSub1 == PRADIALSUB_CHEATS && hoveredSlice == CSLICE_AUTO_SHOT) {
-            Practice_DrawTextOutline(RADIAL_CENTER_X - 44, RADIAL_CENTER_Y - 10, "AUTO CHARGE SHOT:", 0, 255, 128);
-            Practice_DrawTextColor(RADIAL_CENTER_X - 44, RADIAL_CENTER_Y + 4,
-                gPracticeConfig.autoFireChargeShot ? "ON" : "OFF",
-                gPracticeConfig.autoFireChargeShot ? 0 : 255, gPracticeConfig.autoFireChargeShot ? 255 : 100, 0);
+        } else if (sMenuDepth == 1 && sRadialSub1 == PRADIALSUB_CHEATS) {
+            bool st = false;
+            const char* nm = NULL;
+
+            switch (hoveredSlice) {
+                case CSLICE_AUTO_SHOT:
+                    st = gPracticeConfig.autoFireChargeShot;
+                    nm = "AUTO CHARGE SHOT:";
+                    break;
+                case CSLICE_INF_HP:
+                    st = gPracticeConfig.infHealth;
+                    nm = "INF HEALTH:";
+                    break;
+                case CSLICE_INF_BOMBS:
+                    st = gPracticeConfig.infBombs;
+                    nm = "INF BOMBS:";
+                    break;
+                case CSLICE_INF_LIVES:
+                    st = gPracticeConfig.infLives;
+                    nm = "INF LIVES:";
+                    break;
+                case CSLICE_INF_BOOST:
+                    st = gPracticeConfig.infBoost;
+                    nm = "INF BOOST:";
+                    break;
+                default:
+                    nm = NULL;
+                    break;
+            }
+            if (nm != NULL) {
+                Practice_DrawTextOutline(RADIAL_CENTER_X - 44, RADIAL_CENTER_Y - 10, nm, 0, 255, 128);
+                Practice_DrawTextColor(RADIAL_CENTER_X - 44, RADIAL_CENTER_Y + 4, st ? "ON" : "OFF",
+                    st ? 0 : 255, st ? 255 : 100, 0);
+            }
         } else {
             Practice_DrawTextOutline(
                 RADIAL_CENTER_X - 40, RADIAL_CENTER_Y - 5,

@@ -99,6 +99,7 @@ def check_engine_hooks():
             "Player_Shoot must suppress spurious tap-fire after auto-charge synthetic A release",
         ),
         (PRACTICE_MAIN_INIT, "Practice_ChargeMeter_Draw", "Practice_ChargeMeter_Draw must be called from practice_main.c Practice_Draw"),
+        (PRACTICE_MAIN_INIT, "Practice_Cheats_Apply", "Practice_Cheats_Apply must be called from practice_main.c Practice_Update"),
         (FOX_PLAY, "gPracticeCheckpointProgress", "gPracticeCheckpointProgress checkpoint hook must exist in fox_play.c Player_Setup"),
         (FOX_DISPLAY, "Practice_Hitbox_Draw", "Practice_Hitbox_Draw() must be called from fox_display.c"),
         (FOX_DISPLAY, "Practice_FreeCam_IsActive", "Practice_FreeCam_IsActive() hook must exist in fox_display.c"),

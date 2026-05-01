@@ -45,6 +45,10 @@ void Practice_Init(void) {
     gPracticeConfig.showPauseMinimap = true;
     gPracticeConfig.showChargeShotMeter = false;
     gPracticeConfig.autoFireChargeShot = false;
+    gPracticeConfig.infHealth = false;
+    gPracticeConfig.infBombs = false;
+    gPracticeConfig.infLives = false;
+    gPracticeConfig.infBoost = false;
 
     osSyncPrintf("=== PRACTICE ROM boot @ %s %s ===\n", __DATE__, __TIME__);
 
@@ -69,6 +73,8 @@ void Practice_Init(void) {
 }
 
 void Practice_Update(void) {
+    Practice_Cheats_Apply();
+
     if (Practice_Sd_IsActive()) {
         Practice_Sd_Update();
         return;

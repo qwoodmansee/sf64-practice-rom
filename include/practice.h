@@ -49,6 +49,10 @@ typedef struct PracticeConfig {
     bool showPauseMinimap;
     bool showChargeShotMeter;
     bool autoFireChargeShot;
+    bool infHealth;
+    bool infBombs;
+    bool infLives;
+    bool infBoost;
 } PracticeConfig;
 
 typedef enum PracticeSubMenu {
@@ -188,6 +192,9 @@ void Practice_ChargeAssist_OnChargeShotBlocked(Player* player);
 void Practice_ChargeMeter_Draw(void);
 void Practice_ChargeShotHud_Tick(void);
 void Practice_ChargeShotHud_DrawLine(s32 labelX, s32 valueX, s32 y);
+
+/* practice_cheats.c — radial cheat toggles (applied each frame in gameplay). */
+void Practice_Cheats_Apply(void);
 
 /* practice_input_display.c */
 void Practice_InputDisplay_Draw(void);
