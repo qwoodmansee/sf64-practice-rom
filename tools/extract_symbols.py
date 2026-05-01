@@ -141,6 +141,8 @@ CONFIG_OFFSETS = {
     "expertMode":       0x68,
     "longHealth":       0x6C,
     "showPauseMinimap": 0x70,
+    "showChargeShotMeter": 0x74,
+    "autoFireChargeShot": 0x78,
 }
 
 # Player struct field offsets (include/sf64player.h Player)

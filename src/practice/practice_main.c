@@ -43,6 +43,8 @@ void Practice_Init(void) {
     gPracticeConfig.expertMode = false;
     gPracticeConfig.longHealth = false;
     gPracticeConfig.showPauseMinimap = true;
+    gPracticeConfig.showChargeShotMeter = false;
+    gPracticeConfig.autoFireChargeShot = false;
 
     osSyncPrintf("=== PRACTICE ROM boot @ %s %s ===\n", __DATE__, __TIME__);
 
@@ -107,6 +109,7 @@ void Practice_Draw(void) {
         case PSCREEN_GAMEPLAY:
             if (!Practice_FreeCam_IsActive() || Practice_FreeCam_OverlayVisible()) {
                 Practice_Hud_Draw();
+                Practice_ChargeMeter_Draw();
                 if (gPracticeConfig.showInputDisplay) {
                     Practice_InputDisplay_Draw();
                 }

@@ -47,6 +47,8 @@ typedef struct PracticeConfig {
     bool expertMode;
     bool longHealth;
     bool showPauseMinimap;
+    bool showChargeShotMeter;
+    bool autoFireChargeShot;
 } PracticeConfig;
 
 typedef enum PracticeSubMenu {
@@ -174,6 +176,18 @@ void Practice_Hud_Reset(void);
 void Practice_Hud_ShowStatus(const char* text, u8 r, u8 g, u8 b);
 void Practice_Hud_Update(void);
 void Practice_Hud_Draw(void);
+
+/* practice_charge_shot.c */
+void Practice_ChargeAssist_Reset(void);
+void Practice_ChargeAssist_LockOnBegin(Player* player);
+void Practice_ChargeAssist_PreChargeInc(Player* player);
+void Practice_ChargeAssist_PostChargeInc(Player* player);
+void Practice_ChargeAssist_OnChargeShotFired(Player* player);
+void Practice_ChargeAssist_OnChargeShotEarlyReset(Player* player, s32 timerBeforeZero);
+void Practice_ChargeAssist_OnChargeShotBlocked(Player* player);
+void Practice_ChargeMeter_Draw(void);
+void Practice_ChargeShotHud_Tick(void);
+void Practice_ChargeShotHud_DrawLine(s32 labelX, s32 valueX, s32 y);
 
 /* practice_input_display.c */
 void Practice_InputDisplay_Draw(void);

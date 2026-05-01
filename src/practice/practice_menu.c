@@ -36,6 +36,7 @@ typedef enum RootSlice {
     RSLICE_LOADOUT,
     RSLICE_DISPLAY,
     RSLICE_CAMERA,
+    RSLICE_CHEATS,
     RSLICE_MAX,
 } RootSlice;
 
@@ -45,8 +46,9 @@ static const RadialEntry sRootEntries[RSLICE_MAX] = {
     { "LOAD",    "LOAD POSITION",  214, 152, 4,  60,  180, 100 },
     { "LEVELS",  "LEVEL SELECT",   136, 178, 6,  180, 140, 60  },
     { "LOADOUT", "LOADOUT...",      68, 148, 10, 140, 60,  180 },
-    { "DISPLAY", "DISPLAY...",      68, 82,  10, 60,  160, 160 },
+    { "DISPLAY", "DISPLAY...",      68, 72,  10, 60,  160, 160 },
     { "CAMERA",  "FREE CAMERA",    222, 108, 6,  60,  200, 200 },
+    { "CHEATS",  "CHEATS...",      68, 118, 10, 200, 80,  80  },
 };
 
 static s32 Root_GetSlice(s8 stickX, s8 stickY) {
@@ -67,7 +69,13 @@ static s32 Root_GetSlice(s8 stickX, s8 stickY) {
         }
         return y > 0 ? RSLICE_SAVE : RSLICE_LOAD;
     }
-    return y > 0 ? RSLICE_DISPLAY : RSLICE_LOADOUT;
+    if (y > 25) {
+        return RSLICE_DISPLAY;
+    }
+    if (y < -25) {
+        return RSLICE_LOADOUT;
+    }
+    return RSLICE_CHEATS;
 }
 
 // ── Display sub-radial ────────────────────────────────────────────────────────
@@ -76,7 +84,8 @@ typedef enum DisplaySlice {
     DSLICE_SKIP_CUTS,   // left
     DSLICE_INPUTS,      // down
     DSLICE_STATS,       // up
-    DSLICE_VISUALS,     // right
+    DSLICE_VISUALS,     // right upper
+    DSLICE_CHARGE_METER,
     DSLICE_MAX,
 } DisplaySlice;
 
@@ -84,7 +93,8 @@ static const RadialEntry sDisplayEntries[DSLICE_MAX] = {
     { "SKIP CUTS", "SKIP CUTSCENES",   50, 108, 9, 60, 160, 160 },
     { "INPUTS",    "INPUT DISPLAY",   136, 175, 6, 60, 160, 160 },
     { "STATS",     "STATS OVERLAY...", 140, 55, 5, 60, 160, 160 },
-    { "VISUALS",   "VISUALIZERS...",   212, 108, 7, 60, 160, 160 },
+    { "VISUALS",   "VISUALIZERS...",   212, 88, 7, 60, 160, 160 },
+    { "CS METER",  "CHARGE SHOT METER", 212, 168, 8, 0, 220, 100 },
 };
 
 static s32 Display_GetSlice(s8 stickX, s8 stickY) {
@@ -97,26 +107,70 @@ static s32 Display_GetSlice(s8 stickX, s8 stickY) {
         return SLICE_NONE;
     }
     if (ax > ay) {
-        return x > 0 ? DSLICE_VISUALS : DSLICE_SKIP_CUTS;
+        if (x > 0) {
+            if (y < -10) {
+                return DSLICE_CHARGE_METER;
+            }
+            return DSLICE_VISUALS;
+        }
+        return DSLICE_SKIP_CUTS;
     }
     return y > 0 ? DSLICE_STATS : DSLICE_INPUTS;
 }
 
-// ── Menu stack ────────────────────────────────────────────────────────────────
+typedef enum CheatSlice {
+    CSLICE_AUTO_SHOT,
+    CSLICE_MAX,
+} CheatSlice;
 
-static const RadialMenuDef sMenuDefs[] = {
-    { sRootEntries,    RSLICE_MAX, Root_GetSlice    },
-    { sDisplayEntries, DSLICE_MAX, Display_GetSlice },
+static const RadialEntry sCheatsEntries[CSLICE_MAX] = {
+    { "AUTO CS", "AUTO CHARGE SHOT", 132, 108, 7, 200, 80, 80 },
 };
+
+static s32 Cheats_GetSlice(s8 stickX, s8 stickY) {
+    s32 ax = (stickX < 0) ? -stickX : stickX;
+    s32 ay = (stickY < 0) ? -stickY : stickY;
+
+    if ((ax < RADIAL_DEAD_ZONE) && (ay < RADIAL_DEAD_ZONE)) {
+        return SLICE_NONE;
+    }
+    return CSLICE_AUTO_SHOT;
+}
+
+typedef enum PracticeRadialSub1 {
+    PRADIALSUB_DISPLAY,
+    PRADIALSUB_CHEATS,
+} PracticeRadialSub1;
+
+static PracticeRadialSub1 sRadialSub1 = PRADIALSUB_DISPLAY;
+
+// ── Menu stack ────────────────────────────────────────────────────────────────
 
 static s32 sMenuDepth = 0;
 static s32 sHovered[RADIAL_STACK_MAX];
 static s32 sStartHoldTimer = 0;
 
+static const RadialMenuDef sMenuDefs[] = {
+    { sRootEntries,    RSLICE_MAX, Root_GetSlice    },
+    { sDisplayEntries, DSLICE_MAX, Display_GetSlice },
+    { sCheatsEntries,  CSLICE_MAX, Cheats_GetSlice  },
+};
+
+static const RadialMenuDef* Menu_ActiveDef(void) {
+    if (sMenuDepth == 0) {
+        return &sMenuDefs[0];
+    }
+    if (sRadialSub1 == PRADIALSUB_CHEATS) {
+        return &sMenuDefs[2];
+    }
+    return &sMenuDefs[1];
+}
+
 void Practice_Menu_Open(void) {
     s32 i;
     gPracticeMenuState = PMENU_OPEN;
     sMenuDepth = 0;
+    sRadialSub1 = PRADIALSUB_DISPLAY;
     for (i = 0; i < RADIAL_STACK_MAX; i++) {
         sHovered[i] = SLICE_NONE;
     }
@@ -127,6 +181,7 @@ void Practice_Menu_OpenFrozen(void) {
     s32 i;
     gPracticeMenuState = PMENU_OPEN_FROZEN;
     sMenuDepth = 0;
+    sRadialSub1 = PRADIALSUB_DISPLAY;
     for (i = 0; i < RADIAL_STACK_MAX; i++) {
         sHovered[i] = SLICE_NONE;
     }
@@ -192,7 +247,7 @@ void Practice_Menu_Update(void) {
         return;
     }
 
-    def = &sMenuDefs[sMenuDepth];
+    def = Menu_ActiveDef();
     sHovered[sMenuDepth] = def->getSlice(hold->stick_x, hold->stick_y);
 
     if ((press->button & A_BUTTON) && (sHovered[sMenuDepth] != SLICE_NONE)) {
@@ -222,6 +277,12 @@ void Practice_Menu_Update(void) {
                     Practice_StateMenu_Open(PSUBMENU_LOADOUT);
                     break;
                 case RSLICE_DISPLAY:
+                    sRadialSub1 = PRADIALSUB_DISPLAY;
+                    sMenuDepth = 1;
+                    sHovered[1] = SLICE_NONE;
+                    break;
+                case RSLICE_CHEATS:
+                    sRadialSub1 = PRADIALSUB_CHEATS;
                     sMenuDepth = 1;
                     sHovered[1] = SLICE_NONE;
                     break;
@@ -234,21 +295,34 @@ void Practice_Menu_Update(void) {
                     break;
             }
         } else if (sMenuDepth == 1) {
-            switch (sHovered[1]) {
-                case DSLICE_SKIP_CUTS:
-                    gPracticeConfig.skipCutscenes ^= true;
-                    break;
-                case DSLICE_INPUTS:
-                    gPracticeConfig.showInputDisplay ^= true;
-                    break;
-                case DSLICE_STATS:
-                    Practice_StateMenu_Open(PSUBMENU_STATS);
-                    break;
-                case DSLICE_VISUALS:
-                    Practice_StateMenu_Open(PSUBMENU_VISUALIZERS);
-                    break;
-                default:
-                    break;
+            if (sRadialSub1 == PRADIALSUB_CHEATS) {
+                switch (sHovered[1]) {
+                    case CSLICE_AUTO_SHOT:
+                        gPracticeConfig.autoFireChargeShot ^= true;
+                        break;
+                    default:
+                        break;
+                }
+            } else {
+                switch (sHovered[1]) {
+                    case DSLICE_SKIP_CUTS:
+                        gPracticeConfig.skipCutscenes ^= true;
+                        break;
+                    case DSLICE_INPUTS:
+                        gPracticeConfig.showInputDisplay ^= true;
+                        break;
+                    case DSLICE_STATS:
+                        Practice_StateMenu_Open(PSUBMENU_STATS);
+                        break;
+                    case DSLICE_VISUALS:
+                        Practice_StateMenu_Open(PSUBMENU_VISUALIZERS);
+                        break;
+                    case DSLICE_CHARGE_METER:
+                        gPracticeConfig.showChargeShotMeter ^= true;
+                        break;
+                    default:
+                        break;
+                }
             }
         }
     }
@@ -273,6 +347,12 @@ static void RadialMenu_DrawLayer(const RadialMenuDef* def, s32 hoveredSlice, boo
             if (i == DSLICE_SKIP_CUTS && gPracticeConfig.skipCutscenes) {
                 pr = 0; pg = 180; pb = 80;
             } else if (i == DSLICE_INPUTS && gPracticeConfig.showInputDisplay) {
+                pr = 0; pg = 180; pb = 80;
+            } else if (i == DSLICE_CHARGE_METER && gPracticeConfig.showChargeShotMeter) {
+                pr = 0; pg = 180; pb = 80;
+            }
+        } else if (!dimmed && def == &sMenuDefs[2]) {
+            if (i == CSLICE_AUTO_SHOT && gPracticeConfig.autoFireChargeShot) {
                 pr = 0; pg = 180; pb = 80;
             }
         }
@@ -305,7 +385,7 @@ static void RadialMenu_DrawLayer(const RadialMenuDef* def, s32 hoveredSlice, boo
 }
 
 void Practice_Menu_Draw(void) {
-    const RadialMenuDef* def = &sMenuDefs[sMenuDepth];
+    const RadialMenuDef* def = Menu_ActiveDef();
     s32 hoveredSlice = sHovered[sMenuDepth];
     bool hasSelection = (hoveredSlice != SLICE_NONE);
 
@@ -314,22 +394,39 @@ void Practice_Menu_Draw(void) {
     RadialMenu_DrawLayer(def, hoveredSlice, false);
 
     if (hasSelection) {
-        if (sMenuDepth == 1 && (hoveredSlice == DSLICE_SKIP_CUTS || hoveredSlice == DSLICE_INPUTS)) {
-            bool state = (hoveredSlice == DSLICE_SKIP_CUTS)
-                ? gPracticeConfig.skipCutscenes
-                : gPracticeConfig.showInputDisplay;
-            const char* name = (hoveredSlice == DSLICE_SKIP_CUTS) ? "SKIP CUTSCENES:" : "INPUT DISPLAY:";
+        if (sMenuDepth == 1 && sRadialSub1 == PRADIALSUB_DISPLAY &&
+            (hoveredSlice == DSLICE_SKIP_CUTS || hoveredSlice == DSLICE_INPUTS ||
+             hoveredSlice == DSLICE_CHARGE_METER)) {
+            bool state;
+            const char* name;
+
+            if (hoveredSlice == DSLICE_SKIP_CUTS) {
+                state = gPracticeConfig.skipCutscenes;
+                name = "SKIP CUTSCENES:";
+            } else if (hoveredSlice == DSLICE_INPUTS) {
+                state = gPracticeConfig.showInputDisplay;
+                name = "INPUT DISPLAY:";
+            } else {
+                state = gPracticeConfig.showChargeShotMeter;
+                name = "CHARGE SHOT METER:";
+            }
             Practice_DrawTextOutline(RADIAL_CENTER_X - 44, RADIAL_CENTER_Y - 10, name, 0, 255, 128);
             Practice_DrawTextColor(RADIAL_CENTER_X - 44, RADIAL_CENTER_Y + 4,
                 state ? "ON" : "OFF",
                 state ? 0 : 255, state ? 255 : 100, 0);
+        } else if (sMenuDepth == 1 && sRadialSub1 == PRADIALSUB_CHEATS && hoveredSlice == CSLICE_AUTO_SHOT) {
+            Practice_DrawTextOutline(RADIAL_CENTER_X - 44, RADIAL_CENTER_Y - 10, "AUTO CHARGE SHOT:", 0, 255, 128);
+            Practice_DrawTextColor(RADIAL_CENTER_X - 44, RADIAL_CENTER_Y + 4,
+                gPracticeConfig.autoFireChargeShot ? "ON" : "OFF",
+                gPracticeConfig.autoFireChargeShot ? 0 : 255, gPracticeConfig.autoFireChargeShot ? 255 : 100, 0);
         } else {
             Practice_DrawTextOutline(
                 RADIAL_CENTER_X - 40, RADIAL_CENTER_Y - 5,
                 def->entries[hoveredSlice].desc, 0, 255, 128);
         }
     } else if (sMenuDepth > 0) {
-        Practice_DrawTextColor(RADIAL_CENTER_X - 28, RADIAL_CENTER_Y - 5, "DISPLAY", 0, 255, 128);
+        Practice_DrawTextColor(RADIAL_CENTER_X - 28, RADIAL_CENTER_Y - 5,
+            (sRadialSub1 == PRADIALSUB_CHEATS) ? "CHEATS" : "DISPLAY", 0, 255, 128);
     } else {
         s32 slotCount = Practice_GetRamSlotCount();
         s32 active    = Practice_GetActiveSlot();

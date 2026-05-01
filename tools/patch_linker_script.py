@@ -31,6 +31,7 @@ PRACTICE_OBJS = [
     "practice_overlay",     # Phase 4: LevelId -> ovl_iN region map (Wave 1: stubs)
     "practice_input_display",
     "practice_hud",
+    "practice_charge_shot",
     "practice_hitbox",
     "practice_minimap",
     "practice_freecam",

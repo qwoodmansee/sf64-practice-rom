@@ -34,6 +34,7 @@ s32 gPracticeIndirectBonus = 0;
 s32 gPracticeDespawns = 0;
 
 void Practice_Hud_Reset(void) {
+    Practice_ChargeAssist_Reset();
     sLastGameFrame = -1;
     sLagFrameCount = 0;
     sLastChargeTimer = 0;
@@ -65,6 +66,10 @@ void Practice_Hud_Update(void) {
 
     if (sStatusTimer > 0) {
         sStatusTimer--;
+    }
+
+    if (gPracticeConfig.showChargeShotMeter && (gGameState == GSTATE_PLAY) && (gPlayState == PLAY_UPDATE)) {
+        Practice_ChargeShotHud_Tick();
     }
 
     if (!gPracticeConfig.showHudOverlay) {
@@ -144,6 +149,7 @@ void Practice_Hud_Draw(void) {
     if (gPracticeConfig.showLagFrames) { lineCount++; }
     if (gPracticeConfig.showSpeed) { lineCount++; }
     if (gPracticeConfig.showChargeTiming) { lineCount += 3; }
+    if (gPracticeConfig.showChargeShotMeter) { lineCount++; }
     if (gPracticeConfig.showMissedInputs) { lineCount++; }
     if (gPracticeConfig.showHitTracking) { lineCount += 4; }
 
@@ -218,6 +224,11 @@ void Practice_Hud_Draw(void) {
         } else {
             Practice_DrawTextColor(valueX, y, "----", 80, 80, 80);
         }
+        y += HUD_LINE_H;
+    }
+
+    if (gPracticeConfig.showChargeShotMeter) {
+        Practice_ChargeShotHud_DrawLine(labelX, valueX, y);
         y += HUD_LINE_H;
     }
 
