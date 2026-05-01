@@ -3191,8 +3191,18 @@ bool Player_UpdateLockOn(Player* player) {
     bool hasBombTarget;
     s32 i;
 
+#ifdef PRACTICE_ROM
+    Practice_ChargeAssist_LockOnBegin(player);
+#endif
+
     if (gInputHold->button & A_BUTTON) {
+#ifdef PRACTICE_ROM
+        Practice_ChargeAssist_PreChargeInc(player);
+#endif
         gChargeTimers[player->num]++;
+#ifdef PRACTICE_ROM
+        Practice_ChargeAssist_PostChargeInc(player);
+#endif
         if (gChargeTimers[player->num] > 21) {
             gChargeTimers[player->num] = 21;
         }
@@ -3257,10 +3267,19 @@ bool Player_UpdateLockOn(Player* player) {
                 }
                 Object_PlayerSfx(player->sfxSource, NA_SE_LOCK_ON_LASER, player->num);
                 gChargeTimers[player->num] = 0;
+#ifdef PRACTICE_ROM
+                Practice_ChargeAssist_OnChargeShotFired(player);
+#endif
                 gControllerRumbleTimers[player->num] = 5;
                 return true;
             }
+#ifdef PRACTICE_ROM
+            Practice_ChargeAssist_OnChargeShotBlocked(player);
+#endif
         }
+#ifdef PRACTICE_ROM
+        Practice_ChargeAssist_OnChargeShotEarlyReset(player, gChargeTimers[player->num]);
+#endif
         gChargeTimers[player->num] = 0;
     }
 
@@ -3309,6 +3328,16 @@ void Player_Shoot(Player* player) {
             }
 
             if (!Player_UpdateLockOn(player)) {
+#ifdef PRACTICE_ROM
+                /* Practice_ChargeAssist strips A from gControllerHold mid-frame so the next
+                 * Controller_UpdateInput computes a spurious A press while the real pad still
+                 * holds A, firing tap lasers between auto charge shots. Continuous A charge
+                 * never has a press edge in stock input. */
+                if (gPracticeConfig.autoFireChargeShot && (gInputHold->button & A_BUTTON) &&
+                    (gChargeTimers[player->num] > 0)) {
+                    gInputPress->button &= ~gShootButton[player->num];
+                }
+#endif
                 if (gLaserStrength[gPlayerNum] > LASERS_SINGLE) {
                     Math_SmoothStepToF(&player->arwing.laserGunsYpos, -10.0f, 1.0f, 0.5f, 0.0f);
                 } else {
@@ -3330,6 +3359,12 @@ void Player_Shoot(Player* player) {
 
         case FORM_LANDMASTER:
             if (!Player_UpdateLockOn(player)) {
+#ifdef PRACTICE_ROM
+                if (gPracticeConfig.autoFireChargeShot && (gInputHold->button & A_BUTTON) &&
+                    (gChargeTimers[player->num] > 0)) {
+                    gInputPress->button &= ~gShootButton[player->num];
+                }
+#endif
                 if (gShootButton[player->num] & gInputPress->button) {
                     Player_TankCannon(player);
                 }
