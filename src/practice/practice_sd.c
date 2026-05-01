@@ -249,8 +249,8 @@ static void draw_osk(void) {
     Practice_DrawTextColor( 32,  pillY + 1, ":SEL  ",   150, 150, 150);
     Practice_DrawButtonPill(74,  pillY, 10, "B",     0, 160,   0);
     Practice_DrawTextColor( 86,  pillY + 1, ":DEL  ",   150, 150, 150);
-    Practice_DrawButtonPill(128, pillY, 44, "START", 200,  30,  30);
-    Practice_DrawTextColor( 174, pillY + 1, ":OK  ",    150, 150, 150);
+    Practice_DrawButtonPill(128, pillY, 10, "S",     200,  30,  30);
+    Practice_DrawTextColor( 140, pillY + 1, ":OK  ",    150, 150, 150);
     Practice_DrawButtonPill(209, pillY, 10, "Z",     100, 100, 100);
     Practice_DrawTextColor( 221, pillY + 1, ":CANCEL",  150, 150, 150);
 }

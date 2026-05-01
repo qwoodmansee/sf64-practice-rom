@@ -1,5 +1,6 @@
 #include "practice.h"
 #include "practice_build_info.h"
+#include "assets/ast_arwing.h"
 
 #ifdef PRACTICE_ROM
 
@@ -293,17 +294,19 @@ void Practice_LevelSelect_Draw(void) {
                (gPracticeConfig.laserStrength == LASERS_TWIN)   ? "TWIN"   : "HYPER";
     Practice_DrawText(20,  204, "LASER:");
     Practice_DrawTextColor(72,  204, laserStr, 255, 255, 100);
-    Practice_DrawText(136, 204, "BOMBS:");
-    Practice_DrawNumber(192, 204, gPracticeConfig.bombCount);
-    Practice_DrawText(208, 204, "LIVES:");
-    Practice_DrawNumber(264, 204, gPracticeConfig.lifeCount);
+    RCP_SetupDL(&gMasterDisp, SETUPDL_78);
+    gDPSetPrimColor(gMasterDisp++, 0, 0, 255, 255, 255, 255);
+    Lib_TextureRect_CI4(&gMasterDisp, aVsBombIconTex,       aVsBombIconTLUT,       16, 16, 136.0f, 199.0f, 1.0f, 1.0f);
+    Lib_TextureRect_CI4(&gMasterDisp, aAwArwingLifeIconTex, aAwArwingLifeIconTLUT, 16, 16, 174.0f, 199.0f, 1.0f, 1.0f);
+    Practice_DrawNumber(154, 204, gPracticeConfig.bombCount);
+    Practice_DrawNumber(192, 204, gPracticeConfig.lifeCount);
 
     Practice_DrawButtonPill(20,  215, 10, "A",     0, 100, 220);
     Practice_DrawTextColor( 32,  216, ":GO  ",    150, 150, 150);
     Practice_DrawButtonPill(68,  215, 10, "B",     0, 160,   0);
     Practice_DrawTextColor( 80,  216, ":EXP  ",   150, 150, 150);
-    Practice_DrawButtonPill(124, 215, 44, "START", 200,  30,  30);
-    Practice_DrawTextColor( 170, 216, ":LOAD  ",  150, 150, 150);
+    Practice_DrawButtonPill(124, 215, 10, "S",     200,  30,  30);
+    Practice_DrawTextColor( 136, 216, ":LOAD  ",  150, 150, 150);
     Practice_DrawButtonPill(222, 215, 10, "L",     100, 100, 100);
     Practice_DrawButtonPill(234, 215, 10, "R",     100, 100, 100);
     Practice_DrawTextColor( 246, 216, ":BGM",     150, 150, 150);
