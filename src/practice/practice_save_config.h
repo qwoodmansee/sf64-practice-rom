@@ -8,7 +8,7 @@
  *   dynamic load window; Titania setup 5 worst-case reaches 0x8028a210, which is
  *   37 KB above buffers_VRAM at 0x80281000).
  * - Expansion Pak (osMemSize == 0x800000): 4-slot pool above 0x80400000, each
- *   slot 256 KB with overlay snapshots enabled.
+ *   slot 512 KB with overlay snapshots enabled.
  *
  * The static invariant check_max_state_size_budget() enforces:
  *     MAX_STATE_SIZE * MAX_RAM_SLOTS_NO_PAK   <= 1 048 576   (1 MB)
@@ -22,9 +22,10 @@
 #define LIB_VERSION           1
 
 /* Worst-case bytes per slot (TLV stream, including header).
- * 256 KB leaves ~46 KB of slop above ~90 KB scalars/arrays + ~120 KB
- * worst-case overlay segment. Fits Pak pool; unreachable on stock. */
-#define MAX_STATE_SIZE        0x40000
+ * 512 KB required: ovl_i3 (Aquas/Zoness/Solar/Area 6) is 235 KB alone;
+ * game arrays add ~90-100 KB, leaving ~175 KB headroom for future state.
+ * 4 slots = 2 MB, within the 2.5 MB Pak budget ceiling. */
+#define MAX_STATE_SIZE        0x80000
 
 /* Number of RAM slots exposed in this build. Runtime value set at boot
  * based on osMemSize. Stock gets 0, Pak gets 4. */
