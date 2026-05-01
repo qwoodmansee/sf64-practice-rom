@@ -250,6 +250,7 @@ void Practice_LevelSelect_Draw(void) {
 
     Practice_DrawTextColor(20, 20, "SF64 PRACTICE ROM", 0, 255, 128);
     Practice_DrawTextColor(20, 30, "SELECT LEVEL", 200, 200, 200);
+    Practice_DrawTextColor(163, 20, PRACTICE_VERSION, 90, 90, 90);
     Practice_DrawTextColor(163, 30, PRACTICE_BUILD_HASH, 90, 90, 90);
 
     startIdx = sSelectedLevel - (visibleCount / 2);

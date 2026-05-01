@@ -3,6 +3,8 @@
 
 #ifdef PRACTICE_ROM
 
+#define PRACTICE_VERSION "V0.4.0"
+
 #include "global.h"
 
 typedef enum PracticeMenuState {
