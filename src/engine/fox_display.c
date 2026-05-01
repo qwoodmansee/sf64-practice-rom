@@ -1829,6 +1829,7 @@ void Display_Update(void) {
     TexturedLine_Draw();
 #ifdef PRACTICE_ROM
     Practice_Hitbox_Draw();
+    Practice_FreeCam_DrawMarkers();
 #endif
     gReflectY = 1;
     PlayerShot_DrawAll();

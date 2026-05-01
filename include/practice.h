@@ -63,6 +63,13 @@ typedef enum PracticeAction {
     PACTION_MAX,
 } PracticeAction;
 
+typedef enum PracticeFreeCamObject {
+    PFREECAM_OBJECT_NONE,
+    PFREECAM_OBJECT_BOMB,
+    PFREECAM_OBJECT_EXPLOSION,
+    PFREECAM_OBJECT_MAX,
+} PracticeFreeCamObject;
+
 extern PracticeScreen gPracticeScreen;
 extern PracticeConfig gPracticeConfig;
 extern PracticeMenuState gPracticeMenuState;
@@ -187,11 +194,13 @@ void Practice_Hitbox_Draw(void);
 /* practice_freecam.c */
 bool Practice_FreeCam_IsActive(void);
 bool Practice_FreeCam_OverlayVisible(void);
+PracticeFreeCamObject Practice_FreeCam_GetObject(void);
 void Practice_FreeCam_Enter(void);
 void Practice_FreeCam_Exit(void);
 void Practice_FreeCam_GetView(Vec3f* eye, Vec3f* at);
 void Practice_FreeCam_GetMapPos(f32* x, f32* z, f32* yaw_deg);
 void Practice_FreeCam_Update(void);
+void Practice_FreeCam_DrawMarkers(void);
 void Practice_FreeCam_Draw(void);
 
 /* practice_save.c */
