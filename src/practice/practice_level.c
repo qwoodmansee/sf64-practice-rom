@@ -4,10 +4,11 @@
 
 #ifdef PRACTICE_ROM
 
-#define MAX_PHASES 3
+#define MAX_PHASES 4
 
 typedef struct PhaseEntry {
     const char* name;
+    LevelId levelId;
     s32 phase;
     f32 checkpointProgress;
 } PhaseEntry;
@@ -23,37 +24,37 @@ typedef struct LevelEntry {
 
 static LevelEntry sLevelList[] = {
     { "CORNERIA", LEVEL_CORNERIA, PLANET_CORNERIA, 1, 2,
-      { { "START", 0 }, { "CHECKPOINT", 0, 93610.3f } } },
+      { { "START", LEVEL_INVALID, 0 }, { "CP 1", LEVEL_INVALID, 0, 93610.3f } } },
     { "METEO",    LEVEL_METEO,    PLANET_METEO,    2, 3,
-      { { "START", 0 }, { "WARP", 1 }, { "CHECKPOINT", 0, 223651.3f } } },
+      { { "START", LEVEL_INVALID, 0 }, { "WARP", LEVEL_INVALID, 1 }, { "CP 1", LEVEL_INVALID, 0, 223651.3f } } },
     { "SECTOR Y", LEVEL_SECTOR_Y, PLANET_SECTOR_Y, 2, 2,
-      { { "START", 0 }, { "CHECKPOINT", 0, 96148.4f } } },
+      { { "START", LEVEL_INVALID, 0 }, { "CP 1", LEVEL_INVALID, 0, 96148.4f } } },
     { "FORTUNA",  LEVEL_FORTUNA,  PLANET_FORTUNA,  3, 1,
-      { { "START", 0 } } },
+      { { "START", LEVEL_INVALID, 0 } } },
     { "KATINA",   LEVEL_KATINA,   PLANET_KATINA,   3, 1,
-      { { "START", 0 } } },
+      { { "START", LEVEL_INVALID, 0 } } },
     { "AQUAS",    LEVEL_AQUAS,    PLANET_AQUAS,    3, 2,
-      { { "START", 0 }, { "CHECKPOINT", 0, 52268.8f } } },
+      { { "START", LEVEL_INVALID, 0 }, { "CP 1", LEVEL_INVALID, 0, 52268.8f } } },
     { "SECTOR X", LEVEL_SECTOR_X, PLANET_SECTOR_X, 4, 3,
-      { { "START", 0 }, { "WARP", 1 }, { "CHECKPOINT", 0, 85788.5f } } },
+      { { "START", LEVEL_INVALID, 0 }, { "WARP", LEVEL_INVALID, 1 }, { "CP 1", LEVEL_INVALID, 0, 85788.5f } } },
     { "SOLAR",    LEVEL_SOLAR,    PLANET_SOLAR,    4, 2,
-      { { "START", 0 }, { "CHECKPOINT", 0, 81850.0f } } },
+      { { "START", LEVEL_INVALID, 0 }, { "CP 1", LEVEL_INVALID, 0, 81850.0f } } },
     { "ZONESS",   LEVEL_ZONESS,   PLANET_ZONESS,   4, 2,
-      { { "START", 0 }, { "CHECKPOINT", 0, 140850.0f } } },
+      { { "START", LEVEL_INVALID, 0 }, { "CP 1", LEVEL_INVALID, 0, 140850.0f } } },
     { "TITANIA",  LEVEL_TITANIA,  PLANET_TITANIA,  5, 2,
-      { { "START", 0 }, { "CHECKPOINT", 0, 48150.0f } } },
+      { { "START", LEVEL_INVALID, 0 }, { "CP 1", LEVEL_INVALID, 0, 48150.0f } } },
     { "MACBETH",  LEVEL_MACBETH,  PLANET_MACBETH,  5, 2,
-      { { "START", 0 }, { "CHECKPOINT", 0, 69015.0f } } },
+      { { "START", LEVEL_INVALID, 0 }, { "CP 1", LEVEL_INVALID, 0, 69015.0f } } },
     { "SECTOR Z", LEVEL_SECTOR_Z, PLANET_SECTOR_Z, 5, 1,
-      { { "START", 0 } } },
+      { { "START", LEVEL_INVALID, 0 } } },
     { "BOLSE",    LEVEL_BOLSE,    PLANET_BOLSE,    6, 1,
-      { { "START", 0 } } },
-    { "AREA 6",   LEVEL_AREA_6,   PLANET_AREA_6,   6, 2,
-      { { "START", 0 }, { "CHECKPOINT", 0, 152984.0f } } },
-    { "VENOM 1",  LEVEL_VENOM_1,  PLANET_VENOM,    7, 2,
-      { { "START", 0 }, { "CHECKPOINT", 0, 150379.9f } } },
+      { { "START", LEVEL_INVALID, 0 } } },
+    { "AREA 6",   LEVEL_AREA_6,   PLANET_AREA_6,   6, 3,
+      { { "START", LEVEL_INVALID, 0 }, { "BETA SB", LEVEL_UNK_4, 0 }, { "CP 1", LEVEL_INVALID, 0, 152984.0f } } },
+    { "VENOM 1",  LEVEL_VENOM_1,  PLANET_VENOM,    7, 3,
+      { { "START", LEVEL_INVALID, 0 }, { "ANDROSS", LEVEL_VENOM_ANDROSS, 0 }, { "CP 1", LEVEL_INVALID, 0, 150379.9f } } },
     { "VENOM 2",  LEVEL_VENOM_2,  PLANET_VENOM,    7, 2,
-      { { "START", 0 }, { "GREAT FOX", 2 } } },
+      { { "START", LEVEL_INVALID, 0 }, { "GREAT FOX", LEVEL_INVALID, 2 } } },
 };
 
 #define LEVEL_COUNT (s32)(sizeof(sLevelList) / sizeof(sLevelList[0]))
@@ -157,6 +158,8 @@ void Practice_LevelSelect_OnEnter(void) {
 void Practice_LevelSelect_Update(void) {
     OSContPad* press = &gControllerPress[gMainController];
     s32 phaseCount;
+    PhaseEntry* phase;
+    LevelId levelId;
 
     if (Practice_StateMenuIsOpen()) {
         Practice_StateMenu_Update();
@@ -220,8 +223,9 @@ void Practice_LevelSelect_Update(void) {
     }
 
     if (press->button & A_BUTTON) {
-        PhaseEntry* phase = &sLevelList[sSelectedLevel].phases[sSelectedPhase];
-        Practice_LaunchLevel(sLevelList[sSelectedLevel].levelId, phase->phase, phase->checkpointProgress);
+        phase = &sLevelList[sSelectedLevel].phases[sSelectedPhase];
+        levelId = (phase->levelId == LEVEL_INVALID) ? sLevelList[sSelectedLevel].levelId : phase->levelId;
+        Practice_LaunchLevel(levelId, phase->phase, phase->checkpointProgress);
         return;
     }
 
@@ -328,6 +332,7 @@ const char* Practice_LevelAbbrev(LevelId levelId) {
         case LEVEL_SOLAR:         return "SO";
         case LEVEL_ZONESS:        return "ZO";
         case LEVEL_VENOM_ANDROSS: return "AN";
+        case LEVEL_UNK_4:         return "SB";
         case LEVEL_MACBETH:       return "MA";
         case LEVEL_TITANIA:       return "TI";
         case LEVEL_AQUAS:         return "AQ";
@@ -353,6 +358,7 @@ u16 Practice_AudioSpecForLevel(LevelId levelId) {
         case LEVEL_BOLSE:         spec = AUDIOSPEC_BO;  break;
         case LEVEL_KATINA:        spec = AUDIOSPEC_KA;  break;
         case LEVEL_AREA_6:        spec = AUDIOSPEC_A6;  break;
+        case LEVEL_UNK_4:         spec = AUDIOSPEC_A6;  break;
         case LEVEL_SECTOR_Z:      spec = AUDIOSPEC_SZ;  break;
         case LEVEL_FORTUNA:       spec = AUDIOSPEC_FO;  break;
         case LEVEL_SECTOR_X:      spec = AUDIOSPEC_SX;  break;
@@ -386,8 +392,10 @@ static u16 Practice_BgmIdForLevel(LevelId levelId) {
         case LEVEL_SECTOR_Z:  return NA_BGM_STAGE_SZ;
         case LEVEL_BOLSE:     return NA_BGM_STAGE_BO;
         case LEVEL_AREA_6:    return NA_BGM_STAGE_A6;
+        case LEVEL_UNK_4:     return NA_BGM_STAGE_A6;
         case LEVEL_VENOM_1:
         case LEVEL_VENOM_2:   return NA_BGM_STAGE_VE1;
+        case LEVEL_VENOM_ANDROSS: return NA_BGM_STAGE_VE1;
         case LEVEL_TRAINING:  return NA_BGM_TRAINING;
         default:              return (u16)SEQ_ID_NONE;
     }
