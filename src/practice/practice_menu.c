@@ -37,6 +37,7 @@ typedef enum RootSlice {
     RSLICE_DISPLAY,
     RSLICE_CAMERA,
     RSLICE_CHEATS,
+    RSLICE_SD,
     RSLICE_MAX,
 } RootSlice;
 
@@ -45,10 +46,11 @@ static const RadialEntry sRootEntries[RSLICE_MAX] = {
     { "SAVE",    "SAVE POSITION",  214, 74,  4,  60,  140, 180 },
     { "LOAD",    "LOAD POSITION",  214, 152, 4,  60,  180, 100 },
     { "LEVELS",  "LEVEL SELECT",   136, 178, 6,  180, 140, 60  },
-    { "LOADOUT", "LOADOUT...",      68, 148, 10, 140, 60,  180 },
-    { "DISPLAY", "DISPLAY...",      68, 72,  10, 60,  160, 160 },
+    { "LOADOUT", "LOADOUT...",      68, 135, 10, 140, 60,  180 },
+    { "DISPLAY", "DISPLAY...",      68, 63,  10, 60,  160, 160 },
     { "CAMERA",  "FREE CAMERA",    222, 108, 6,  60,  200, 200 },
-    { "CHEATS",  "CHEATS...",      68, 118, 10, 200, 80,  80  },
+    { "CHEATS",  "CHEATS...",       68, 111, 10, 200, 80,  80  },
+    { "SD",      "SD CARD...",      68, 87,  7,  80,  200, 120 },
 };
 
 static s32 Root_GetSlice(s8 stickX, s8 stickY) {
@@ -69,13 +71,17 @@ static s32 Root_GetSlice(s8 stickX, s8 stickY) {
         }
         return y > 0 ? RSLICE_SAVE : RSLICE_LOAD;
     }
-    if (y > 25) {
+    /* Left side: 4 zones split by y thresholds */
+    if (y > 35) {
         return RSLICE_DISPLAY;
     }
-    if (y < -25) {
-        return RSLICE_LOADOUT;
+    if (y > 5) {
+        return RSLICE_SD;
     }
-    return RSLICE_CHEATS;
+    if (y > -30) {
+        return RSLICE_CHEATS;
+    }
+    return RSLICE_LOADOUT;
 }
 
 // ── Display sub-radial ────────────────────────────────────────────────────────
@@ -159,9 +165,32 @@ static s32 Cheats_GetSlice(s8 stickX, s8 stickY) {
     return y > 0 ? CSLICE_INF_HP : CSLICE_AUTO_SHOT;
 }
 
+// ── SD sub-radial ─────────────────────────────────────────────────────────────
+
+typedef enum SdSlice {
+    SSLICE_SAVE,
+    SSLICE_LOAD,
+    SSLICE_MAX,
+} SdSlice;
+
+static const RadialEntry sSdEntries[SSLICE_MAX] = {
+    { "SD SAVE", "SAVE TO SD CARD", 68,  108, 7, 80, 200, 120 },
+    { "SD LOAD", "LOAD FROM SD",   192,  108, 7, 80, 200, 120 },
+};
+
+static s32 Sd_GetSlice(s8 stickX, s8 stickY) {
+    s32 ax = stickX < 0 ? -stickX : stickX;
+    s32 ay = stickY < 0 ? -stickY : stickY;
+    if (ax < RADIAL_DEAD_ZONE && ay < RADIAL_DEAD_ZONE) {
+        return SLICE_NONE;
+    }
+    return stickX > 0 ? SSLICE_LOAD : SSLICE_SAVE;
+}
+
 typedef enum PracticeRadialSub1 {
     PRADIALSUB_DISPLAY,
     PRADIALSUB_CHEATS,
+    PRADIALSUB_SD,
 } PracticeRadialSub1;
 
 static PracticeRadialSub1 sRadialSub1 = PRADIALSUB_DISPLAY;
@@ -176,6 +205,7 @@ static const RadialMenuDef sMenuDefs[] = {
     { sRootEntries,    RSLICE_MAX, Root_GetSlice    },
     { sDisplayEntries, DSLICE_MAX, Display_GetSlice },
     { sCheatsEntries,  CSLICE_MAX, Cheats_GetSlice  },
+    { sSdEntries,      SSLICE_MAX, Sd_GetSlice      },
 };
 
 static const RadialMenuDef* Menu_ActiveDef(void) {
@@ -184,6 +214,9 @@ static const RadialMenuDef* Menu_ActiveDef(void) {
     }
     if (sRadialSub1 == PRADIALSUB_CHEATS) {
         return &sMenuDefs[2];
+    }
+    if (sRadialSub1 == PRADIALSUB_SD) {
+        return &sMenuDefs[3];
     }
     return &sMenuDefs[1];
 }
@@ -308,6 +341,11 @@ void Practice_Menu_Update(void) {
                     sMenuDepth = 1;
                     sHovered[1] = SLICE_NONE;
                     break;
+                case RSLICE_SD:
+                    sRadialSub1 = PRADIALSUB_SD;
+                    sMenuDepth = 1;
+                    sHovered[1] = SLICE_NONE;
+                    break;
                 case RSLICE_CAMERA:
                     if (gPracticeMenuState == PMENU_OPEN_FROZEN) {
                         Practice_FreeCam_Enter();
@@ -317,7 +355,18 @@ void Practice_Menu_Update(void) {
                     break;
             }
         } else if (sMenuDepth == 1) {
-            if (sRadialSub1 == PRADIALSUB_CHEATS) {
+            if (sRadialSub1 == PRADIALSUB_SD) {
+                switch (sHovered[1]) {
+                    case SSLICE_SAVE:
+                        Practice_Sd_StartSave();
+                        break;
+                    case SSLICE_LOAD:
+                        Practice_Sd_StartLoad();
+                        break;
+                    default:
+                        break;
+                }
+            } else if (sRadialSub1 == PRADIALSUB_CHEATS) {
                 switch (sHovered[1]) {
                     case CSLICE_AUTO_SHOT:
                         gPracticeConfig.autoFireChargeShot ^= true;
@@ -497,8 +546,10 @@ void Practice_Menu_Draw(void) {
                 def->entries[hoveredSlice].desc, 0, 255, 128);
         }
     } else if (sMenuDepth > 0) {
-        Practice_DrawTextColor(RADIAL_CENTER_X - 28, RADIAL_CENTER_Y - 5,
-            (sRadialSub1 == PRADIALSUB_CHEATS) ? "CHEATS" : "DISPLAY", 0, 255, 128);
+        const char* sub = (sRadialSub1 == PRADIALSUB_CHEATS) ? "CHEATS"
+                        : (sRadialSub1 == PRADIALSUB_SD)     ? "SD CARD"
+                        : "DISPLAY";
+        Practice_DrawTextColor(RADIAL_CENTER_X - 28, RADIAL_CENTER_Y - 5, sub, 0, 255, 128);
     } else {
         s32 slotCount = Practice_GetRamSlotCount();
         s32 active    = Practice_GetActiveSlot();
