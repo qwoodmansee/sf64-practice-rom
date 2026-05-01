@@ -294,7 +294,8 @@ void Practice_LevelSelect_Draw(void) {
                (gPracticeConfig.laserStrength == LASERS_TWIN)   ? "TWIN"   : "HYPER";
     Practice_DrawText(20,  204, "LASER:");
     Practice_DrawTextColor(72,  204, laserStr, 255, 255, 100);
-    RCP_SetupDL(&gMasterDisp, SETUPDL_78);
+    gDPPipeSync(gMasterDisp++);
+    RCP_SetupDL(&gMasterDisp, SETUPDL_76);
     gDPSetPrimColor(gMasterDisp++, 0, 0, 255, 255, 255, 255);
     Lib_TextureRect_CI4(&gMasterDisp, aVsBombIconTex,       aVsBombIconTLUT,       16, 16, 136.0f, 199.0f, 1.0f, 1.0f);
     Lib_TextureRect_CI4(&gMasterDisp, aAwArwingLifeIconTex, aAwArwingLifeIconTLUT, 16, 16, 174.0f, 199.0f, 1.0f, 1.0f);
