@@ -150,19 +150,32 @@ static void on_load_canceled(void *ud) {
 }
 
 void Practice_Sd_Init(void) {
+    FRESULT r;
+    osSyncPrintf("[sd_init] osk_close enter\n");
     osk_close();
+    osSyncPrintf("[sd_init] osk_close exit; file_browser_close enter\n");
     file_browser_close();
+    osSyncPrintf("[sd_init] file_browser_close exit; iodev_sd_was_ok enter\n");
     sSdAvailable = iodev_sd_was_ok();
+    osSyncPrintf("[sd_init] iodev_sd_was_ok=%d\n", (s32) sSdAvailable);
     if (sSdAvailable) {
         /* Create the save directory tree at ROM boot so the first save never
          * stalls on fresh directory allocation mid-game. */
+        osSyncPrintf("[sd_init] sd_op_begin (f_mount) enter\n");
         sd_op_begin();
-        f_mkdir(SD_ROOT);
-        f_mkdir(SD_APP);
-        f_mkdir(SD_DIR);
+        osSyncPrintf("[sd_init] sd_op_begin exit; f_mkdir SD_ROOT enter\n");
+        r = f_mkdir(SD_ROOT);
+        osSyncPrintf("[sd_init] f_mkdir SD_ROOT r=%d; f_mkdir SD_APP enter\n", (s32) r);
+        r = f_mkdir(SD_APP);
+        osSyncPrintf("[sd_init] f_mkdir SD_APP r=%d; f_mkdir SD_DIR enter\n", (s32) r);
+        r = f_mkdir(SD_DIR);
+        osSyncPrintf("[sd_init] f_mkdir SD_DIR r=%d; sd_op_end enter\n", (s32) r);
         sd_op_end();
+        osSyncPrintf("[sd_init] sd_op_end exit\n");
     }
+    osSyncPrintf("[sd_init] slot_manager_set_sd_scratch enter\n");
     slot_manager_set_sd_scratch(Practice_Save_ScratchBase(), MAX_STATE_SIZE);
+    osSyncPrintf("[sd_init] slot_manager_set_sd_scratch exit (Practice_Sd_Init done)\n");
 }
 
 bool Practice_Sd_IsActive(void) {

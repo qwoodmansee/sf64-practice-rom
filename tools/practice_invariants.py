@@ -171,6 +171,8 @@ def check_isviewer_sc64():
         error("isviewer.c must use SC64 token 0x49533634 ('IS64') at base+0; libdragon's 0x12345678 is silently dropped on hardware")
     if "PI_WRITE" not in isv:
         error("isviewer.c must use a PI_WRITE macro that flushes via IO_READ; back-to-back writes to SC64 cart space get dropped")
+    if "__osDisableInt" not in isv or "__osRestoreInt" not in isv:
+        error("isviewer.c rp/wp dance must run with interrupts masked (__osDisableInt/__osRestoreInt); without it a timer/SP/DP IRQ landing mid-dance leaves the firmware polling a torn (wp<rp) pair and triggers a 64KB garbage dump to USB ('ZZZZ' storm)")
 
 def check_iodev_sc64():
     """SC64 iodev backend must preserve hard-won SC64 protocol invariants.

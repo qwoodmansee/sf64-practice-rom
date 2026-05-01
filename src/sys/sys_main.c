@@ -243,8 +243,12 @@ void Graphics_ThreadEntry(void* arg0) {
     u8 visPerFrame;
     u8 validVIsPerFrame;
 
+    osSyncPrintf("[boot] 30 graphics thread entry\n");
+    osSyncPrintf("[boot] 31 Game_Initialize enter (Practice_Init runs deeper inside game state machine)\n");
     Game_Initialize();
+    osSyncPrintf("[boot] 32 Game_Initialize exit\n");
     osSendMesg(&gSerialThreadMesgQueue, (OSMesg) SI_READ_CONTROLLER, OS_MESG_NOBLOCK);
+    osSyncPrintf("[boot] 33 first frame: Graphics_InitializeTask + Game_Update enter\n");
     Graphics_InitializeTask(gSysFrameCount);
     {
         gSPSegment(gUnkDisp1++, 0, 0);
@@ -256,7 +260,9 @@ void Graphics_ThreadEntry(void* arg0) {
         gDPFullSync(gMasterDisp++);
         gSPEndDisplayList(gMasterDisp++);
     }
+    osSyncPrintf("[boot] 34 first frame: Graphics_SetTask\n");
     Graphics_SetTask();
+    osSyncPrintf("[boot] 35 first frame submitted; entering main render loop\n");
     while (true) {
         gSysFrameCount++;
         Graphics_InitializeTask(gSysFrameCount);
@@ -438,20 +444,27 @@ void Main_ThreadEntry(void* arg0) {
     OSMesg osMesg;
     u8 mesg;
 
+    osSyncPrintf("[boot] 23 main thread entry\n");
+    osSyncPrintf("[boot] 24 audio thread create+start\n");
     osCreateThread(&gAudioThread, THREAD_ID_AUDIO, Audio_ThreadEntry, arg0,
                    gAudioThreadStack + sizeof(gAudioThreadStack), 80);
     osStartThread(&gAudioThread);
+    osSyncPrintf("[boot] 25 graphics thread create+start\n");
     osCreateThread(&gGraphicsThread, THREAD_ID_GRAPHICS, Graphics_ThreadEntry, arg0,
                    gGraphicsThreadStack + sizeof(gGraphicsThreadStack), 40);
     osStartThread(&gGraphicsThread);
+    osSyncPrintf("[boot] 26 timer thread create+start\n");
     osCreateThread(&gTimerThread, THREAD_ID_TIMER, Timer_ThreadEntry, arg0,
                    gTimerThreadStack + sizeof(gTimerThreadStack), 60);
     osStartThread(&gTimerThread);
+    osSyncPrintf("[boot] 27 serial thread create+start\n");
     osCreateThread(&gSerialThread, THREAD_ID_SERIAL, SerialInterface_ThreadEntry, arg0,
                    gSerialThreadStack + sizeof(gSerialThreadStack), 20);
     osStartThread(&gSerialThread);
 
+    osSyncPrintf("[boot] 28 Main_InitMesgQueues enter\n");
     Main_InitMesgQueues();
+    osSyncPrintf("[boot] 29 Main_InitMesgQueues exit (entering main thread loop)\n");
 
     while (true) {
         MQ_WAIT_FOR_MESG(&gMainThreadMesgQueue, &osMesg);
@@ -480,27 +493,57 @@ void Main_ThreadEntry(void* arg0) {
 }
 
 void Idle_ThreadEntry(void* arg0) {
+    osSyncPrintf("[boot] 10 idle thread entry\n");
+    osSyncPrintf("[boot] 11 osCreateViManager enter\n");
     osCreateViManager(OS_PRIORITY_VIMGR);
+    osSyncPrintf("[boot] 12 osCreateViManager exit\n");
+    osSyncPrintf("[boot] 13 Main_SetVIMode enter (osTvType=%d)\n", (s32) osTvType);
     Main_SetVIMode();
+    osSyncPrintf("[boot] 14 Main_SetVIMode exit\n");
+    osSyncPrintf("[boot] 15 Lib_FillScreen(1) enter (color=0x%04x)\n", gFillScreenColor);
     Lib_FillScreen(1);
+    osSyncPrintf("[boot] 16 Lib_FillScreen(1) exit (screen now visible)\n");
+    osSyncPrintf("[boot] 17 osCreatePiManager enter\n");
     osCreatePiManager(OS_PRIORITY_PIMGR, &gPiMgrCmdQueue, sPiMgrCmdBuff, ARRAY_COUNT(sPiMgrCmdBuff));
+    osSyncPrintf("[boot] 18 osCreatePiManager exit\n");
+    osSyncPrintf("[boot] 19 main thread create\n");
     osCreateThread(&gMainThread, THREAD_ID_MAIN, &Main_ThreadEntry, arg0, sMainThreadStack + sizeof(sMainThreadStack),
                    100);
+    osSyncPrintf("[boot] 20 main thread start (control transfers)\n");
     osStartThread(&gMainThread);
+    osSyncPrintf("[boot] 21 idle: Fault_Init\n");
     Fault_Init();
+    osSyncPrintf("[boot] 22 idle: dropping to OS_PRIORITY_IDLE\n");
     osSetThreadPri(NULL, OS_PRIORITY_IDLE);
     for (;;) {}
 }
 
 void bootproc(void) {
-    RdRam_CheckIPL3();
-    osInitialize();
 #if MODS_ISVIEWER == 1
+    /* Init IS-Viewer FIRST so osSyncPrintf works for every later stage.
+     * PI bus is functional immediately after IPL3; no other init required. */
     ISViewer_Init();
 #endif
+    osSyncPrintf("\n========== bootproc start (build %s %s) ==========\n", __DATE__, __TIME__);
+    osSyncPrintf("[boot] 01 bootproc entry\n");
+    osSyncPrintf("[boot] 02 RdRam_CheckIPL3 enter\n");
+    RdRam_CheckIPL3();
+    osSyncPrintf("[boot] 03 RdRam_CheckIPL3 exit\n");
+    osSyncPrintf("[boot] 04 osInitialize enter\n");
+    osInitialize();
+    osSyncPrintf("[boot] 05 osInitialize exit (osMemSize=0x%08x)\n", (u32) osMemSize);
+    osSyncPrintf("[boot] 06 Main_Initialize enter\n");
     Main_Initialize();
+    osSyncPrintf("[boot] 07 Main_Initialize exit\n");
+    /* Loading-screen color: any value != 1 makes Lib_FillScreen draw solid
+     * color via gFillBuffer instead of osViBlack(true). Lets the user
+     * distinguish "still loading" (solid blue) from "hard hang on black."
+     * 0x0011 = RGBA5551 dark-blue with alpha. Lib_FillScreen ORs in 1. */
+    gFillScreenColor = 0x0011;
+    osSyncPrintf("[boot] 08 idle thread create\n");
     osCreateThread(&sIdleThread, THREAD_ID_IDLE, &Idle_ThreadEntry, NULL, sIdleThreadStack + sizeof(sIdleThreadStack),
                    255);
+    osSyncPrintf("[boot] 09 idle thread start (control transfers)\n");
     osStartThread(&sIdleThread);
 }
 

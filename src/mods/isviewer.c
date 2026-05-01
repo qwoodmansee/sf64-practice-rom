@@ -1,5 +1,6 @@
 #include "PR/xstdio.h"
 #include "PR/rcp.h"
+#include "PR/os_internal.h"
 #include "libc/stdarg.h"
 
 // SummerCart64 IS-Viewer 64.
@@ -22,17 +23,25 @@
 
 #define ISV_MAX_FLUSH            512
 
+/* If drain-wait times out this many calls in a row, the host has fallen
+ * behind in a way we can't recover from cleanly. Kill the channel rather
+ * than continue to spew torn rp/wp pairs that the SC64 firmware mistakes
+ * for buffer-wraps and dumps as 64KB garbage to USB ("ZZZZZ" storm). */
+#define ISV_FAILURE_LIMIT        5
+
 #define PI_WRITE(addr, val)      do {                  \
     IO_WRITE((addr), (val));                           \
     (void) IO_READ(ISV_BASE + ISV_TOKEN_OFF);          \
 } while (0)
 
 static u8 sISViewerInitialized = 0;
+static u8 sISViewerFailureCount = 0;
 
 static void ISViewer_Write(const u8* data, s32 len);
 
 void ISViewer_Init(void) {
     sISViewerInitialized = 1;
+    sISViewerFailureCount = 0;
     PI_WRITE(ISV_BASE + ISV_TOKEN_OFF,     ISV_TOKEN);
     PI_WRITE(ISV_BASE + ISV_READ_PTR_OFF,  0);
     PI_WRITE(ISV_BASE + ISV_WRITE_PTR_OFF, 0);
@@ -44,15 +53,30 @@ static void ISViewer_Write(const u8* data, s32 len) {
     u32 word;
     u32 rp;
     u32 wp;
+    u32 saved_int_mask;
 
     if ((!sISViewerInitialized) || (len <= 0)) {
+        return;
+    }
+    if (sISViewerFailureCount >= ISV_FAILURE_LIMIT) {
+        /* Channel previously fell out of sync and the host is no longer
+         * draining cleanly. Stay quiet so we don't keep flooding the
+         * deployer with garbage. */
         return;
     }
     if (len > ISV_MAX_FLUSH) {
         len = ISV_MAX_FLUSH;
     }
 
-    // Wait for prior flush to drain (rp catches up to wp).
+    /* The rp/wp dance must be atomic from the SC64 firmware's POV. Any
+     * preemption (timer/SI/SP/DP interrupt, thread switch) that lands
+     * between PI writes can leave the firmware polling a torn (wp < rp)
+     * pair, which it interprets as a buffer wrap and dumps ~64KB of
+     * garbage to USB. Disable interrupts for the dance. __osDisableInt
+     * is a no-op pre-osInitialize and safe to call from any context. */
+    saved_int_mask = __osDisableInt();
+
+    /* Wait for prior flush to drain (rp catches up to wp). */
     for (retries = 200000; retries > 0; retries--) {
         rp = IO_READ(ISV_BASE + ISV_READ_PTR_OFF);
         wp = IO_READ(ISV_BASE + ISV_WRITE_PTR_OFF);
@@ -60,9 +84,19 @@ static void ISViewer_Write(const u8* data, s32 len) {
             break;
         }
     }
+    if (retries == 0) {
+        /* Host fell behind. Proceeding anyway risks creating a wp<rp state
+         * that the SC64 firmware mistakes for a buffer wrap and dumps 64KB
+         * of garbage to USB. Drop this message; tally the failure so we
+         * eventually disable the channel if it stays wedged. */
+        sISViewerFailureCount++;
+        __osRestoreInt(saved_int_mask);
+        return;
+    }
+    sISViewerFailureCount = 0;
 
-    // Park rp outside the valid range so the SC64 firmware bails on
-    // (rp >= ISV_BUFFER_SIZE) and ignores us during the rewrite.
+    /* Park rp outside the valid range so the SC64 firmware bails on
+     * (rp >= ISV_BUFFER_SIZE) and ignores us during the rewrite. */
     PI_WRITE(ISV_BASE + ISV_READ_PTR_OFF, 0xFFFFFFFF);
     PI_WRITE(ISV_BASE + ISV_WRITE_PTR_OFF, 0);
 
@@ -79,9 +113,11 @@ static void ISViewer_Write(const u8* data, s32 len) {
         PI_WRITE(ISV_BASE + ISV_BUFFER_OFF + i, word);
     }
 
-    // Re-arm: rp valid (==wp=0), then bump wp to trigger a flush.
+    /* Re-arm: rp valid (==wp=0), then bump wp to trigger a flush. */
     PI_WRITE(ISV_BASE + ISV_READ_PTR_OFF, 0);
     PI_WRITE(ISV_BASE + ISV_WRITE_PTR_OFF, len);
+
+    __osRestoreInt(saved_int_mask);
 }
 
 // Accumulator state passed through _Printf as the prout callback's "arg".
