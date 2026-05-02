@@ -1,0 +1,49 @@
+.claude/commands/check.md
+  0db5c62c5b470204 18,21-24,29-33,36-41
+.gitignore
+  0db5c62c5b470204 3-6
+src/practice/practice_draw.c
+  0db5c62c5b470204 76-83
+lib/ui/file_browser.c
+  0db5c62c5b470204 66-75
+.claude/commands/hw-verify.md
+  0db5c62c5b470204 10,13-15
+.claude/agents/sf64-builder.md
+  0db5c62c5b470204 27,29-31
+.claude/agents/sf64-checker.md
+  0db5c62c5b470204 24,26-28,32-36,38-42
+tools/gen_hit64_logo.py
+  0db5c62c5b470204 36-40
+.claude/agents/sf64-reviewer.md
+  0db5c62c5b470204 30-31
+lib/iodev/iodev.c
+  0db5c62c5b470204 80-84
+docs/superpowers/specs/2026-04-25-radial-menu-design.md
+  0db5c62c5b470204 29-30,32-33,35-36,39-42
+.claude/commands/new-feature.md
+  0db5c62c5b470204 2
+docs/superpowers/plans/HW_VERIFY_phase2.md
+  0db5c62c5b470204 9,77
+.claude/commands/phase-wave.md
+  0db5c62c5b470204 19-23,26-28,31-35
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "085d363f29051493c17549a33f2f9eb6b62a644d",
+  "prompts": {
+    "0db5c62c5b470204": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "06b17724-9c68-4c47-b4e4-e1408357a117",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 100,
+      "total_deletions": 29,
+      "accepted_lines": 100,
+      "overriden_lines": 0
+    }
+  }
+}
