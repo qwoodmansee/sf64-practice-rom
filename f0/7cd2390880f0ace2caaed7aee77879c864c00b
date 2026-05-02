@@ -1,0 +1,161 @@
+tests/README.md
+  059542250aebf848 1-91
+.gitignore
+  8f5d6bd3daa153e5 38-42
+.tool-versions
+  0041fe2c9b180f37 1
+tests/test_e2e_levels.py
+  059542250aebf848 1-144
+tests/dtm_generator.py
+  059542250aebf848 1-133
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "f07cd2390880f0ace2caaed7aee77879c864c00b",
+  "prompts": {
+    "0041fe2c9b180f37": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "918a7433-c5d7-48cb-bf9e-616273abb64a",
+        "model": "claude-4.6-opus-max-thinking"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 1,
+      "total_deletions": 0,
+      "accepted_lines": 1,
+      "overriden_lines": 0
+    },
+    "059542250aebf848": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "90829b3d-2b63-4764-bad4-86ad8cac61f4",
+        "model": "claude-haiku-4-5-20251001"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 392,
+      "total_deletions": 24,
+      "accepted_lines": 368,
+      "overriden_lines": 0
+    },
+    "1616cc5cb8b1d722": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "c90faa10-23a3-4d92-ac7f-eef9c1c226fa",
+        "model": "claude-4.6-opus-max-thinking"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 216,
+      "total_deletions": 0,
+      "accepted_lines": 151,
+      "overriden_lines": 67
+    },
+    "4db77c571f40a3bb": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "1fba98e0-a136-4dfc-8be4-bc45ce882194",
+        "model": "claude-4.6-opus-max-thinking"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 51,
+      "total_deletions": 0,
+      "accepted_lines": 40,
+      "overriden_lines": 11
+    },
+    "52f5010531687fd9": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "0833aafc-6429-4dff-b516-2ee68dad84c4",
+        "model": "claude-4.6-opus-max-thinking"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 1774,
+      "total_deletions": 7,
+      "accepted_lines": 1742,
+      "overriden_lines": 9
+    },
+    "6e8270fadda25590": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "61269ece-da69-4964-943b-eef3ac1fc907",
+        "model": "claude-4.6-opus-max-thinking"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 113,
+      "total_deletions": 0,
+      "accepted_lines": 46,
+      "overriden_lines": 38
+    },
+    "78593ed508934e5a": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "30348212-e88f-4212-b021-dc3fa33a35ce",
+        "model": "claude-4.6-opus-max-thinking"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 62,
+      "total_deletions": 0,
+      "accepted_lines": 61,
+      "overriden_lines": 0
+    },
+    "7c6942cee27d96d0": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "7f6803f4-67fc-42c5-a4e1-77008d93f106",
+        "model": "claude-4.6-opus-max-thinking"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 151,
+      "total_deletions": 0,
+      "accepted_lines": 108,
+      "overriden_lines": 73
+    },
+    "8f5d6bd3daa153e5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6e57f916-44eb-4b0c-9e65-dfab6c8115f3",
+        "model": "claude-haiku-4-5-20251001"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 57,
+      "total_deletions": 8,
+      "accepted_lines": 56,
+      "overriden_lines": 0
+    },
+    "ea93628b4f02bff5": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "ca7f5468-26e9-40b2-aadd-8d565ff38b20",
+        "model": "claude-4.6-opus-max-thinking"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 65,
+      "total_deletions": 0,
+      "accepted_lines": 22,
+      "overriden_lines": 6
+    },
+    "f0c59645ad4d9b25": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "6192b23f-fb1e-4e65-b6eb-762e46f75c48",
+        "model": "claude-4.6-opus-max-thinking"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 441,
+      "total_deletions": 54,
+      "accepted_lines": 222,
+      "overriden_lines": 228
+    }
+  }
+}
