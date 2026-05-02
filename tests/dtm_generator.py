@@ -16,7 +16,7 @@ class DTMGenerator:
 
     # N64 controller button bits, matching include/PR/os_cont.h.
     BUTTON_A = 0x8000
-    BUTTON_D_DOWN = 0x0400
+    BUTTON_D_DOWN = 0x4000
 
     def __init__(self, game_id="NG2E01", output_dir="tests/dtm"):
         """Initialize generator.
