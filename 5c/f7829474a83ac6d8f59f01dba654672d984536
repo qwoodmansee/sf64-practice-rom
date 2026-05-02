@@ -1,0 +1,23 @@
+tools/patcher/src/assets/manifest.json
+  42fa2a1f6cdfbfcf 10-11,22-24
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "5cf7829474a83ac6d8f59f01dba654672d984536",
+  "prompts": {
+    "42fa2a1f6cdfbfcf": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6e8c483e-1413-4b73-9071-f190961a81ce",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 5,
+      "total_deletions": 5,
+      "accepted_lines": 5,
+      "overriden_lines": 0
+    }
+  }
+}
