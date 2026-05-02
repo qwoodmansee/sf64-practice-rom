@@ -25,6 +25,8 @@ CC_CHECK_COMP ?= gcc
 OBJDUMP_BUILD ?= 0
 # Number of threads to compress with
 N_THREADS ?= $(shell nproc)
+# Version string used for generated BPS release artifacts.
+PATCH_VERSION ?= 0.0.0
 # If COMPILER is GCC, compile with GCC instead of IDO.
 COMPILER ?= ido
 # Whether to colorize build messages
@@ -58,6 +60,8 @@ TARGET               := starfox64
 BUILD_DIR := build
 TOOLS	  := tools
 PYTHON	  := python3
+PATCHER_DIR := tools/patcher
+RELEASE_ASSETS_DIR ?= $(PATCHER_DIR)/src/assets
 ROM       := $(BUILD_DIR)/$(TARGET).$(VERSION).$(REV).uncompressed.z64
 ROMC 	  := $(BUILD_DIR)/$(TARGET).$(VERSION).$(REV).z64
 ELF       := $(BUILD_DIR)/$(TARGET).$(VERSION).$(REV).elf
@@ -148,6 +152,27 @@ ifeq ($(NON_MATCHING),1)
     CPPFLAGS += -DNON_MATCHING -DAVOID_UB
 endif
 
+# Heap audit (IS-Viewer). Set PRACTICE_HEAP_AUDIT=0 to strip telemetry for release builds.
+PRACTICE_HEAP_AUDIT ?= 1
+
+# Save/load TLV + snapshot ISV trace ([save_tr]). Build with PRACTICE_SAVE_TRACE=1 for HW triage.
+PRACTICE_SAVE_TRACE ?= 0
+
+ifeq ($(PRACTICE_ROM),1)
+    BUILD_DEFINES   += -DPRACTICE_ROM=1 -DAVOID_UB -DPRACTICE_HEAP_AUDIT=$(PRACTICE_HEAP_AUDIT) \
+                       -DPRACTICE_SAVE_TRACE=$(PRACTICE_SAVE_TRACE)
+    CFLAGS += -DSLOT_MANAGER_USE_FATFS=1
+    COMPARE := 0
+endif
+
+# Phase 2 FatFs hardware verification probe. Build with IODEV_DIAG_FATFS=1
+# to enable a one-shot mount/write/read round-trip test on boot, output
+# via IS-Viewer. WRITES A REAL FILE TO THE USER'S SD CARD ROOT (SF64TEST.TXT).
+# See docs/superpowers/plans/HW_VERIFY_phase2.md.
+ifeq ($(IODEV_DIAG_FATFS),1)
+    BUILD_DEFINES   += -DIODEV_DIAG_FATFS=1
+endif
+
 MAKE = make
 CPPFLAGS += -fno-dollars-in-identifiers -P
 LDFLAGS  := --no-check-sections --accept-unknown-input-arch --emit-relocs
@@ -231,7 +256,7 @@ COMPTOOL_DIR	:= baserom
 MIO0			:= $(TOOLS)/mio0
 
 
-IINC := -Iinclude -Ibin/$(VERSION).$(REV) -I.
+IINC := -Iinclude -Ilib -Ibin/$(VERSION).$(REV) -I.
 IINC += -Ilib/ultralib/include -Ilib/ultralib/include/PR -Ilib/ultralib/include/ido
 
 ifeq ($(KEEP_MDEBUG),0)
@@ -294,7 +319,7 @@ endif
 
 $(shell mkdir -p asm bin linker_scripts/$(VERSION)/$(REV)/auto)
 
-SRC_DIRS      := $(shell find src -type d)
+SRC_DIRS      := $(shell find src -type d) $(shell find lib -type d -not -path 'lib/test*' 2>/dev/null)
 # Temporary, until we decide how we're gonna handle other versions
 ifeq ($(VERSION), jp)
 SRC_DIRS      := $(shell find srcjp -type d)
@@ -302,8 +327,9 @@ endif
 ifeq ($(VERSION), eu)
 SRC_DIRS      := $(shell find srceu -type d)
 endif
-ASM_DIRS      := $(shell find asm/$(VERSION)/$(REV) -type d -not -path "asm/$(VERSION)/$(REV)/nonmatchings/*")
-BIN_DIRS      := $(shell find bin -type d)
+# find -L: worktrees may symlink asm/ and bin/; POSIX find does not traverse symlink dirs otherwise.
+ASM_DIRS      := $(shell find -L asm/$(VERSION)/$(REV) -type d -not -path "asm/$(VERSION)/$(REV)/nonmatchings/*")
+BIN_DIRS      := $(shell find -L bin -type d)
 
 
 C_FILES       := $(foreach dir,$(SRC_DIRS),$(wildcard $(dir)/*.c))
@@ -461,6 +487,7 @@ extract:
 	@$(CAT) yamls/$(VERSION)/$(REV)/header.yaml yamls/$(VERSION)/$(REV)/main.yaml yamls/$(VERSION)/$(REV)/assets.yaml yamls/$(VERSION)/$(REV)/overlays.yaml > $(SPLAT_YAML)
 	@echo "Extracting..."
 	@$(SPLAT) $(SPLAT_YAML)
+	@$(PYTHON) tools/patch_linker_script.py
 
 assets:
 	@echo "Extracting assets from ROM..."
@@ -470,6 +497,25 @@ assets:
 
 mod:
 	@$(TORCH) modding import code $(BASEROM_UNCOMPRESSED)
+
+gen-build-info: FORCE
+	@$(PYTHON) tools/gen_build_info.py
+
+practice: gen-build-info
+	@$(PYTHON) tools/patch_linker_script.py
+	$(MAKE) PRACTICE_ROM=1 IODEV_DIAG_FATFS=$(IODEV_DIAG_FATFS)
+
+lib-test:
+	@$(MAKE) -C lib/test run-all
+
+practice-compressed:
+	@$(PYTHON) tools/patch_linker_script.py
+	$(MAKE) PRACTICE_ROM=1 uncompressed
+	$(MAKE) PRACTICE_ROM=1 compress
+	$(MAKE) PRACTICE_ROM=1 COMPARE=0 compressed
+
+practice-patch: practice-compressed
+	npm --prefix tools/patcher run create-release -- --source $(CURDIR)/$(BASEROM) --target $(CURDIR)/$(ROMC) --assets-dir $(CURDIR)/$(RELEASE_ASSETS_DIR) --version $(PATCH_VERSION)
 
 clean:
 	rm -f torch.hash.yml
@@ -560,4 +606,6 @@ build/src/libultra/libc/ll.o: src/libultra/libc/ll.c
 # Print target for debugging
 print-% : ; $(info $* is a $(flavor $*) variable set to [$($*)]) @true
 
-.PHONY: all uncompressed compressed clean init extract expected format checkformat decompress compress assets context disasm toolchain
+FORCE:
+
+.PHONY: all uncompressed compressed clean init extract expected format checkformat decompress compress assets context disasm toolchain practice practice-compressed practice-patch lib-test gen-build-info

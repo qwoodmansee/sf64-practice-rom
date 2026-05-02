@@ -1,4 +1,7 @@
 #include "global.h"
+#ifdef PRACTICE_ROM
+#include "practice.h"
+#endif
 #include "assets/ast_arwing.h"
 #include "assets/ast_allies.h"
 #include "assets/ast_landmaster.h"
@@ -1685,7 +1688,6 @@ void Display_Update(void) {
     s32 pad;
     Player* player;
     Player* camPlayer = &gPlayer[gPlayerNum];
-
     sDrawCockpit = false;
 
     // 511 hit count cap
@@ -1759,6 +1761,15 @@ void Display_Update(void) {
     tempVec.z = 0.0f;
     Matrix_MultVec3f(gCalcMatrix, &tempVec, &playerCamUp);
 
+#ifdef PRACTICE_ROM
+    if (Practice_FreeCam_IsActive()) {
+        Practice_FreeCam_GetView(&gPlayCamEye, &gPlayCamAt);
+        playerCamUp.x = 0.0f;
+        playerCamUp.y = 100.0f;
+        playerCamUp.z = 0.0f;
+    }
+#endif
+
     if (gStarCount != 0) {
         gStarfieldRoll = DEG_TO_RAD(gPlayer[0].camRoll);
         Camera_SetStarfieldPos(gPlayCamEye.x, gPlayCamEye.y, gPlayCamEye.z, gPlayCamAt.x, gPlayCamAt.y, gPlayCamAt.z);
@@ -1816,6 +1827,10 @@ void Display_Update(void) {
                        gAmbientB);
     Object_Draw(1);
     TexturedLine_Draw();
+#ifdef PRACTICE_ROM
+    Practice_Hitbox_Draw();
+    Practice_FreeCam_DrawMarkers();
+#endif
     gReflectY = 1;
     PlayerShot_DrawAll();
 

@@ -1,0 +1,4 @@
+# Host gcc test binaries (built by `make lib-test`).
+test_*
+!test_*.c
+*.dSYM

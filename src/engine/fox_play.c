@@ -21,6 +21,9 @@
 #include "assets/ast_versus.h"
 #include "assets/ast_area_6.h"
 #include "assets/ast_zoness.h"
+#ifdef PRACTICE_ROM
+#include "practice.h"
+#endif
 
 UNK_TYPE D_800D2F50 = 0; // unused
 s32 sOverheadCam = 0;
@@ -504,6 +507,7 @@ Environment* sEnvironmentSetup[21] = {
 };
 
 void Play_InitEnvironment(void) {
+
     if (gVersusMode) {
         switch (gVersusStage) {
             case VS_STAGE_CORNERIA:
@@ -3187,8 +3191,18 @@ bool Player_UpdateLockOn(Player* player) {
     bool hasBombTarget;
     s32 i;
 
+#ifdef PRACTICE_ROM
+    Practice_ChargeAssist_LockOnBegin(player);
+#endif
+
     if (gInputHold->button & A_BUTTON) {
+#ifdef PRACTICE_ROM
+        Practice_ChargeAssist_PreChargeInc(player);
+#endif
         gChargeTimers[player->num]++;
+#ifdef PRACTICE_ROM
+        Practice_ChargeAssist_PostChargeInc(player);
+#endif
         if (gChargeTimers[player->num] > 21) {
             gChargeTimers[player->num] = 21;
         }
@@ -3253,10 +3267,19 @@ bool Player_UpdateLockOn(Player* player) {
                 }
                 Object_PlayerSfx(player->sfxSource, NA_SE_LOCK_ON_LASER, player->num);
                 gChargeTimers[player->num] = 0;
+#ifdef PRACTICE_ROM
+                Practice_ChargeAssist_OnChargeShotFired(player);
+#endif
                 gControllerRumbleTimers[player->num] = 5;
                 return true;
             }
+#ifdef PRACTICE_ROM
+            Practice_ChargeAssist_OnChargeShotBlocked(player);
+#endif
         }
+#ifdef PRACTICE_ROM
+        Practice_ChargeAssist_OnChargeShotEarlyReset(player, gChargeTimers[player->num]);
+#endif
         gChargeTimers[player->num] = 0;
     }
 
@@ -3305,6 +3328,16 @@ void Player_Shoot(Player* player) {
             }
 
             if (!Player_UpdateLockOn(player)) {
+#ifdef PRACTICE_ROM
+                /* Practice_ChargeAssist strips A from gControllerHold mid-frame so the next
+                 * Controller_UpdateInput computes a spurious A press while the real pad still
+                 * holds A, firing tap lasers between auto charge shots. Continuous A charge
+                 * never has a press edge in stock input. */
+                if (gPracticeConfig.autoFireChargeShot && (gInputHold->button & A_BUTTON) &&
+                    (gChargeTimers[player->num] > 0)) {
+                    gInputPress->button &= ~gShootButton[player->num];
+                }
+#endif
                 if (gLaserStrength[gPlayerNum] > LASERS_SINGLE) {
                     Math_SmoothStepToF(&player->arwing.laserGunsYpos, -10.0f, 1.0f, 0.5f, 0.0f);
                 } else {
@@ -3326,6 +3359,12 @@ void Player_Shoot(Player* player) {
 
         case FORM_LANDMASTER:
             if (!Player_UpdateLockOn(player)) {
+#ifdef PRACTICE_ROM
+                if (gPracticeConfig.autoFireChargeShot && (gInputHold->button & A_BUTTON) &&
+                    (gChargeTimers[player->num] > 0)) {
+                    gInputPress->button &= ~gShootButton[player->num];
+                }
+#endif
                 if (gShootButton[player->num] & gInputPress->button) {
                     Player_TankCannon(player);
                 }
@@ -4546,6 +4585,18 @@ void Player_Setup(Player* playerx) {
     gDisplayedHitCount = gHitCount;
     gShieldGaugeState = SHIELD_GAUGE_NEUTRAL;
     gMissedZoSearchlight = gSavedZoSearchlightStatus;
+#ifdef PRACTICE_ROM
+    if (gLevelMode == LEVELMODE_ON_RAILS && gPracticeCheckpointProgress > 0.0f) {
+        s32 ckIdx = 0;
+        while ((gLevelObjects != NULL) && (ckIdx < 10000) && (gLevelObjects[ckIdx].id > OBJ_INVALID) &&
+               (gLevelObjects[ckIdx].zPos1 <= gPracticeCheckpointProgress)) {
+            ckIdx++;
+        }
+        gSavedObjectLoadIndex = ckIdx;
+        gSavedPathProgress = gPracticeCheckpointProgress;
+        gPracticeCheckpointProgress = 0.0f;
+    }
+#endif
     gObjectLoadIndex = gSavedObjectLoadIndex;
     gGroundSurface = gSavedGroundSurface;
     gPathProgress = player->zPath = gSavedPathProgress;
@@ -4772,6 +4823,10 @@ void Player_Setup(Player* playerx) {
     if ((gCurrentLevel == LEVEL_TRAINING)) {
         gClearPlayerInfo = true;
     }
+
+#ifdef PRACTICE_ROM
+    Practice_ApplyStartConditions();
+#endif
 
     player->sfx.levelType = gLevelType;
     player->sfx.form = player->form;
@@ -5886,6 +5941,18 @@ void Player_Update(Player* player) {
             break;
 
         case PLAYERSTATE_LEVEL_COMPLETE:
+#ifdef PRACTICE_ROM
+            if (gPracticeConfig.skipCutscenes) {
+                Practice_Menu_Close();
+                gPracticeScreen = PSCREEN_LEVEL_SELECT;
+                Practice_LevelSelect_OnEnter();
+                gGameState = GSTATE_MAP;
+                gDrawMode = DRAW_NONE;
+                Audio_FadeOutAll(1);
+                Audio_ClearVoice();
+                break;
+            }
+#endif
             player->alternateView = false;
             gPauseEnabled = false;
             Player_UpdateShields(player);
@@ -6887,7 +6954,6 @@ void Play_Update(void) {
         gPlayer[i].num = gPlayerNum = i;
         Player_Update(&gPlayer[i]);
     }
-
     Object_Update();
     PlayerShot_UpdateAll();
     BonusText_Update();
@@ -7020,7 +7086,11 @@ void Play_Main(void) {
 
             if ((gControllerPress[gMainController].button & START_BUTTON) &&
                 (gPlayer[0].state == PLAYERSTATE_LEVEL_INTRO) &&
+#ifdef PRACTICE_ROM
+                true) {
+#else
                 gSaveFile.save.data.planet[sSaveSlotFromLevel[gCurrentLevel]].normalClear) {
+#endif
                 Audio_ClearVoice();
                 Audio_SetEnvSfxReverb(0);
                 Play_ClearObjectData();
@@ -7051,31 +7121,36 @@ void Play_Main(void) {
             break;
 
         case PLAY_PAUSE:
-            if (!gVersusMode) {
-                if ((gControllerPress[gMainController].button & R_TRIG) && (gPlayer[0].form != FORM_BLUE_MARINE) &&
-                    (gPlayer[0].state != PLAYERSTATE_STANDBY)) {
-                    if (gShowReticles[0] = 1 - gShowReticles[0]) {
-                        AUDIO_PLAY_SFX(NA_SE_MAP_WINDOW_OPEN, gDefaultSfxSource, 4);
-                    } else {
-                        AUDIO_PLAY_SFX(NA_SE_MAP_WINDOW_CLOSE, gDefaultSfxSource, 4);
-                    }
-                }
-            } else {
-                for (i = 0; i < 4; i++) {
-                    if ((gControllerPress[i].button & R_TRIG) && (gPlayer[i].form != FORM_ON_FOOT)) {
-                        if (gShowReticles[i] = 1 - gShowReticles[i]) {
-                            Object_PlayerSfx(gPlayer[i].sfxSource, NA_SE_MAP_WINDOW_OPEN, i);
+#ifdef PRACTICE_ROM
+            if (gPracticeMenuState == PMENU_CLOSED)
+#endif
+            {
+                if (!gVersusMode) {
+                    if ((gControllerPress[gMainController].button & R_TRIG) && (gPlayer[0].form != FORM_BLUE_MARINE) &&
+                        (gPlayer[0].state != PLAYERSTATE_STANDBY)) {
+                        if (gShowReticles[0] = 1 - gShowReticles[0]) {
+                            AUDIO_PLAY_SFX(NA_SE_MAP_WINDOW_OPEN, gDefaultSfxSource, 4);
                         } else {
-                            Object_PlayerSfx(gPlayer[i].sfxSource, NA_SE_MAP_WINDOW_CLOSE, i);
+                            AUDIO_PLAY_SFX(NA_SE_MAP_WINDOW_CLOSE, gDefaultSfxSource, 4);
+                        }
+                    }
+                } else {
+                    for (i = 0; i < 4; i++) {
+                        if ((gControllerPress[i].button & R_TRIG) && (gPlayer[i].form != FORM_ON_FOOT)) {
+                            if (gShowReticles[i] = 1 - gShowReticles[i]) {
+                                Object_PlayerSfx(gPlayer[i].sfxSource, NA_SE_MAP_WINDOW_OPEN, i);
+                            } else {
+                                Object_PlayerSfx(gPlayer[i].sfxSource, NA_SE_MAP_WINDOW_CLOSE, i);
+                            }
                         }
                     }
                 }
-            }
 
-            if ((D_ctx_80177868 == 4) && (gControllerPress[gMainController].button & START_BUTTON) && gPauseEnabled) {
-                Audio_PlayPauseSfx(0);
-                gPlayState = PLAY_UPDATE;
-                gDrawMode = DRAW_PLAY;
+                if ((D_ctx_80177868 == 4) && (gControllerPress[gMainController].button & START_BUTTON) && gPauseEnabled) {
+                    Audio_PlayPauseSfx(0);
+                    gPlayState = PLAY_UPDATE;
+                    gDrawMode = DRAW_PLAY;
+                }
             }
             gPauseEnabled = true;
             break;

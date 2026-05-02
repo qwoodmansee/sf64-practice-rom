@@ -32,6 +32,10 @@ void Lib_FillScreen(u8 setFill);
 void Memory_FreeAll(void);
 void* Memory_Allocate(s32);
 
+#ifdef PRACTICE_ROM
+u32 Practice_MemoryGetBumpUsed(void);
+#endif
+
 OSPiHandle * osDriveRomInit(void);
 void RdRam_CheckIPL3(void);
 void Mio0_Decompress(void* header, u8* dst);

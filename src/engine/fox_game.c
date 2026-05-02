@@ -3,6 +3,9 @@
 #include "sf64dma.h"
 #include "assets/ast_logo.h"
 #include "mods.h"
+#ifdef PRACTICE_ROM
+#include "practice.h"
+#endif
 
 f32 gNextVsViewScale;
 f32 gVsViewScale;
@@ -67,6 +70,18 @@ void Game_Initialize(void) {
         Save_Write();
     }
 #endif
+#ifdef PRACTICE_ROM
+    gNextGameState = GSTATE_INIT;
+    if (Save_Read() != 0) {
+#ifdef AVOID_UB
+        gSaveFile.save = gDefaultSave;
+        gSaveFile.backup = gDefaultSave;
+#else
+        gSaveFile = *((SaveFile*) &gDefaultSave);
+#endif
+        Save_Write();
+    }
+#endif
     gNextGameStateTimer = 0;
     gBgColor = 0;
     gBlurAlpha = 255;
@@ -97,6 +112,11 @@ void Game_SetGameState(void) {
             if ((gLevelPhase != 0) && (gCurrentLevel != LEVEL_VENOM_ANDROSS)) {
                 gCsWasNotSkipped = false;
             }
+#ifdef PRACTICE_ROM
+            if (gPracticeConfig.skipCutscenes) {
+                gCsWasNotSkipped = false;
+            }
+#endif
             break;
         case GSTATE_MAP:
             gMapState = 0;
@@ -432,6 +452,10 @@ void Game_Update(void) {
 #ifdef MODS_BOOT_STATE
                 gNextGameState = MODS_BOOT_STATE;
 #endif
+#ifdef PRACTICE_ROM
+                Practice_Init();
+                gNextGameState = GSTATE_MAP;
+#endif
                 for (i = 0; i < 4; i++) {
                     gBoostButton[i] = L_CBUTTONS;
                     gBrakeButton[i] = D_CBUTTONS;
@@ -499,13 +523,25 @@ void Game_Update(void) {
                 OvlMenu_CallFunction(OVLCALL_OPTION_UPDATE, NULL);
                 break;
             case GSTATE_MAP:
+#ifdef PRACTICE_ROM
+                if (gPracticeScreen == PSCREEN_LEVEL_SELECT) {
+                    gDrawMode = DRAW_NONE;
+                    break;
+                }
+#endif
                 Map_Main();
                 break;
             case GSTATE_VS_INIT:
                 Versus_StartMatch();
                 break;
             case GSTATE_PLAY:
+#ifdef PRACTICE_ROM
+                if (gPracticeMenuState != PMENU_OPEN_FROZEN) {
+                    Play_Main();
+                }
+#else
                 Play_Main();
+#endif
                 break;
             case GSTATE_GAME_OVER:
                 OvlMenu_CallFunction(OVLCALL_GAME_OVER_UPDATE, NULL);
@@ -517,7 +553,6 @@ void Game_Update(void) {
             default:
                 break;
         }
-
         Game_Draw(0);
 
         if (gCamCount == 2) {
@@ -617,6 +652,10 @@ void Game_Update(void) {
 #endif
 #if MODS_SPAWNER == 1
         Spawner();
+#endif
+#ifdef PRACTICE_ROM
+        Practice_Update();
+        Practice_Draw();
 #endif
     }
 }

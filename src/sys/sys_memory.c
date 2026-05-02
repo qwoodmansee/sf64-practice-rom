@@ -13,3 +13,9 @@ void* Memory_Allocate(s32 size) {
     sMemoryPtr = (void*) (((size + 0xF) & ~0xF) + (uintptr_t) sMemoryPtr);
     return addr;
 }
+
+#ifdef PRACTICE_ROM
+u32 Practice_MemoryGetBumpUsed(void) {
+    return (u32)((uintptr_t)sMemoryPtr - (uintptr_t)sMemoryBuffer);
+}
+#endif

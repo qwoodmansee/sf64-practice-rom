@@ -821,7 +821,7 @@ void Graphics_DisplaySmallNumber(s32 xPos, s32 yPos, s32 number) {
     Lib_TextureRect_IA8(&gMasterDisp, sSmallNumberTex[number / place], 16, 8, xPos, yPos, 1.0f, 1.0f);
 }
 
-char sSmallChars[] = " ABCDEFGHIJKLMNOPQRSTUVWXYZ!:-.0123456789";
+char sSmallChars[] = " ABCDEFGHIJKLMNOPQRSTUVWXYZ!:-._0123456789";
 char sLargeChars[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ. 0123456789st-";
 u8 sLargeCharWidths[] = { 15, 14, 14, 13, 13, 13, 14, 14, 5,  12, 14, 12, 16, 14, 15, 13, 16, 14, 13, 13, 13,
                           16, 17, 17, 16, 13, 5,  16, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 10, 9,  14, 0 };
@@ -843,9 +843,9 @@ u8* sSmallCharTex[] = { NULL,           aSmallText_A, aSmallText_B,         aSma
                         aSmallText_o_,  aSmallText_p, aSmallText_q,         aSmallText_r,     aSmallText_s,
                         aSmallText_T,   aSmallText_U, aSmallText_V,         aSmallText_W,     aSmallText_X,
                         aSmallText_Y,   aSmallText_Z, aSmallTextExclamMark, aSmallText_COLON, aSmallText_HYPHEN,
-                        aSmallText_DOT, aSmallText_0, aSmallText_1,         aSmallText_2,     aSmallText_3,
-                        aSmallText_4,   aSmallText_5, aSmallText_6,         aSmallText_7,     aSmallText_8,
-                        aSmallText_9 };
+                        aSmallText_DOT, NULL,         aSmallText_0,         aSmallText_1,     aSmallText_2,
+                        aSmallText_3,   aSmallText_4, aSmallText_5,         aSmallText_6,     aSmallText_7,
+                        aSmallText_8,   aSmallText_9 };
 
 void Graphics_DisplayLargeText(s32 xPos, s32 yPos, f32 xScale, f32 yScale, char* text) {
     u32 charIndex;
@@ -859,7 +859,7 @@ void Graphics_DisplayLargeText(s32 xPos, s32 yPos, f32 xScale, f32 yScale, char*
         while ((charIndex < ARRAY_COUNT(sLargeChars)) && sLargeChars[charIndex] != text[0]) {
             charIndex++;
         }
-        if (sLargeChars[charIndex] == text[0]) {
+        if ((charIndex < ARRAY_COUNT(sLargeChars)) && (sLargeChars[charIndex] == text[0])) {
             if ((startPrint == true) && (text[-1] == 'Y') && (text[0] == 'A')) {
                 xPosCurrent -= 3.0f;
             }
@@ -990,7 +990,7 @@ s32 Graphics_GetLargeTextWidth(char* text) {
         while ((charIndex < ARRAY_COUNT(sLargeChars)) && sLargeChars[charIndex] != text[0]) {
             charIndex++;
         }
-        if (sLargeChars[charIndex] == text[0]) {
+        if ((charIndex < ARRAY_COUNT(sLargeChars)) && (sLargeChars[charIndex] == text[0])) {
             if ((startPrint == true) && (text[-1] == 'Y') && (text[0] == 'A')) {
                 xPos -= 3.0f;
             }
@@ -1131,10 +1131,10 @@ void Graphics_DisplaySmallText(s32 xPos, s32 yPos, f32 xScale, f32 yScale, char*
         while ((var_t0 < ARRAY_COUNT(sSmallChars)) && sSmallChars[var_t0] != text[0]) {
             var_t0++;
         }
-        if (sSmallChars[var_t0] == text[0]) {
+        if ((var_t0 < ARRAY_COUNT(sSmallChars)) && (sSmallChars[var_t0] == text[0])) {
             if (sSmallCharTex[var_t0] != NULL) {
                 width = 8;
-                if (var_t0 > 30) {
+                if (var_t0 > 31) {
                     width = 16;
                 }
                 Lib_TextureRect_IA8(&gMasterDisp, sSmallCharTex[var_t0], width, 8, xPosCurrent, yPos, xScale, yScale);
@@ -1170,7 +1170,7 @@ s32 Graphics_GetSmallTextWidth(char* text) {
         while ((charIndex < ARRAY_COUNT(sSmallChars)) && sSmallChars[charIndex] != text[0]) {
             charIndex++;
         }
-        if (sSmallChars[charIndex] == text[0]) {
+        if ((charIndex < ARRAY_COUNT(sSmallChars)) && (sSmallChars[charIndex] == text[0])) {
             switch (text[0]) {
                 case '!':
                 case ':':

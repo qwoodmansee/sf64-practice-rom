@@ -1250,7 +1250,7 @@ void Aquas_BlueMarineShoot(Player* player) {
     Vec3f sp5C;
     Actor* actor;
 
-    if ((gPlayerShots[D_i3_801C4190[5] - 1].obj.status == SHOT_FREE) && (D_i3_801C4190[5] != 0)) {
+    if ((D_i3_801C4190[5] != 0) && (gPlayerShots[D_i3_801C4190[5] - 1].obj.status == SHOT_FREE)) {
         D_i3_801C41B8[21] = D_i3_801C41B8[22] = D_i3_801C41B8[23] = 0.0f;
         D_i3_801C4190[5] = D_i3_801C4190[3] = 0;
     }

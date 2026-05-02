@@ -1,0 +1,210 @@
+#!/usr/bin/env bash
+# Star Fox 64 Practice ROM — SummerCart64 dev loop.
+#
+# Usage:
+#   sc64dev               REPL: start SC64 server, numbered worktrees, press N to build+upload
+#   sc64dev build         one-shot: make practice (current worktree)
+#   sc64dev all           one-shot: build + upload (routes through server if one is running)
+#   sc64dev help          show this message
+#
+# The REPL starts sc64deployer server on SC64_SERVER_ADDR so the IS-Viewer
+# debug session and uploads share the cart without conflicts. On first launch,
+# restart your debug session using the address printed at startup:
+#   sc64deployer -r 127.0.0.1:9064 debug --isv 0x03FF0000
+#
+# Env (optional):
+#   SC64_SERVER_ADDR   server listen/connect address (default: 127.0.0.1:9064)
+#   SF64_REPO_ROOT     repo/worktree to use (skips discovery, one-shot only)
+#   SF64_ROM           .z64 path (default: <wt>/build/starfox64.us.rev1.uncompressed.z64)
+#   SC64_DEPLOYER      sc64deployer binary (default: from PATH)
+#   SF64_MAKE_JOBS     make -j (default: 4)
+
+set -euo pipefail
+
+MAIN_REPO="${HOME}/code/sf64-practice-rom"
+SC64_DEPLOYER="${SC64_DEPLOYER:-sc64deployer}"
+SF64_MAKE_JOBS="${SF64_MAKE_JOBS:-4}"
+SC64_SERVER_ADDR="${SC64_SERVER_ADDR:-127.0.0.1:9064}"
+DEFAULT_ROM_REL="build/starfox64.us.rev1.uncompressed.z64"
+
+die() { echo "sc64dev: $*" >&2; exit 1; }
+
+# Walk up from $1 looking for a Makefile that defines a `practice:` target.
+find_practice_repo() {
+  local d="$1"
+  while [[ -n "$d" && "$d" != "/" ]]; do
+    if [[ -f "$d/Makefile" ]] && grep -q '^practice:' "$d/Makefile" 2>/dev/null; then
+      echo "$d"; return 0
+    fi
+    d="$(dirname "$d")"
+  done
+  return 1
+}
+
+resolve_repo_root() {
+  if [[ -n "${SF64_REPO_ROOT:-}" ]]; then
+    [[ -f "${SF64_REPO_ROOT}/Makefile" ]] || die "SF64_REPO_ROOT '$SF64_REPO_ROOT' has no Makefile"
+    echo "${SF64_REPO_ROOT}"; return 0
+  fi
+  local r
+  r="$(find_practice_repo "$PWD" 2>/dev/null || true)"
+  if [[ -z "$r" ]]; then
+    r="$(find_practice_repo "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" 2>/dev/null || true)"
+  fi
+  [[ -n "$r" ]] || die "no SF64 practice repo found from cwd or script dir"
+  echo "$r"
+}
+
+worktree_label() {
+  local p="$1"
+  if [[ "$p" == "$MAIN_REPO" ]]; then
+    echo "main"
+  else
+    basename "$p"
+  fi
+}
+
+run_build() {
+  local wt="$1"
+  (cd "$wt" && make practice "-j${SF64_MAKE_JOBS}")
+}
+
+# run_upload <rom> [remote-addr]
+# Omit remote-addr to connect directly (bypasses server).
+run_upload() {
+  local rom="$1"
+  local remote="${2:-}"
+  command -v "$SC64_DEPLOYER" >/dev/null 2>&1 \
+    || die "'$SC64_DEPLOYER' not on PATH"
+  [[ -f "$rom" ]] || die "ROM not found: $rom"
+  if [[ -n "$remote" ]]; then
+    "$SC64_DEPLOYER" -r "$remote" upload --direct --reboot "$rom"
+  else
+    "$SC64_DEPLOYER" upload --direct --reboot "$rom"
+  fi
+}
+
+# Returns 0 if something is listening on the server address.
+server_ready() {
+  local addr="${1:-$SC64_SERVER_ADDR}"
+  local host="${addr%%:*}"
+  local port="${addr##*:}"
+  (echo >/dev/tcp/"$host"/"$port") 2>/dev/null
+}
+
+# Single-keystroke read, portable across bash/zsh.
+read_key() {
+  local k
+  if read -rsn1 k 2>/dev/null; then
+    REPLY="$k"; return 0
+  fi
+  read -sk1 k
+  REPLY="$k"
+}
+
+repl() {
+  local -a paths branches
+  local p="" b="" line
+  while IFS= read -r line; do
+    case "$line" in
+      "worktree "*) p="${line#worktree }" ; b="" ;;
+      "branch "*)   b="${line#branch refs/heads/}" ;;
+      "")
+        if [[ -n "$p" ]]; then
+          paths+=("$p")
+          branches+=("${b:-$(worktree_label "$p")}")
+          p="" ; b=""
+        fi
+        ;;
+    esac
+  done < <(git -C "$MAIN_REPO" worktree list --porcelain 2>/dev/null)
+  # flush last entry if porcelain output lacks trailing blank line
+  if [[ -n "$p" ]]; then
+    paths+=("$p")
+    branches+=("${b:-$(worktree_label "$p")}")
+  fi
+
+  (( ${#paths[@]} > 0 )) || die "no worktrees under $MAIN_REPO"
+
+  # Start server, or reuse one already running.
+  local server_pid=""
+  if server_ready "$SC64_SERVER_ADDR"; then
+    echo "sc64dev: server already running at $SC64_SERVER_ADDR"
+  else
+    "$SC64_DEPLOYER" server "$SC64_SERVER_ADDR" >/dev/null 2>&1 &
+    server_pid=$!
+    local i ready=0
+    for (( i=0; i<10; i++ )); do
+      sleep 0.2
+      if server_ready "$SC64_SERVER_ADDR"; then ready=1; break; fi
+    done
+    if (( !ready )); then
+      kill "$server_pid" 2>/dev/null || true
+      die "server failed to start — kill any direct debug session first, then retry"
+    fi
+    trap "kill ${server_pid} 2>/dev/null; trap - EXIT" EXIT
+  fi
+
+  echo "debug cmd: $SC64_DEPLOYER -r $SC64_SERVER_ADDR debug --isv 0x03FF0000"
+  echo ""
+
+  while true; do
+    local i
+    for (( i=0; i<${#paths[@]}; i++ )); do
+      printf "  %d) %s\n" "$((i+1))" "${branches[i]}"
+    done
+    printf "  q) quit\n"
+    printf "> "
+    read_key
+    local key="$REPLY"
+    if [[ "$key" =~ ^[1-9]$ ]] && (( key >= 1 && key <= ${#paths[@]} )); then
+      echo "$key"
+      local wt="${paths[$((key-1))]}"
+      local rom="${SF64_ROM:-$wt/$DEFAULT_ROM_REL}"
+      if run_build "$wt" && run_upload "$rom" "$SC64_SERVER_ADDR"; then
+        echo "ok — reset console"
+      fi
+    elif [[ "$key" == "q" || "$key" == $'\003' || "$key" == $'\004' || "$key" == "" ]]; then
+      echo "q"
+      break
+    else
+      echo "?  press 1-${#paths[@]}, q to quit"
+    fi
+  done
+}
+
+usage() {
+  sed -n '2,/^set -euo/p' "$0" | sed -e 's/^# \{0,1\}//' -e '/^set -euo/d'
+}
+
+cmd="${1:-}"
+
+case "$cmd" in
+  build)
+    REPO="$(resolve_repo_root)"
+    run_build "$REPO"
+    exit 0
+    ;;
+  all)
+    REPO="$(resolve_repo_root)"
+    ROM="${SF64_ROM:-${REPO}/${DEFAULT_ROM_REL}}"
+    run_build "$REPO"
+    if server_ready "$SC64_SERVER_ADDR"; then
+      run_upload "$ROM" "$SC64_SERVER_ADDR"
+    else
+      run_upload "$ROM"
+    fi
+    echo "ok — reset console"
+    exit 0
+    ;;
+  -h|--help|help)
+    usage
+    exit 0
+    ;;
+  "")
+    repl
+    ;;
+  *)
+    die "unknown command '$cmd' (try: sc64dev help)"
+    ;;
+esac

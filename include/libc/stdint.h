@@ -3,8 +3,15 @@
 
 #include "PR/ultratypes.h"
 
+#ifndef _INTPTR_T_DEFINED
 typedef s32 intptr_t;
+#define _INTPTR_T_DEFINED
+#endif
+
+#ifndef _UINTPTR_T_DEFINED
 typedef u32 uintptr_t;
+#define _UINTPTR_T_DEFINED
+#endif
 
 #define INT8_MIN    (-0x80)
 #define INT16_MIN   (-0x8000)
