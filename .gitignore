@@ -1,5 +1,9 @@
 asm
 expected
+# baserom is a per-developer symlink (or directory) into a local extract of
+# the original ROM data. It must never be tracked: in a worktree it is an
+# absolute path that breaks portability for other developers and CI.
+/baserom
 __pycache__
 .splat/
 starfox64.ld

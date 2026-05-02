@@ -77,8 +77,10 @@ iodev_result_t iodev_sd_acquire(void) {
     iodev_result_t r;
     if (!gIodevActive) iodev_detect();
     r = gIodevActive->sd_init();
-    if (r == IODEV_OK) {
-        sIodevSdInitResult = IODEV_OK;
-    }
+    /* Always overwrite the cached result. If we cached only successes, a
+     * failed re-acquire after a previous success would leave was_ok()
+     * returning true and let callers (diskio) skip re-init on a card the
+     * hardware no longer owns. */
+    sIodevSdInitResult = r;
     return r;
 }

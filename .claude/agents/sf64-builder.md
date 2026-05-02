@@ -24,8 +24,11 @@ You compile the SF64 practice ROM and report the result. That is your entire job
 
 2. Build:
    ```bash
-   make practice -j4 2>&1 | tail -30
+   set -o pipefail; make practice -j4 2>&1 | tail -30
    ```
+   `pipefail` is required: without it, the pipeline's exit status is just
+   `tail`'s, so `make` failures are reported as success. With `pipefail`,
+   `$?` reflects the build result while `tail` still trims the noise.
 
 3. Report:
 

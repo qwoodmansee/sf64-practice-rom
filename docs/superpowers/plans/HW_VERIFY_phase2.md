@@ -6,7 +6,7 @@
 
 - SC64 cart with `sc64deployer` configured (per Phase 1a workflow)
 - A FAT32-formatted SD card. **A scratch card is recommended** — Phase 2's
-  test writes a real file (`SF64TEST.TXT`, ~22 bytes) to the card root.
+  test writes a real file (`SF64TEST.TXT`, 21 bytes) to the card root.
   Any size up to 32 GB works (Phase 2 doesn't enable exFAT).
 
 ## Background
@@ -74,7 +74,7 @@ modes" below for triage hints.
 
 ## PASS criteria
 
-All four conditions must hold:
+All five conditions must hold:
 
 - [iodev] line: `cart=1 sd_init=0`
 - T7 mount: `fatfs_mount=0`

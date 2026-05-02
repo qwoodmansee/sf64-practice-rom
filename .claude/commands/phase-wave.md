@@ -16,13 +16,23 @@ Read the plan doc fully before doing anything else.
 
 ## Step 2 — Find the next wave
 
-Check recent commits to see which waves are already done:
+Determine the phase number from the plan filename (e.g.
+`2026-04-27-phase4-...md` → phase 4) and search the **entire** history of
+the current branch for matching wave commits — never a fixed last-N
+window. Once a phase has more than ~20 commits behind it, a `-20` cap will
+silently re-classify already-done waves as pending and re-run them.
 
 ```bash
-git log --oneline -20
+PHASE="<N>"  # e.g. 4
+git log --oneline --grep="Phase ${PHASE}" --grep="phase${PHASE}" \
+        --regexp-ignore-case --extended-regexp
 ```
 
-Match commit messages against the wave names in the plan (e.g. "Phase 4 Wave 1", "Phase 4 Wave 2.1"). The next wave is the lowest-numbered one with no matching commit.
+Match commit messages against the wave names in the plan (e.g. "Phase 4
+Wave 1", "Phase 4 Wave 2.1"). The next wave is the lowest-numbered one
+with no matching commit. If the plan uses a non-default commit-message
+convention, fall back to `git log --all --oneline | grep -iE "wave[ ._-]?N"`
+across the whole log.
 
 Report: "Found next wave: **Wave N.M — <title>**. Proceeding."
 

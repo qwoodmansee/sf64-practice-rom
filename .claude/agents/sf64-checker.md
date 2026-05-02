@@ -21,15 +21,25 @@ Expected: exit 0. On failure: report the exact failing check name and the grep p
 
 ### 2. Lib unit tests
 ```bash
-make -C lib test 2>&1 | tail -20
+set -o pipefail; make -C lib test 2>&1 | tail -20
 ```
-Expected: all tests pass. On failure: report which test failed.
+Expected: all tests pass and `$?` is 0. `pipefail` is mandatory: without it
+the pipeline only reflects `tail`'s exit code, so test failures look like
+success. On failure: report which test failed.
 
 ### 3. Build smoke
 ```bash
-make practice -j4 2>&1 | grep -E '^(src|lib|include)/.*error:|error:' | head -5
+set -o pipefail
+make practice -j4 > /tmp/sf64-build.log 2>&1
+build_status=$?
+grep -E '^(src|lib|include)/.*error:|error:' /tmp/sf64-build.log | head -5
+exit $build_status
 ```
-Expected: no output. On failure: report the first error line.
+Expected: `build_status == 0` and no error lines. Filtering `make` through
+`grep | head` would otherwise hide build failures whose error format
+doesn't match (linker errors, signal-killed jobs, missing rules) and
+return success even though the ROM didn't build. On failure: report the
+first error line and the non-zero `build_status`.
 
 ### 4. BizHawk functional tests (only if env var is set)
 ```bash

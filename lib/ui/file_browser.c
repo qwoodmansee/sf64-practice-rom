@@ -63,7 +63,16 @@ int file_browser_open(fb_mode_t mode, const char *dir, const char *suffix,
 
     while (gFileBrowser.count < FB_MAX_ENTRIES) {
         res = f_readdir(&fatdir, &fno);
-        if (res != FR_OK || fno.fname[0] == '\0') break;
+        if (res != FR_OK) {
+            /* Real I/O / FS error -- distinct from end-of-dir (FR_OK with
+             * empty fname). Don't silently truncate the listing and pretend
+             * we opened cleanly; surface the FRESULT so the caller can
+             * distinguish "empty directory" from "card went away mid-scan". */
+            f_closedir(&fatdir);
+            fb_zero();
+            return -(int)res;
+        }
+        if (fno.fname[0] == '\0') break; /* end of directory */
         if (fno.fattrib & AM_DIR) continue;
         if (!fb_suffix_match(fno.fname, gFileBrowser.suffix)) continue;
         fb_strncpy(gFileBrowser.names[gFileBrowser.count], fno.fname, FB_NAME_MAX);

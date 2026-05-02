@@ -26,15 +26,20 @@ Read `stick_x` (positive=right) and `stick_y` (positive=up) from held controller
 
 ```
 if abs(y)*100 > abs(x)*173:
-    y > 0 → UP (RESTART)
-    y < 0 → DOWN (LEVELS)
+    y >= 0 → UP (RESTART)
+    y <  0 → DOWN (LEVELS)
 else if x > 0:
-    y > 0 → UP-RIGHT (SAVE)
-    y < 0 → DOWN-RIGHT (LOAD)
+    y >= 0 → UP-RIGHT (SAVE)
+    y <  0 → DOWN-RIGHT (LOAD)
 else:
-    y > 0 → UP-LEFT (DISPLAY)
-    y < 0 → DOWN-LEFT (LOADOUT)
+    y >= 0 → UP-LEFT (DISPLAY)
+    y <  0 → DOWN-LEFT (LOADOUT)
 ```
+
+`y == 0` is bound to the upper slice in each pair so an exactly-horizontal
+stick still selects a valid sector. (Past the dead zone, `x == 0 && y == 0`
+is unreachable, so the strictly-greater dead-zone test above is what
+prevents a no-op pick at center.)
 
 ## Visual Layout (320x240 screen)
 

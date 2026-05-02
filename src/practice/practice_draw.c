@@ -73,6 +73,14 @@ void Practice_DrawFloat(s32 x, s32 y, f32 value, s32 decimals) {
         value = -value;
     }
 
+    /* Clamp to keep mult in s32 range and the formatted result inside buf[16]:
+     * worst case is "-99999." + decimals digits + '\0' = 8 + decimals bytes. */
+    if (decimals < 0) {
+        decimals = 0;
+    } else if (decimals > 6) {
+        decimals = 6;
+    }
+
     for (i = 0; i < decimals; i++) {
         mult *= 10;
     }

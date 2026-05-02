@@ -1,5 +1,5 @@
 ---
-description: Walk the 8-step checklist for adding a new practice feature to the SF64 ROM. Provide a feature name and description as arguments, e.g. /new-feature lag-counter "counts lag frames per level".
+description: Walk the 8-step checklist for adding a new practice feature to the SF64 ROM. Provide a feature name (snake_case) and description as arguments, e.g. /new-feature lag_counter "counts lag frames per level".
 ---
 
 Add a new practice feature following the CLAUDE.md checklist. Work through each step in order; do not skip or reorder.

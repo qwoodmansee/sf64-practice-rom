@@ -7,8 +7,12 @@ Print the hardware verification procedure for the current phase. No code changes
 ## Step 1 — Find the active phase plan
 
 ```bash
-ls -t docs/superpowers/plans/*.md | head -5
+ls -t docs/superpowers/plans/*.md 2>/dev/null | grep -v '/HW_VERIFY_' | head -5
 ```
+
+`HW_VERIFY_phase<N>.md` files in the same directory are *outputs* of this
+command, not plan inputs — exclude them so a freshly-generated verification
+log isn't misread as the active plan.
 
 Read the most recent plan doc (or the one passed as argument).
 

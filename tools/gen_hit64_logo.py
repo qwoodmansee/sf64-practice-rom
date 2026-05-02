@@ -33,6 +33,11 @@ def main():
     mask = (arr[:,:,0] > 30) | (arr[:,:,1] > 30) | (arr[:,:,2] > 30)
     row_has = np.any(mask, axis=1)
     col_has = np.any(mask, axis=0)
+    if not row_has.any() or not col_has.any():
+        print(f"Refusing to crop {SRC_PNG}: image has no non-black pixels "
+              f"above the threshold. Update HIT64.png with real logo content.",
+              file=sys.stderr)
+        sys.exit(1)
     rmin = int(np.where(row_has)[0][0])
     rmax = int(np.where(row_has)[0][-1])
     cmin = int(np.where(col_has)[0][0])

@@ -27,8 +27,8 @@ Only use: `Bash(git diff *)`, `Bash(grep *)`, `Read`
 
 | # | Check | Pattern to look for |
 |---|-------|-------------------|
-| 1 | `gPlayer` access guarded | Any `gPlayer[0]` must be preceded by `gPlayState != PLAY_UPDATE` guard |
-| 2 | Float-to-int cast safety | No `(s32)` or `(s16)` cast on a `f32` game state field without gPlayer guard |
+| 1 | `gPlayer` access guarded | Any `gPlayer[0]` access must be preceded by **both** `gGameState != GSTATE_PLAY` and `gPlayState != PLAY_UPDATE` early-returns. `gPlayState` alone is not sufficient: the engine sets `gGameState = GSTATE_PLAY` 3 frames before `Play_Init` allocates `gPlayer`, so the pointer is still NULL during that window. (See CLAUDE.md "gPlayer is a pointer, not an array".) |
+| 2 | Float-to-int cast safety | No `(s32)` or `(s16)` cast on an `f32` whose owning struct may be uninitialized — `gPlayer[0]` requires the gGameState+gPlayState guard above; other game-state floats need a comparable check that the producing system has run at least once. Converting a NaN/uninit float to int triggers a MIPS FP exception and freezes the N64. |
 | 3 | `bcopy` not `memcpy` | No `memcpy(` in `src/practice/` |
 | 4 | `#ifdef PRACTICE_ROM` wrap | Every new `.c` in `src/practice/` must open and close the guard |
 | 5 | Config field initialized | Every new `PracticeConfig` field must appear in `Practice_Init()` |
