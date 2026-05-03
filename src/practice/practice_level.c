@@ -55,6 +55,8 @@ static LevelEntry sLevelList[] = {
       { { "START", LEVEL_INVALID, 0 }, { "ANDROSS", LEVEL_VENOM_ANDROSS, 0 }, { "CP 1", LEVEL_INVALID, 0, 150379.9f } } },
     { "VENOM 2",  LEVEL_VENOM_2,  PLANET_VENOM,    7, 2,
       { { "START", LEVEL_INVALID, 0 }, { "GREAT FOX", LEVEL_INVALID, 2 } } },
+    { "BOSSES",   LEVEL_INVALID,  PLANET_CORNERIA, 8, 0,
+      { { "", LEVEL_INVALID, 0 } } },
 };
 
 #define LEVEL_COUNT (s32)(sizeof(sLevelList) / sizeof(sLevelList[0]))
@@ -155,6 +157,11 @@ void Practice_LevelSelect_OnEnter(void) {
     sBgmLastSpecPacked = 0xFFFF;
 }
 
+static bool IsBossTestEntry(s32 levelIndex) {
+    return (sLevelList[levelIndex].levelId == LEVEL_INVALID) &&
+           (sLevelList[levelIndex].phaseCount == 0);
+}
+
 void Practice_LevelSelect_Update(void) {
     OSContPad* press = &gControllerPress[gMainController];
     s32 phaseCount;
@@ -223,6 +230,10 @@ void Practice_LevelSelect_Update(void) {
     }
 
     if (press->button & A_BUTTON) {
+        if (IsBossTestEntry(sSelectedLevel)) {
+            /* Task 6 will replace this with Practice_BossTest_Launch dispatch. */
+            return;
+        }
         phase = &sLevelList[sSelectedLevel].phases[sSelectedPhase];
         levelId = (phase->levelId == LEVEL_INVALID) ? sLevelList[sSelectedLevel].levelId : phase->levelId;
         Practice_LaunchLevel(levelId, phase->phase, phase->checkpointProgress);
