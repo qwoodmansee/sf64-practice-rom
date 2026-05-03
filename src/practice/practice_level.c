@@ -24,7 +24,7 @@ typedef struct LevelEntry {
 
 static LevelEntry sLevelList[] = {
     { "CORNERIA", LEVEL_CORNERIA, PLANET_CORNERIA, 1, 2,
-      { { "START", LEVEL_INVALID, 0 }, { "CP 1", LEVEL_INVALID, 0, 93610.3f } } },
+      { { "START", LEVEL_INVALID, 0 }, { "CP 1", LEVEL_INVALID, 0, 90860.3f } } },
     { "METEO",    LEVEL_METEO,    PLANET_METEO,    2, 3,
       { { "START", LEVEL_INVALID, 0 }, { "WARP", LEVEL_INVALID, 1 }, { "CP 1", LEVEL_INVALID, 0, 223651.3f } } },
     { "SECTOR Y", LEVEL_SECTOR_Y, PLANET_SECTOR_Y, 2, 2,

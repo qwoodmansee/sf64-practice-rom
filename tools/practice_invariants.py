@@ -117,6 +117,7 @@ def check_engine_hooks():
         (PRACTICE_MAIN_INIT, "Practice_ChargeMeter_Draw", "Practice_ChargeMeter_Draw must be called from practice_main.c Practice_Draw"),
         (PRACTICE_MAIN_INIT, "Practice_Cheats_Apply", "Practice_Cheats_Apply must be called from practice_main.c Practice_Update"),
         (FOX_PLAY, "gPracticeCheckpointProgress", "gPracticeCheckpointProgress checkpoint hook must exist in fox_play.c Player_Setup"),
+        (FOX_PLAY, "gLevelObjectInits[gCurrentLevel]", "checkpoint scan must use gLevelObjectInits[gCurrentLevel], not gLevelObjects (NULL on first boot)"),
         (FOX_DISPLAY, "Practice_Hitbox_Draw", "Practice_Hitbox_Draw() must be called from fox_display.c"),
         (FOX_DISPLAY, "Practice_FreeCam_IsActive", "Practice_FreeCam_IsActive() hook must exist in fox_display.c"),
         (FOX_DISPLAY, "Practice_FreeCam_GetView", "Practice_FreeCam_GetView() hook must exist in fox_display.c"),
@@ -1353,6 +1354,20 @@ def check_hit64_logo():
         error(f"{INCLUDE_PRACTICE}: Practice_Logo_Draw not declared")
 
 
+def check_minimap_boss():
+    """Minimap must iterate gBosses and distinguish Great Fox from enemy bosses."""
+    minimap_c = os.path.join(SRC_PRACTICE, "practice_minimap.c")
+    src = read(minimap_c)
+    if "gBosses" not in src:
+        error(f"{minimap_c}: gBosses not iterated - boss will never appear on minimap")
+    if "OBJ_BOSS_SZ_GREAT_FOX" not in src:
+        error(f"{minimap_c}: OBJ_BOSS_SZ_GREAT_FOX not handled - Great Fox needs distinct color from enemy bosses")
+    if "boss->obj.rot.y + 180.0f" not in src:
+        error(f"{minimap_c}: boss heading missing +180 offset - boss rot.y=0 faces +Z (opposite actor convention)")
+    if 'Minimap_FloatValid(&boss->obj.rot.y)' not in src:
+        error(f"{minimap_c}: boss rot.y not NaN-guarded - SIN_DEG on a NaN freezes the N64")
+
+
 def check_build_info():
     """Build hash header is generated and included in the level-select draw path."""
     gen_script = os.path.join("tools", "gen_build_info.py")
@@ -1446,6 +1461,7 @@ def main():
     check_cs_tap_slot_baseline()
     check_hit64_logo()
     check_owl_logo()
+    check_minimap_boss()
     check_build_info()
 
     if errors:
