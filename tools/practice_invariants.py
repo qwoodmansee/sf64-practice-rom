@@ -1360,6 +1360,27 @@ def check_build_info():
         error(".gitignore: practice_build_info.h not gitignored (generated file)")
 
 
+def check_cs_tap_slot_baseline():
+    """CS TAP timing must use slot-aware baseline for unlocked shots.
+
+    After firing a charge shot, the code must begin polling gPlayerShots[14]
+    until it is fireable again (sShotSlotFreeFrame / sTrackingSlot), and use
+    that frame as the baseline when it is later than sChargeReadyFrame.
+    This prevents blaming the player for frames they could not have fired.
+    """
+    cs = os.path.join("src", "practice", "practice_charge_shot.c")
+    src = read(cs)
+
+    if "sShotSlotFreeFrame" not in src:
+        error(f"{cs}: sShotSlotFreeFrame missing — slot-aware baseline removed")
+    if "sTrackingSlot" not in src:
+        error(f"{cs}: sTrackingSlot missing — slot tracking state removed")
+    if "effectiveBaseline" not in src:
+        error(f"{cs}: effectiveBaseline missing — slot-aware formula removed")
+    if "gPlayerShots[14]" not in src:
+        error(f"{cs}: gPlayerShots[14] poll missing from Practice_ChargeAssist_LockOnBegin")
+
+
 def main():
     check_config_inits()
     check_function_definitions()
@@ -1401,6 +1422,7 @@ def main():
     check_sd_save_implemented()
     check_sd_load_implemented()
     check_sd_per_op_release()
+    check_cs_tap_slot_baseline()
     check_hit64_logo()
     check_owl_logo()
     check_build_info()

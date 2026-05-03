@@ -14,6 +14,8 @@
 #define CHARGE_TIMING_DISPLAY_FRAMES 90
 
 static s32 sChargeReadyFrame = -1;
+static s32 sShotSlotFreeFrame = -1; /* first frame slot 14 is fireable after last CS */
+static bool sTrackingSlot = false;  /* true = actively polling slot availability */
 static s32 sTimingShowFrames = 0;
 static s32 sTimingValue = 0; /* early: negative count; late/perfect: nonnegative frame offset */
 static bool sTimingIsEarly = false;
@@ -38,6 +40,8 @@ static void Practice_ChargeAssist_ResetAutoState(void) {
 
 void Practice_ChargeAssist_Reset(void) {
     sChargeReadyFrame = -1;
+    sShotSlotFreeFrame = -1;
+    sTrackingSlot = false;
     sTimingShowFrames = 0;
     sTimingValue = 0;
     sTimingIsEarly = false;
@@ -50,6 +54,16 @@ void Practice_ChargeAssist_LockOnBegin(Player* player) {
     }
     if (!Practice_ChargeAssist_PlayerOk(player)) {
         return;
+    }
+
+    if (sTrackingSlot) {
+        PlayerShot* slot = &gPlayerShots[14];
+        if ((slot->obj.status == SHOT_FREE) ||
+            (slot->obj.id != PLAYERSHOT_LOCK_ON) ||
+            ((slot->obj.id == PLAYERSHOT_LOCK_ON) && (slot->scale > 1.0f))) {
+            sShotSlotFreeFrame = gGameFrameCount;
+            sTrackingSlot = false;
+        }
     }
 
     if (gChargeTimers[0] < 10) {
@@ -99,6 +113,8 @@ void Practice_ChargeAssist_OnChargeShotFired(Player* player) {
 
     if (!gPracticeConfig.showChargeShotMeter) {
         sChargeReadyFrame = -1;
+        sShotSlotFreeFrame = -1;
+        sTrackingSlot = false;
         return;
     }
     if (!Practice_ChargeAssist_PlayerOk(player)) {
@@ -106,7 +122,11 @@ void Practice_ChargeAssist_OnChargeShotFired(Player* player) {
     }
 
     if (sChargeReadyFrame >= 0) {
-        late = gGameFrameCount - sChargeReadyFrame - 2;
+        s32 effectiveBaseline = sChargeReadyFrame;
+        if (sShotSlotFreeFrame >= 0 && sShotSlotFreeFrame > sChargeReadyFrame) {
+            effectiveBaseline = sShotSlotFreeFrame;
+        }
+        late = gGameFrameCount - effectiveBaseline - 2;
         if (late < 0) {
             late = 0;
         }
@@ -115,6 +135,9 @@ void Practice_ChargeAssist_OnChargeShotFired(Player* player) {
         sTimingShowFrames = CHARGE_TIMING_DISPLAY_FRAMES;
     }
     sChargeReadyFrame = -1;
+
+    sShotSlotFreeFrame = -1;
+    sTrackingSlot = true;
 }
 
 void Practice_ChargeAssist_OnChargeShotBlocked(Player* player) {
@@ -133,6 +156,8 @@ void Practice_ChargeAssist_OnChargeShotEarlyReset(Player* player, s32 timerBefor
 
     if (!gPracticeConfig.showChargeShotMeter) {
         sChargeReadyFrame = -1;
+        sShotSlotFreeFrame = -1;
+        sTrackingSlot = false;
         return;
     }
     if (!Practice_ChargeAssist_PlayerOk(player)) {
@@ -149,6 +174,8 @@ void Practice_ChargeAssist_OnChargeShotEarlyReset(Player* player, s32 timerBefor
         sTimingShowFrames = CHARGE_TIMING_DISPLAY_FRAMES;
     }
     sChargeReadyFrame = -1;
+    sShotSlotFreeFrame = -1;
+    sTrackingSlot = false;
 }
 
 void Practice_ChargeAssist_PostChargeInc(Player* player) {
