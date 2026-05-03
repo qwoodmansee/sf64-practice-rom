@@ -12,6 +12,13 @@ typedef struct {
     bool forceCarrier;
 } BossEntry;
 
+/* Known limitation (inherited from Practice_LaunchLevel checkpoint warp,
+ * not specific to boss-test): on the FIRST gameplay entry after boot,
+ * late-level assets (ground, BGM banks, etc.) may not be primed yet, so
+ * the warp can render with missing ground or no music. Going to the
+ * menu and reloading clears it. Reproduces with CORNERIA -> CP 1 too,
+ * so it's a baseline checkpoint-warp issue, not a boss-test regression. */
+
 /* warpProgress: OBJ_BOSS_CO_CARRIER has TWO spawn entries in
  * aCoOnRailsLevelObjects. ObjectInit fields (per sf64object.h) are
  * { zPos1, zPos2, xPos, yPos, rot, id }, so for entry 2:
