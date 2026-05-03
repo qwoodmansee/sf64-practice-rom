@@ -4610,6 +4610,18 @@ void Player_Setup(Player* playerx) {
     gPathProgress = player->zPath = gSavedPathProgress;
     player->pos.z = player->trueZpos = -player->zPath;
 
+#ifdef PRACTICE_ROM
+    /* Boss-test Carrier warp: force player onto the Falco-shortcut x-lane so
+     * Corneria_CoCarrier_Init's player-relative positioning lands the boss in
+     * the carrier-path geometry (xPos ~1118 from aCoOnRailsLevelObjects entry
+     * for OBJ_BOSS_CO_CARRIER). Without this, xPath stays 0 and the carrier
+     * spawns in Granga's main-path area. */
+    if (gPracticeForceCarrier) {
+        player->xPath = player->xPathTarget = 1118.0f;
+        player->pos.x = 1118.0f;
+    }
+#endif
+
     if ((gSavedObjectLoadIndex > 0) && (gLevelMode == LEVELMODE_ON_RAILS)) {
         if (gCurrentLevel == LEVEL_MACBETH) {
             sp2E = gObjectLoadIndex;

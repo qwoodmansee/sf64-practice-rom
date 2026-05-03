@@ -14,9 +14,11 @@ typedef struct {
 
 /* warpProgress: OBJ_BOSS_CO_CARRIER spawns at zPos1=163074.7f
  * (ast_corneria.c aCoOnRailsLevelObjects entry 9356).
- * Warp 6000 units before spawn so player sees ~1.5s of run-up corridor. */
+ * Warp ~2000 units before spawn for a quick run-up; the xPath override in
+ * Play_Init places the player on the Falco-shortcut lane so the boss
+ * positioning math lands in the right geometry. */
 static BossEntry sBossList[] = {
-    { "CARRIER", LEVEL_CORNERIA, 0, 157074.7f, true },
+    { "CARRIER", LEVEL_CORNERIA, 0, 161000.0f, true },
 };
 
 #define BOSS_COUNT ARRAY_COUNT(sBossList)
