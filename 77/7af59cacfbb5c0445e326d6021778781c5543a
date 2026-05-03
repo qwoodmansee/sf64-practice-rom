@@ -1,0 +1,25 @@
+tests/dtm_generator.py
+  e5e3e48a57a25747 32,37-38,41,43,98-117
+tests/test_e2e_levels.py
+  e5e3e48a57a25747 40-43,47,51
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "777af59cacfbb5c0445e326d6021778781c5543a",
+  "prompts": {
+    "e5e3e48a57a25747": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f593e690-d2c0-4827-b869-5f4630fa8325",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 34,
+      "total_deletions": 35,
+      "accepted_lines": 34,
+      "overriden_lines": 0
+    }
+  }
+}
