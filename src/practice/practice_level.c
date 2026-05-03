@@ -204,18 +204,36 @@ void Practice_LevelSelect_Update(void) {
         sSelectedPhase = 0;
     }
 
-    phaseCount = sLevelList[sSelectedLevel].phaseCount;
-    if (phaseCount > 1) {
-        if (press->button & L_JPAD) {
-            sSelectedPhase--;
-            if (sSelectedPhase < 0) {
-                sSelectedPhase = phaseCount - 1;
+    if (IsBossTestEntry(sSelectedLevel)) {
+        s32 bossCount = Practice_BossTest_GetCount();
+        if (bossCount > 0) {
+            if (press->button & L_JPAD) {
+                sSelectedPhase--;
+                if (sSelectedPhase < 0) {
+                    sSelectedPhase = bossCount - 1;
+                }
+            }
+            if (press->button & R_JPAD) {
+                sSelectedPhase++;
+                if (sSelectedPhase >= bossCount) {
+                    sSelectedPhase = 0;
+                }
             }
         }
-        if (press->button & R_JPAD) {
-            sSelectedPhase++;
-            if (sSelectedPhase >= phaseCount) {
-                sSelectedPhase = 0;
+    } else {
+        phaseCount = sLevelList[sSelectedLevel].phaseCount;
+        if (phaseCount > 1) {
+            if (press->button & L_JPAD) {
+                sSelectedPhase--;
+                if (sSelectedPhase < 0) {
+                    sSelectedPhase = phaseCount - 1;
+                }
+            }
+            if (press->button & R_JPAD) {
+                sSelectedPhase++;
+                if (sSelectedPhase >= phaseCount) {
+                    sSelectedPhase = 0;
+                }
             }
         }
     }
