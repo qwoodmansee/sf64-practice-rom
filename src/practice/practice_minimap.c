@@ -86,9 +86,11 @@ static void Minimap_DrawTriangle(s32 cx, s32 cy, f32 heading_deg, u8 r, u8 g, u8
     Minimap_FillTriangle(ax, ay, blx, bly, brx, bry, r, g, b);
 }
 
+
 void Practice_Minimap_Draw(void) {
     s32 i;
     Actor* actor;
+    Boss* boss;
     f32 halfSize;
     s32 sx, sy;
 
@@ -144,6 +146,28 @@ void Practice_Minimap_Draw(void) {
                 }
                 break;
             default: break;
+        }
+    }
+
+    /* Bosses: separate array from gActors, same Object layout */
+    for (i = 0, boss = &gBosses[0]; i < ARRAY_COUNT(gBosses); i++, boss++) {
+        if (boss->obj.status != OBJ_ACTIVE) continue;
+        if (!Minimap_FloatValid(&boss->obj.pos.x)) continue;
+        if (!Minimap_FloatValid(&boss->obj.pos.z)) continue;
+        if (!Minimap_FloatValid(&boss->obj.rot.y)) continue;
+        if (fabsf(boss->obj.pos.x) > halfSize * 1.1f) continue;
+        if (fabsf(boss->obj.pos.z) > halfSize * 1.1f) continue;
+
+        sx = Minimap_ToScreenX(boss->obj.pos.x, halfSize);
+        sy = Minimap_ToScreenZ(boss->obj.pos.z, halfSize);
+
+        if (boss->obj.id == OBJ_BOSS_SZ_GREAT_FOX) {
+            /* Great Fox is an ally being defended - cyan triangle.
+             * Boss rot.y=0 faces +Z (opposite actor convention), add 180. */
+            Minimap_DrawTriangle(sx, sy, boss->obj.rot.y + 180.0f, 0, 200, 255);
+        } else {
+            /* Enemy boss - red triangle */
+            Minimap_DrawTriangle(sx, sy, boss->obj.rot.y + 180.0f, 255, 60, 60);
         }
     }
 
