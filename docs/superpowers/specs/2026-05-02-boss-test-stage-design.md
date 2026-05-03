@@ -54,8 +54,11 @@ Symbols referenced by this spec:
     discriminator is `if (fabsf(gPlayer[0].xPath) < 1.0f)` — a player
     x-position check at the moment carrier-init fires. The "if" branch
     sets `sFightCarrier = false` (Granga path); the "else" branch sets
-    `sFightCarrier = true` (Carrier path). `sFightCarrier` is a
-    file-static `u8` declared in this same file.
+    `sFightCarrier = true` (Carrier path). `sFightCarrier` is declared
+    `u8 sFightCarrier;` at line 12 (extern linkage despite the `s`
+    naming-convention prefix; no `static` keyword), and is read at
+    line 1756 in `Corneria_CoCarrier_Update` to gate Carrier-only
+    behavior.
 - `include/sf64object.h` — `OBJ_BOSS_CO_CARRIER`, `CARRIER` enum, etc.
 - `include/context.h` — `gBosses[4]` array.
 
@@ -135,10 +138,14 @@ void Practice_BossTest_Launch(s32 index) {
    ```
 
    The `levelId == LEVEL_INVALID` and `phaseCount == 0` together act as a
-   sentinel. (`PLANET_CORNERIA` is a placeholder; the planet id is only
-   used by visual/audio code that won't fire for this entry. If audio
-   triggers at runtime, switch to a SAFE_NONE-style sentinel — see
-   Open Implementation Question 4.)
+   sentinel. Note: `LEVEL_INVALID` is already overloaded — it is also used
+   on `PhaseEntry.levelId` to mean "use the parent's `levelId`" (see
+   `practice_level.c:227`). The boss-test branch short-circuits before
+   that resolver runs, so the overload is harmless, but a future reader
+   could be confused. If this becomes a maintenance pain, replace with a
+   dedicated `bool isBossList` flag on `LevelEntry`. Not done now to keep
+   the diff minimal. (`PLANET_CORNERIA` is a placeholder; see Open
+   Implementation Question 4.)
 
 2. In `Practice_LevelSelect_Update`, treat the BOSSES entry as a special
    case for L/R and A:
@@ -197,10 +204,15 @@ practice-aware override:
 the Granga branch. The patched form here flips the polarity for clarity;
 implementation should match the existing structure.)
 
-`sFightCarrier` is a `u8` and remains `static` to `fox_co.c`. It is set
-only inside this init function; the `gPracticeForceCarrier` override
-ensures the same `sFightCarrier = true; ...` block runs that vanilla
-Carrier route runs.
+`sFightCarrier` is a `u8` with extern linkage (declared `u8 sFightCarrier;`
+at `fox_co.c:12`). It is set only inside this init function; the
+`gPracticeForceCarrier` override ensures the same `sFightCarrier = true; ...`
+block runs that the vanilla Carrier route runs. The else-branch at
+`fox_co.c:1673–1683` does non-trivial extra setup (`obj.rot.y = 180.0f`,
+`fwork[6] = 800.0f`, `fwork[7] = obj.pos.x`, `fwork[5] = 30.0f`,
+`swork[10] = 3`, `swork[8] = 3`, `obj.pos.z = gPlayer[0].trueZpos + 2000.0f`)
+that the implementer must NOT simplify away — the patch only changes the
+condition that selects this branch, not the branch contents.
 
 ### Modified: `include/practice.h`
 
@@ -320,6 +332,8 @@ Add a `check_boss_test()` function asserting:
 - `gPracticeForceCarrier = false` (or equivalent reset) appears in the
   non-boss A-press branch of `Practice_LevelSelect_Update`. (Grep for
   the line in `src/practice/practice_level.c`.)
+- `gPracticeForceCarrier = false` also appears in `Practice_Init` in
+  `src/practice/practice_main.c` (boot-time default).
 - `gPracticeForceCarrier` is NOT a field of `PracticeConfig` in
   `include/practice.h` (negative check — confirms runtime-only).
 
@@ -333,10 +347,12 @@ BizHawk Lua script that:
 3. Presses A.
 4. Advances frames until the Carrier boss spawns (poll `gBosses[CARRIER]`
    for non-zero `obj.id`, with a generous timeout — e.g., 600 frames).
-5. Asserts `gBosses[CARRIER].obj.id == OBJ_BOSS_CO_CARRIER` (i.e., the
+5. Asserts `gNextLevel == LEVEL_CORNERIA` (catches `sBossList[0].hostLevel`
+   regression).
+6. Asserts `gBosses[CARRIER].obj.id == OBJ_BOSS_CO_CARRIER` (i.e., the
    Carrier is loaded, not Granga; `OBJ_BOSS_CO_GRANGA` is the negative
    case).
-6. Bonus assertion: `sFightCarrier == 1` (cast `u8`).
+7. Asserts `sFightCarrier == 1`.
 
 Symbols needed in `tools/extract_symbols.py`:
 
@@ -344,9 +360,8 @@ Symbols needed in `tools/extract_symbols.py`:
 - `Boss` struct offset for `obj.id`.
 - `OBJ_BOSS_CO_CARRIER` and `OBJ_BOSS_CO_GRANGA` enum values.
 - `gPracticeForceCarrier` address.
-- `sFightCarrier` address (file-static; may need an explicit symbol
-  emission tweak if the linker map omits statics — fallback is to drop
-  the bonus assertion).
+- `sFightCarrier` address (extern global, will appear in
+  `build/starfox64.us.rev1.map`).
 
 ## Out of Scope (Future Work)
 
