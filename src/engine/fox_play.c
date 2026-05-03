@@ -4587,9 +4587,17 @@ void Player_Setup(Player* playerx) {
     gMissedZoSearchlight = gSavedZoSearchlightStatus;
 #ifdef PRACTICE_ROM
     if (gLevelMode == LEVELMODE_ON_RAILS && gPracticeCheckpointProgress > 0.0f) {
+        /* gLevelObjects is set lazily in PLAYERSTATE_ACTIVE (Object_LoadLevelObjects).
+         * On first boot it is NULL here in PLAYERSTATE_INIT, so fall back to the
+         * compile-time level table directly - same lookup the engine uses. */
+        ObjectInit* ckObjs = gLevelObjects;
         s32 ckIdx = 0;
-        while ((gLevelObjects != NULL) && (ckIdx < 10000) && (gLevelObjects[ckIdx].id > OBJ_INVALID) &&
-               (gLevelObjects[ckIdx].zPos1 <= gPracticeCheckpointProgress)) {
+        if (ckObjs == NULL && (u32)gCurrentLevel <= (u32)LEVEL_VERSUS &&
+            gLevelObjectInits[gCurrentLevel] != NULL) {
+            ckObjs = SEGMENTED_TO_VIRTUAL(gLevelObjectInits[gCurrentLevel]);
+        }
+        while ((ckObjs != NULL) && (ckIdx < 10000) && (ckObjs[ckIdx].id > OBJ_INVALID) &&
+               (ckObjs[ckIdx].zPos1 <= gPracticeCheckpointProgress)) {
             ckIdx++;
         }
         gSavedObjectLoadIndex = ckIdx;
