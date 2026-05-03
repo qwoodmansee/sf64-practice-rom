@@ -8,6 +8,9 @@
 #include "assets/ast_arwing.h"
 #include "assets/ast_corneria.h"
 #include "fox_co.h"
+#ifdef PRACTICE_ROM
+#include "practice.h"
+#endif
 
 u8 sFightCarrier;
 f32 sCoGrangaWork[68];
@@ -1665,7 +1668,11 @@ void Corneria_CoCarrier_Init(CoCarrier* this) {
     this->health = 601;
     this->fwork[18] = -gArwingSpeed - 10.0f;
 
+#ifdef PRACTICE_ROM
+    if (!gPracticeForceCarrier && (fabsf(gPlayer[0].xPath) < 1.0f)) {
+#else
     if (fabsf(gPlayer[0].xPath) < 1.0f) {
+#endif
         this->timer_05A = 30000;
         this->obj.pos.z = (gPlayer[0].cam.eye.z - gPathProgress) - 2000.0f;
         AUDIO_PLAY_SFX(NA_SE_A_CARRIER_ENGINE, this->sfxSource, 4);
