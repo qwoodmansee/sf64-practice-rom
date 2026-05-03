@@ -12,13 +12,15 @@ typedef struct {
     bool forceCarrier;
 } BossEntry;
 
-/* warpProgress: OBJ_BOSS_CO_CARRIER spawns at zPos1=163074.7f
- * (ast_corneria.c aCoOnRailsLevelObjects entry 9356).
+/* warpProgress: OBJ_BOSS_CO_CARRIER has TWO spawn entries in
+ * aCoOnRailsLevelObjects: 163074.7f (xPos=1118, intro flyby seen on both
+ * paths) and 203017.9f (xPos=4000, the actual shortcut-path fight, after
+ * the waterfall and the path rejoin area). We target entry 2.
  * Warp ~2000 units before spawn for a quick run-up; the xPath override in
- * Play_Init places the player on the Falco-shortcut lane so the boss
- * positioning math lands in the right geometry. */
+ * Play_Init places the player on the shortcut lane (xPath ~= xPos of the
+ * boss entry) so the boss positioning math lands in the right geometry. */
 static BossEntry sBossList[] = {
-    { "CARRIER", LEVEL_CORNERIA, 0, 161000.0f, true },
+    { "CARRIER", LEVEL_CORNERIA, 0, 201000.0f, true },
 };
 
 #define BOSS_COUNT ARRAY_COUNT(sBossList)
