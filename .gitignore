@@ -35,3 +35,8 @@ m2cfiles/
 TempComp.bin.mio0
 torch.hash.yml
 include/practice_build_info.h
+.DS_Store
+src/.DS_Store
+.claude/
+.worktrees/
+bin/
