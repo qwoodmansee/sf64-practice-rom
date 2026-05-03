@@ -1,0 +1,23 @@
+tests/dtm_generator.py
+  e5e3e48a57a25747 41,43,110,112-114
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "56b8e7ecd485c31204616dbfe2d6e1e9a6417e2d",
+  "prompts": {
+    "e5e3e48a57a25747": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f593e690-d2c0-4827-b869-5f4630fa8325",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 9,
+      "total_deletions": 9,
+      "accepted_lines": 22,
+      "overriden_lines": 0
+    }
+  }
+}
