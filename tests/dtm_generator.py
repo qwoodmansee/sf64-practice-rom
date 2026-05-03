@@ -38,9 +38,9 @@ class DTMGenerator:
             stick_y: Analog stick Y (-128..127, 0 is center)
 
         Returns:
-            4 bytes of controller state (M64 format: 2-byte buttons big-endian, signed X, signed Y)
+            4 bytes of controller state (M64 format: 2-byte buttons little-endian, signed X, signed Y)
         """
-        return struct.pack('>H', buttons) + struct.pack('bb', stick_x, stick_y)
+        return struct.pack('<H', buttons) + struct.pack('bb', stick_x, stick_y)
 
     def generate_level_test(self, level_num, frames_per_level=600):
         """Generate a DTM that tests entering a specific level.
@@ -107,11 +107,11 @@ class DTMGenerator:
             struct.pack_into('<I', header, 0x018, len(frames))        # input sample count
             struct.pack_into('<H', header, 0x01C, 2)                  # start type: 2 = power-on
             struct.pack_into('<I', header, 0x020, 0x0001)             # controller flags: P1 present
-            # 0x100: ROM internal name (192 bytes, null-padded)
+            # 0x0C4: ROM internal name (32 bytes, null-padded)
             rom_name = b'Star Fox 64'
-            struct.pack_into('192s', header, 0x100, rom_name.ljust(192, b'\x00'))
-            # 0x1C4: country code ('E' = US NTSC)
-            struct.pack_into('<H', header, 0x1C4, 0x45)
+            struct.pack_into('32s', header, 0x0C4, rom_name.ljust(32, b'\x00'))
+            # 0x0E8: country code ('E' = US NTSC)
+            struct.pack_into('<H', header, 0x0E8, 0x45)
             f.write(bytes(header))
 
             # Write all input frames (4 bytes each)
