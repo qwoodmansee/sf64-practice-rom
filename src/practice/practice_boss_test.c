@@ -12,9 +12,11 @@ typedef struct {
     bool forceCarrier;
 } BossEntry;
 
-/* warpProgress is a placeholder; Task 8 fills in the verified value. */
+/* warpProgress: OBJ_BOSS_CO_CARRIER spawns at zPos1=163074.7f
+ * (ast_corneria.c aCoOnRailsLevelObjects entry 9356).
+ * Warp 6000 units before spawn so player sees ~1.5s of run-up corridor. */
 static BossEntry sBossList[] = {
-    { "CARRIER", LEVEL_CORNERIA, 0, 145000.0f, true },
+    { "CARRIER", LEVEL_CORNERIA, 0, 157074.7f, true },
 };
 
 #define BOSS_COUNT ARRAY_COUNT(sBossList)
