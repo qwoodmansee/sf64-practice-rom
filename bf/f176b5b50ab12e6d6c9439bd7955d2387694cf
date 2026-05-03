@@ -1,0 +1,23 @@
+docs/superpowers/specs/2026-05-02-boss-test-stage-design.md
+  aec6acbaf991dad6 1-234
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "bff176b5b50ab12e6d6c9439bd7955d2387694cf",
+  "prompts": {
+    "aec6acbaf991dad6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a736df88-f3c9-4786-a14f-8aaf1c1fd136",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 234,
+      "total_deletions": 0,
+      "accepted_lines": 234,
+      "overriden_lines": 0
+    }
+  }
+}
