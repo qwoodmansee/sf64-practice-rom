@@ -1,0 +1,9 @@
+tests/dtm_generator.py
+  059542250aebf848 1-16,21-73,76-78,81-137
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "7502237e6edcff9837937438aca1f8bbf8a5e76b",
+  "prompts": {}
+}
