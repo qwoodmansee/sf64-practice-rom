@@ -25,10 +25,19 @@ If any of these fail, fix them before continuing — do not start implementation
 ## Critical Project Conventions (from CLAUDE.md)
 
 - **NEVER run `make clean` or `make init`** — they delete generated asset headers that take ~10 minutes to regenerate.
+- **NEVER use `git commit --no-verify`.** The pre-commit hook (invariants → build → tests) is the safety net. Plan task ordering must keep every commit green.
 - All practice code is wrapped in `#ifdef PRACTICE_ROM`. Engine hooks live inside an `#ifdef PRACTICE_ROM` block.
-- `gPlayer` is a `Player*`, NULL until `gPlayState == PLAY_UPDATE`. Any read of `gPlayer[0].*` requires the guard from CLAUDE.md. (This plan does not read `gPlayer` from new practice code, but `Corneria_CoCarrier_Init` already runs after the engine has set `gPlayer` up — no extra guard needed in the engine-hook patch.)
+- `gPlayer` is a `Player*`, NULL until `gPlayState == PLAY_UPDATE`. The engine's `Corneria_CoCarrier_Init` is called *after* gameplay is active, so the `gPlayer[0].xPath` read at line 1668 is already safe — our patch only changes the condition that selects the branch, not the `gPlayer` read.
 - `make practice -j4`, never plain `make`.
-- The pre-commit hook runs invariants + build + functional tests automatically. Do **not** use `--no-verify`.
+
+## Ordering Strategy (Why It Matters)
+
+Static invariants and the pre-commit hook block any commit that fails them. The new invariant we add (`check_boss_test`) references symbols and source patches that don't exist yet at the start of the work. So we add the invariant **last** — once every target it references is already present in the tree. Every intermediate commit must be green under the *current* invariant set.
+
+Tasks are ordered so each commit:
+1. Compiles cleanly (`make practice -j4`).
+2. Passes the existing invariants.
+3. Either is functionally inert (a pure addition guarded by sentinels nothing reads yet) OR is wired up enough that the existing tests still pass.
 
 ## File Structure
 
@@ -37,108 +46,27 @@ If any of these fail, fix them before continuing — do not start implementation
 | `src/practice/practice_boss_test.c` | Create | Owns `sBossList[]` and `gPracticeForceCarrier`; exposes `Practice_BossTest_*` API |
 | `include/practice.h` | Modify | Declare `gPracticeForceCarrier` + 3 new functions |
 | `src/practice/practice_main.c` | Modify | Reset `gPracticeForceCarrier` in `Practice_Init` |
-| `src/practice/practice_level.c` | Modify | Append BOSSES entry to `sLevelList`; route L/R + A through boss-test path; render boss name in phase slot |
+| `src/practice/practice_level.c` | Modify | Append BOSSES entry; route L/R + A through boss-test path; render boss name in phase slot |
 | `src/overlays/ovl_i1/fox_co.c` | Modify | Override `xPath` discriminator in `Corneria_CoCarrier_Init` when flag set |
 | `tools/patch_linker_script.py` | Modify | Add `practice_boss_test` to `PRACTICE_OBJS` |
-| `tools/practice_invariants.py` | Modify | Add `check_boss_test()` invariant |
-| `tools/extract_symbols.py` | Modify | Add `gBosses`-already-present, `sFightCarrier`, `gPracticeForceCarrier` symbols + boss obj.id offset |
-| `tests/test_boss_test_carrier.lua` | Create | Functional test: navigate to BOSSES → A → assert Carrier spawned |
+| `tools/practice_invariants.py` | Modify | Add `check_boss_test()` invariant (LAST) |
+| `tools/extract_symbols.py` | Modify | Add `sFightCarrier`, `gPracticeForceCarrier`, `BOSS_OFFSETS` |
+| `tests/test_boss_test_carrier.lua` | Create | Functional test |
 
-`gBosses` is already in `SYMBOLS`; verify before adding. `Boss` struct offset for `obj.id` and the `OBJ_BOSS_CO_CARRIER` enum value need to be exposed to the Lua test.
-
----
-
-## Task 1: Add static invariant for boss-test files
-
-Tests-first. We add a `check_boss_test()` invariant that asserts the new file exists, the linker registration is present, the engine hook references the flag, and `Practice_Init` resets the flag. We expect this to FAIL initially.
-
-**Files:**
-- Modify: `tools/practice_invariants.py` (append a new check function and register it in `main()`)
-
-- [ ] **Step 1.1: Read existing invariant patterns**
-
-Run: `grep -n "def check_" tools/practice_invariants.py | head -10`
-Read one example (e.g., `check_engine_hooks`) to match style. Reuse helpers like `read_text(path)`, `fail(msg)`.
-
-- [ ] **Step 1.2: Add `check_boss_test()` to `tools/practice_invariants.py`**
-
-Append a new function (placement: after the last `check_*` function but before `main`). Match the style of neighboring checks (return failure list, use `fail()`):
-
-```python
-def check_boss_test():
-    """Boss-test feature: file exists, flag is wired, reset paths are present."""
-    failures = []
-
-    boss_test_path = "src/practice/practice_boss_test.c"
-    if not os.path.isfile(boss_test_path):
-        failures.append(f"Boss-test source missing: {boss_test_path}")
-        return failures
-
-    boss_test_src = read_text(boss_test_path)
-    fox_co_src    = read_text("src/overlays/ovl_i1/fox_co.c")
-    practice_h    = read_text("include/practice.h")
-    main_src      = read_text("src/practice/practice_main.c")
-    level_src     = read_text("src/practice/practice_level.c")
-    patch_src     = read_text("tools/patch_linker_script.py")
-
-    if "gPracticeForceCarrier" not in boss_test_src:
-        failures.append("practice_boss_test.c missing gPracticeForceCarrier")
-    if "gPracticeForceCarrier" not in fox_co_src:
-        failures.append("fox_co.c missing gPracticeForceCarrier override")
-    if "Practice_BossTest_Launch" not in practice_h:
-        failures.append("practice.h missing Practice_BossTest_Launch declaration")
-    if "Practice_BossTest_Launch" not in boss_test_src:
-        failures.append("practice_boss_test.c missing Practice_BossTest_Launch definition")
-    if "gPracticeForceCarrier = false" not in main_src:
-        failures.append("Practice_Init missing gPracticeForceCarrier reset")
-    if "gPracticeForceCarrier = false" not in level_src:
-        failures.append("Practice_LevelSelect_Update missing gPracticeForceCarrier reset on non-boss A-press")
-    if '"practice_boss_test"' not in patch_src:
-        failures.append("tools/patch_linker_script.py missing practice_boss_test in PRACTICE_OBJS")
-
-    # Negative check: gPracticeForceCarrier must NOT be a PracticeConfig field (runtime only)
-    config_block_match = re.search(r"typedef struct\s+PracticeConfig\s*{(.+?)}\s*PracticeConfig",
-                                    practice_h, re.S)
-    if config_block_match and "gPracticeForceCarrier" in config_block_match.group(1):
-        failures.append("gPracticeForceCarrier must not be a PracticeConfig field (runtime-only state)")
-
-    return failures
-```
-
-Then in `main()` (or wherever the check list is built), register it. Look for the existing pattern — most likely a list of `(name, fn)` pairs; append `("boss test", check_boss_test)`.
-
-- [ ] **Step 1.3: Run the invariants and verify they fail with the expected message**
-
-Run: `python3 tools/practice_invariants.py`
-Expected: non-zero exit, error mentioning `practice_boss_test.c` missing.
-
-- [ ] **Step 1.4: Commit**
-
-```bash
-git add tools/practice_invariants.py
-git commit -m "test(boss-test): add failing static invariant"
-```
-
-Pre-commit hook will run the invariants and **fail** on this commit because the boss-test files don't exist yet. Use `git commit --no-verify` ONLY for this single commit, with an explicit note in the commit message — this is the rare case where TDD's "red" phase intentionally breaks the build:
-
-```bash
-git commit --no-verify -m "test(boss-test): add failing static invariant (TDD red phase)"
-```
-
-NOTE TO IMPLEMENTER: If the project policy disallows `--no-verify` even for TDD red phases, instead reorder Tasks 1 and 2 — create the empty stub file first so invariants pass when added. Confirm with the user before using `--no-verify`.
+`gBosses` is already in `tools/extract_symbols.py:36` — no need to add.
 
 ---
 
-## Task 2: Create the boss-test source file (stub)
+## Task 1: Scaffold `practice_boss_test.c`
 
-Make the failing invariant pass with the smallest possible content.
+Create the new source file with stub bodies. This is functionally inert (nothing calls into it yet) so the existing invariants and build still pass.
 
 **Files:**
 - Create: `src/practice/practice_boss_test.c`
 - Modify: `include/practice.h`
 - Modify: `tools/patch_linker_script.py`
 
-- [ ] **Step 2.1: Create `src/practice/practice_boss_test.c`**
+- [ ] **Step 1.1: Create `src/practice/practice_boss_test.c`**
 
 ```c
 #include "practice.h"
@@ -155,10 +83,9 @@ typedef struct {
     bool forceCarrier;
 } BossEntry;
 
-/* warpProgress is a placeholder; Task 6 fills it in once we measure the
- * Corneria progress at which the Carrier event fires. */
+/* warpProgress is a placeholder; Task 8 fills in the verified value. */
 static BossEntry sBossList[] = {
-    { "CARRIER", LEVEL_CORNERIA, 0, 100000.0f, true },
+    { "CARRIER", LEVEL_CORNERIA, 0, 145000.0f, true },
 };
 
 #define BOSS_COUNT ARRAY_COUNT(sBossList)
@@ -193,9 +120,9 @@ void Practice_BossTest_Launch(s32 index) {
 #endif
 ```
 
-- [ ] **Step 2.2: Add declarations to `include/practice.h`**
+- [ ] **Step 1.2: Add declarations to `include/practice.h`**
 
-Find an appropriate section (near other practice-feature function declarations — `grep -n "Practice_.*_Init\|Practice_.*_Launch\|Practice_LaunchLevel" include/practice.h` to locate). Add:
+Run: `grep -n "Practice_LaunchLevel\|extern\\b.*g[A-Z]" include/practice.h | head -10` to find an appropriate insertion point near other practice-feature declarations. Add:
 
 ```c
 extern bool gPracticeForceCarrier;
@@ -205,58 +132,98 @@ const char* Practice_BossTest_GetName(s32 index);
 void Practice_BossTest_Launch(s32 index);
 ```
 
-- [ ] **Step 2.3: Register the new object in `tools/patch_linker_script.py`**
+- [ ] **Step 1.3: Register the new object in `tools/patch_linker_script.py`**
 
-Find `PRACTICE_OBJS = [`. Append `"practice_boss_test",` at the end of the list (order matters per the comment, but appending preserves all existing anchors).
+Open `tools/patch_linker_script.py`, find the `PRACTICE_OBJS = [` list, append `"practice_boss_test",` at the end (after `"practice_sd"`).
 
-- [ ] **Step 2.4: Build and verify**
+- [ ] **Step 1.4: Build**
 
 Run: `make practice -j4`
-Expected: clean build. The new `.o` file appears at `build/src/practice/practice_boss_test.o`.
+Expected: clean build. The new `.o` appears at `build/src/practice/practice_boss_test.o`.
 
-If linker errors mention missing sections, the patch script needs to re-run. Run: `python3 tools/patch_linker_script.py` then rebuild.
+If the linker complains about missing sections for `practice_boss_test`, the patcher needs to inject it: re-run `python3 tools/patch_linker_script.py` then rebuild.
 
-- [ ] **Step 2.5: Run static invariants — most should now pass**
+- [ ] **Step 1.5: Run all existing invariants and tests**
 
 Run: `python3 tools/practice_invariants.py`
-Expected: still failing on the four checks that need fox_co.c, practice_main.c, and practice_level.c changes:
-- `fox_co.c missing gPracticeForceCarrier override`
-- `Practice_Init missing gPracticeForceCarrier reset`
-- `Practice_LevelSelect_Update missing gPracticeForceCarrier reset on non-boss A-press`
+Expected: PASS (no new invariant added yet).
 
-These are addressed in Tasks 3, 4, 5.
+Run: `python3 tools/run_tests.py` (if BizHawk available; otherwise skip).
+Expected: previously-green tests still pass.
 
-- [ ] **Step 2.6: Commit (skipping pre-commit if needed because invariants are still failing)**
+- [ ] **Step 1.6: Commit (full pre-commit hook MUST pass)**
 
-If invariants still red:
 ```bash
 git add src/practice/practice_boss_test.c include/practice.h tools/patch_linker_script.py
-git commit --no-verify -m "feat(boss-test): scaffold practice_boss_test.c (invariants still red)"
-```
+git commit -m "feat(boss-test): scaffold practice_boss_test.c
 
-Otherwise (invariants passed because Tasks 1 and 2 reordered):
-```bash
-git add src/practice/practice_boss_test.c include/practice.h tools/patch_linker_script.py
-git commit -m "feat(boss-test): scaffold practice_boss_test.c"
+Inert v1 of the boss-test feature: data table, API stubs, linker
+registration. Nothing calls into it yet."
 ```
 
 ---
 
-## Task 3: Add the engine-side override hook
-
-Make `Corneria_CoCarrier_Init` honor `gPracticeForceCarrier`.
+## Task 2: Reset `gPracticeForceCarrier` in `Practice_Init`
 
 **Files:**
-- Modify: `src/overlays/ovl_i1/fox_co.c` (around line 1668)
+- Modify: `src/practice/practice_main.c`
 
-- [ ] **Step 3.1: Read the current condition**
+- [ ] **Step 2.1: Locate the insertion point**
+
+Run: `grep -n "gPracticeConfig.infBoost\|osSyncPrintf.*PRACTICE ROM boot" src/practice/practice_main.c`
+The reset goes right after the last `gPracticeConfig.*` assignment (currently `gPracticeConfig.infBoost = false;` at line 51) and before the first `osSyncPrintf` (line 53).
+
+- [ ] **Step 2.2: Insert the reset**
+
+Add after the `gPracticeConfig.infBoost = false;` line:
+
+```c
+    /* Boss-test override flag: runtime-only, reset on every boot.
+     * Per-launch resets happen in Practice_LevelSelect_Update's non-boss
+     * A-press branch (Task 6) and in Practice_BossTest_Launch (which sets
+     * it true after Practice_LaunchLevel returns). */
+    gPracticeForceCarrier = false;
+```
+
+- [ ] **Step 2.3: Build + test + commit**
+
+```bash
+make practice -j4
+python3 tools/practice_invariants.py
+git add src/practice/practice_main.c
+git commit -m "feat(boss-test): reset gPracticeForceCarrier in Practice_Init"
+```
+
+---
+
+## Task 3: Add the engine-side override in `fox_co.c`
+
+Make `Corneria_CoCarrier_Init` honor `gPracticeForceCarrier`. The flag is currently `false` for all execution paths (set false in `Practice_Init`, never written elsewhere yet), so this commit changes no observable behavior. It only adds the override mechanism.
+
+**Files:**
+- Modify: `src/overlays/ovl_i1/fox_co.c`
+
+- [ ] **Step 3.1: Re-verify the current state at the patch site**
 
 Run: `sed -n '1656,1700p' src/overlays/ovl_i1/fox_co.c`
-Confirm the structure: `if (fabsf(gPlayer[0].xPath) < 1.0f) { /* Granga */ } else { /* Carrier */ }`.
+Confirm the discriminator at line 1668 is exactly `if (fabsf(gPlayer[0].xPath) < 1.0f) {` and the else-branch contains the Carrier setup (lines 1673–1683 of spec — `obj.rot.y = 180.0f`, `fwork[6] = 800.0f`, `fwork[7] = obj.pos.x`, `fwork[5] = 30.0f`, `swork[10] = 3`, `swork[8] = 3`, `obj.pos.z = gPlayer[0].trueZpos + 2000.0f`, `sFightCarrier = true`, `AUDIO_PLAY_SFX(...)`).
 
-- [ ] **Step 3.2: Patch the condition**
+If the line numbers have drifted, find the equivalent block by grep instead.
 
-Wrap the condition in an `#ifdef PRACTICE_ROM` block. Locate the exact line (currently `1668`) and replace:
+- [ ] **Step 3.2: Add the practice-aware include if not already present**
+
+Run: `grep -n '#include "practice.h"' src/overlays/ovl_i1/fox_co.c`
+If absent, add at the top of the file inside an `#ifdef PRACTICE_ROM` guard:
+
+```c
+#ifdef PRACTICE_ROM
+#include "practice.h"
+#endif
+```
+
+- [ ] **Step 3.3: Patch the discriminator**
+
+Replace:
 
 ```c
     if (fabsf(gPlayer[0].xPath) < 1.0f) {
@@ -272,104 +239,29 @@ with:
 #endif
 ```
 
-This keeps the **logic identical** for vanilla builds. In practice builds: when `gPracticeForceCarrier` is true, the condition is forced false, taking the Carrier `else` branch regardless of `xPath`. The Carrier branch contents (lines 1673–1683 — `obj.rot.y = 180.0f`, `fwork[6] = 800.0f`, `fwork[7] = obj.pos.x`, `fwork[5] = 30.0f`, `swork[10] = 3`, `swork[8] = 3`, `obj.pos.z = gPlayer[0].trueZpos + 2000.0f`) are NOT modified.
+The Granga branch contents (the if-body) and the Carrier branch contents (the else-body) are NOT modified — only the condition.
 
-- [ ] **Step 3.3: Verify the patch matches the spec's polarity expectation**
-
-Re-read lines 1668–1690 and visually confirm: the if-branch is Granga (`sFightCarrier = false`), the else-branch is Carrier (`sFightCarrier = true`). With our patch and `gPracticeForceCarrier == true`, the if-condition is forced false → else-branch runs → `sFightCarrier = true`.
-
-- [ ] **Step 3.4: Add `#include "practice.h"` if not already present**
-
-Run: `grep -n '#include "practice.h"' src/overlays/ovl_i1/fox_co.c`
-If absent, add inside an `#ifdef PRACTICE_ROM` block at the top of file or near other `#ifdef PRACTICE_ROM` includes. The header pulls in `extern bool gPracticeForceCarrier;` declared in Task 2.
-
-- [ ] **Step 3.5: Build**
-
-Run: `make practice -j4`
-Expected: clean build.
-
-- [ ] **Step 3.6: Run static invariants**
-
-Run: `python3 tools/practice_invariants.py`
-Expected: the `fox_co.c missing gPracticeForceCarrier override` failure is gone. Two failures remain (Practice_Init reset, level-select non-boss reset).
-
-- [ ] **Step 3.7: Commit**
+- [ ] **Step 3.4: Build + test + commit**
 
 ```bash
+make practice -j4
+python3 tools/practice_invariants.py
 git add src/overlays/ovl_i1/fox_co.c
-git commit --no-verify -m "feat(boss-test): override carrier route discriminator on PRACTICE_ROM"
-```
-
-(Still `--no-verify` because two invariants remain red.)
-
----
-
-## Task 4: Add Practice_Init reset
-
-**Files:**
-- Modify: `src/practice/practice_main.c` (in `Practice_Init`, near other config defaults)
-
-- [ ] **Step 4.1: Locate `Practice_Init`**
-
-Run: `grep -n "Practice_Init\|gPracticeConfig.expertMode" src/practice/practice_main.c`
-Plan to insert the reset just after the last `gPracticeConfig.*` assignment line (around line 51) but before `osSyncPrintf("=== PRACTICE ROM boot...`.
-
-- [ ] **Step 4.2: Insert the reset**
-
-After the line `gPracticeConfig.infBoost = false;` and before the `osSyncPrintf` line, add:
-
-```c
-    /* Boss-test override flag: runtime-only, reset on every boot.
-     * Per-launch resets happen in Practice_LevelSelect_Update's non-boss
-     * A-press branch and in Practice_BossTest_Launch (which sets it). */
-    gPracticeForceCarrier = false;
-```
-
-- [ ] **Step 4.3: Build**
-
-Run: `make practice -j4`
-Expected: clean build.
-
-- [ ] **Step 4.4: Run invariants**
-
-Run: `python3 tools/practice_invariants.py`
-Expected: `Practice_Init missing gPracticeForceCarrier reset` failure gone. One remaining: the level-select reset.
-
-- [ ] **Step 4.5: Commit**
-
-```bash
-git add src/practice/practice_main.c
-git commit --no-verify -m "feat(boss-test): reset gPracticeForceCarrier in Practice_Init"
+git commit -m "feat(boss-test): add gPracticeForceCarrier override in CoCarrier_Init"
 ```
 
 ---
 
-## Task 5: Wire the BOSSES entry into level-select
+## Task 4: Append BOSSES entry to `sLevelList`
 
-This is the largest task. Three sub-changes inside `src/practice/practice_level.c`:
-
-1. Append `BOSSES` entry to `sLevelList`.
-2. In `Practice_LevelSelect_Update`'s A-press branch, route through the boss-test path when the BOSSES entry is selected, AND clear `gPracticeForceCarrier` on the non-boss A-press path.
-3. In `Practice_LevelSelect_Update`'s L/R-press branch, scroll `sBossList` instead of phases when BOSSES is selected.
-4. In `Practice_LevelSelect_Draw`'s phase-line render, draw the current boss name when BOSSES is selected.
+This adds a new entry to the level-select list. The existing input handler will treat it as a normal level and try to launch `LEVEL_INVALID` if A is pressed — so we must verify A is NOT pressable on this entry until Task 6 wires the dispatch. **Workaround for ordering:** the existing A-press path resolves `LEVEL_INVALID` via the `phases[0]` fallback, which is also `LEVEL_INVALID` on our new entry, so `Practice_LaunchLevel(LEVEL_INVALID, 0, 0)` is what gets called. Empirically this is harmless (the engine refuses to start an unknown level), but to be safe we add an early-return guard in this same task.
 
 **Files:**
 - Modify: `src/practice/practice_level.c`
 
-- [ ] **Step 5.1: Append the BOSSES entry to `sLevelList`**
+- [ ] **Step 4.1: Add the `IsBossTestEntry` helper**
 
-Locate the closing `}` of `sLevelList` (immediately after `{ "VENOM 2", ... }` near the top of the file). Add a final entry:
-
-```c
-    { "BOSSES",   LEVEL_INVALID,  PLANET_CORNERIA, 8, 0,
-      { { "", LEVEL_INVALID, 0 } } },
-```
-
-(`phaseCount = 0` is the sentinel marking this as the boss-test entry. The empty single phase entry exists only to satisfy struct array bounds; it is never read because the BOSSES branch short-circuits.)
-
-- [ ] **Step 5.2: Add a helper macro or inline check for the BOSSES sentinel**
-
-Right above `Practice_LevelSelect_Update`, add:
+Just above `Practice_LevelSelect_Update` (currently line 158), add:
 
 ```c
 static bool IsBossTestEntry(s32 levelIndex) {
@@ -378,11 +270,22 @@ static bool IsBossTestEntry(s32 levelIndex) {
 }
 ```
 
-(Using a function rather than a macro to keep it debuggable. The double-condition match is defensive against the `LEVEL_INVALID`-on-PhaseEntry semantic overload.)
+- [ ] **Step 4.2: Append the BOSSES entry to `sLevelList`**
 
-- [ ] **Step 5.3: Patch the A-press branch**
+Locate the closing `};` of `sLevelList` (after the `VENOM 2` entry, near line 56). Add a new entry as the last element of the array, before the closing brace:
 
-Locate the current A-press code (around line 225–229 of `practice_level.c`):
+```c
+    { "BOSSES",   LEVEL_INVALID,  PLANET_CORNERIA, 8, 0,
+      { { "", LEVEL_INVALID, 0 } } },
+```
+
+`phaseCount = 0` is the sentinel that `IsBossTestEntry` looks for. The empty single phase exists only to satisfy the struct array bound; it is never read.
+
+- [ ] **Step 4.3: Add a defensive A-press guard for BOSSES**
+
+In `Practice_LevelSelect_Update`, the existing A-press handler (around line 225) currently runs unconditionally. Add a temporary guard at the top of the A-press branch that prevents launching when on the BOSSES entry. Task 6 replaces this with the real dispatch.
+
+Replace:
 
 ```c
     if (press->button & A_BUTTON) {
@@ -393,17 +296,14 @@ Locate the current A-press code (around line 225–229 of `practice_level.c`):
     }
 ```
 
-Replace with:
+with:
 
 ```c
     if (press->button & A_BUTTON) {
         if (IsBossTestEntry(sSelectedLevel)) {
-            Practice_BossTest_Launch(sSelectedPhase);
+            /* Task 6 will replace this with Practice_BossTest_Launch dispatch. */
             return;
         }
-        /* Non-boss launch: clear the override so a previous boss-test run
-         * does not leak its force flag into a subsequent vanilla launch. */
-        gPracticeForceCarrier = false;
         phase = &sLevelList[sSelectedLevel].phases[sSelectedPhase];
         levelId = (phase->levelId == LEVEL_INVALID) ? sLevelList[sSelectedLevel].levelId : phase->levelId;
         Practice_LaunchLevel(levelId, phase->phase, phase->checkpointProgress);
@@ -411,9 +311,27 @@ Replace with:
     }
 ```
 
-- [ ] **Step 5.4: Patch the L/R-press branch**
+- [ ] **Step 4.4: Build + test + commit**
 
-Locate the L/R block (around line 200–214):
+```bash
+make practice -j4
+python3 tools/practice_invariants.py
+git add src/practice/practice_level.c
+git commit -m "feat(boss-test): add BOSSES entry to level-select list"
+```
+
+---
+
+## Task 5: Wire L/R navigation for the boss list
+
+When BOSSES is highlighted, L/R scrolls through `sBossList` instead of phases.
+
+**Files:**
+- Modify: `src/practice/practice_level.c`
+
+- [ ] **Step 5.1: Patch the L/R block**
+
+Locate the L/R block in `Practice_LevelSelect_Update` (around line 200):
 
 ```c
     phaseCount = sLevelList[sSelectedLevel].phaseCount;
@@ -471,9 +389,74 @@ Replace with:
     }
 ```
 
-- [ ] **Step 5.5: Patch `Practice_LevelSelect_Draw` phase line**
+- [ ] **Step 5.2: Build + test + commit**
 
-Locate the phase rendering block (around line 281–289):
+```bash
+make practice -j4
+python3 tools/practice_invariants.py
+git add src/practice/practice_level.c
+git commit -m "feat(boss-test): scroll boss list with L/R on BOSSES entry"
+```
+
+---
+
+## Task 6: Wire A-press dispatch + non-boss reset
+
+**Files:**
+- Modify: `src/practice/practice_level.c`
+
+- [ ] **Step 6.1: Replace the A-press guard with the real dispatch**
+
+In `Practice_LevelSelect_Update`, replace the temporary guard from Task 4.3:
+
+```c
+    if (press->button & A_BUTTON) {
+        if (IsBossTestEntry(sSelectedLevel)) {
+            /* Task 6 will replace this with Practice_BossTest_Launch dispatch. */
+            return;
+        }
+        phase = &sLevelList[sSelectedLevel].phases[sSelectedPhase];
+        ...
+    }
+```
+
+with the final form:
+
+```c
+    if (press->button & A_BUTTON) {
+        if (IsBossTestEntry(sSelectedLevel)) {
+            Practice_BossTest_Launch(sSelectedPhase);
+            return;
+        }
+        /* Non-boss launch: clear the override so a previous boss-test run
+         * does not leak its force flag into a subsequent vanilla launch. */
+        gPracticeForceCarrier = false;
+        phase = &sLevelList[sSelectedLevel].phases[sSelectedPhase];
+        levelId = (phase->levelId == LEVEL_INVALID) ? sLevelList[sSelectedLevel].levelId : phase->levelId;
+        Practice_LaunchLevel(levelId, phase->phase, phase->checkpointProgress);
+        return;
+    }
+```
+
+- [ ] **Step 6.2: Build + test + commit**
+
+```bash
+make practice -j4
+python3 tools/practice_invariants.py
+git add src/practice/practice_level.c
+git commit -m "feat(boss-test): dispatch A on BOSSES entry; clear flag on non-boss"
+```
+
+---
+
+## Task 7: Render boss name in the phase slot
+
+**Files:**
+- Modify: `src/practice/practice_level.c`
+
+- [ ] **Step 7.1: Patch the phase line render block**
+
+Locate (around line 281):
 
 ```c
     phaseCount = sLevelList[sSelectedLevel].phaseCount;
@@ -507,235 +490,309 @@ Replace with:
     }
 ```
 
-(Label changes from "PHASE:" to "BOSS:" when on the BOSSES entry, which is friendlier UX.)
+The "BOSS:" label uses 5 glyphs all in the supported set (`B O S S :` per `sSmallChars[]` in `fox_std_lib.c`).
 
-- [ ] **Step 5.6: Build**
-
-Run: `make practice -j4`
-Expected: clean build.
-
-- [ ] **Step 5.7: Run all invariants**
-
-Run: `python3 tools/practice_invariants.py`
-Expected: PASS. All boss-test invariants now satisfied.
-
-- [ ] **Step 5.8: Commit**
+- [ ] **Step 7.2: Build + test + commit**
 
 ```bash
+make practice -j4
+python3 tools/practice_invariants.py
 git add src/practice/practice_level.c
-git commit -m "feat(boss-test): wire BOSSES entry into practice level-select"
+git commit -m "feat(boss-test): render BOSS: <name> on level-select phase line"
 ```
 
-(No `--no-verify` — the full pre-commit hook should now pass.)
+After this commit, the feature is **functionally complete** — pressing A on BOSSES → CARRIER warps to Corneria with the override flag set. The remaining tasks tighten correctness (warpProgress) and lock down regressions (invariants + functional test).
 
 ---
 
-## Task 6: Determine and set the correct `warpProgress` value
+## Task 8: Determine and set the correct `warpProgress`
 
-The placeholder `100000.0f` from Task 2 is a guess. We need to find the actual progress at which the Carrier event fires.
+The placeholder `145000.0f` from Task 1 is a guess. Find the actual progress at which the Carrier event fires.
 
 **Files:**
 - Modify: `src/practice/practice_boss_test.c` (the literal in `sBossList[0]`)
 
-- [ ] **Step 6.1: Find the Carrier spawn trigger in fox_co.c**
+- [ ] **Step 8.1: Targeted greps to find the spawn trigger**
 
-Run: `grep -n "Corneria_CoCarrier_Init\|gActorSpawnPoint\|gPathProgress\|MEVENT" src/overlays/ovl_i1/fox_co.c | head -30`
-
-Look for where a `Boss_Initialize(&gBosses[CARRIER])` or `Corneria_CoCarrier_Init` is called, and trace back to find the progress condition. Likely candidates: an event table indexed by `gPathProgress`, or an actor spawn entry with a `zPos` that's compared to player progress.
-
-If the search above doesn't yield it, also check:
-- `src/overlays/ovl_i1/fox_i1.c`
-- `assets/yaml/us/rev1/co_*.yaml` (level scripting tables)
-- The level event/message table emitted as a header (`include/assets/co_*.h` if any).
-
-- [ ] **Step 6.2: Choose `warpProgress`**
-
-Pick a progress value ~5000–8000 units before the trigger (≈1–2 seconds at default arwing speed; reference: existing `CP 1` is at 93610.3f, so the Carrier event progress is somewhere larger — `gPathProgress` numbers in the 100k–200k range are typical for late-Corneria events).
-
-If you cannot find the exact value confidently, fall back to a reasonable empirical value (e.g., `145000.0f`) and verify in Task 7 that the boss spawns. Adjust based on observation.
-
-- [ ] **Step 6.3: Update the literal**
-
-Edit `src/practice/practice_boss_test.c` line `{ "CARRIER", LEVEL_CORNERIA, 0, 100000.0f, true },` to use the chosen value.
-
-- [ ] **Step 6.4: Build and run a smoke test**
-
-Run: `make practice -j4` (clean build).
-
-If you have access to BizHawk locally, manual smoke: launch the ROM, navigate to BOSSES → CARRIER → A. Observe whether the Carrier appears within ~5 seconds of gameplay.
-
-- [ ] **Step 6.5: Commit**
+Run these in order:
 
 ```bash
+grep -n "Boss_Initialize.*CARRIER\|OBJ_BOSS_CO_CARRIER\b" src/overlays/ovl_i1/fox_co.c
+grep -rn "OBJ_BOSS_CO_CARRIER\|sCorneriaBossEventActor" src/overlays/ovl_i1/ include/assets/
+ls include/assets/co_*.h 2>/dev/null
+```
+
+The Carrier and Granga are scripted into Corneria's event/object table. Look for an `ObjectInit`/`event_*` table entry whose `id` is `OBJ_BOSS_CO_GRANGA` or `OBJ_BOSS_CO_CARRIER`. The entry will have a `zPos` (the player's progress at which the event fires; `gPathProgress` advances roughly linearly with player Z).
+
+If the spawn table entries name a different progress field than `gPathProgress`, look for the consumer that compares them.
+
+- [ ] **Step 8.2: Choose `warpProgress`**
+
+Pick a value ~5000–8000 progress units before the Carrier trigger. Reference: existing CORNERIA `CP 1` is 93610.3f; the Carrier event is later. Late-Corneria progress values are typically 100k–200k.
+
+If you cannot find an exact value confidently, run a quick empirical pass:
+1. Edit `sBossList[0].warpProgress` to e.g. `140000.0f`.
+2. `make practice -j4` and boot the ROM in BizHawk.
+3. Navigate BOSSES → CARRIER → A.
+4. If the Carrier appears within ~3 seconds of gameplay, accept the value. If not, adjust ±10000 and retry.
+
+- [ ] **Step 8.3: Update the literal and commit**
+
+```bash
+make practice -j4
+python3 tools/practice_invariants.py
 git add src/practice/practice_boss_test.c
 git commit -m "feat(boss-test): set Carrier warpProgress to <chosen-value>"
 ```
 
 ---
 
-## Task 7: Functional test (BizHawk Lua)
+## Task 9: Lock down with static invariants
 
-End-to-end regression test that boots the ROM, drives the menu, and asserts the Carrier spawns.
+Now that every target referenced by the invariant exists, add the invariant. This commit is green out of the gate.
+
+**Files:**
+- Modify: `tools/practice_invariants.py`
+
+- [ ] **Step 9.1: Add `check_boss_test()` matching the project's actual style**
+
+Read the existing pattern first: `sed -n '32,60p' tools/practice_invariants.py` shows the module uses a global `errors[]`, `error(msg)`, and `read(path)`. There is no `(name, fn)` registration — `main()` calls `check_*()` directly.
+
+Append after the last `check_*` function (currently `check_practice_text_glyphs` and friends near line 1068+; pick a logical neighbor — e.g., right after `check_practice_text_glyphs` is fine):
+
+```python
+def check_boss_test():
+    """Boss-test feature: file exists, flag is wired, reset paths are present."""
+    boss_test_path = os.path.join(SRC_PRACTICE, "practice_boss_test.c")
+    if not os.path.isfile(boss_test_path):
+        error(f"Boss-test source missing: {boss_test_path}")
+        return
+
+    boss_test_src = read(boss_test_path)
+    fox_co_src    = read("src/overlays/ovl_i1/fox_co.c")
+    practice_h    = read(INCLUDE_PRACTICE)
+    main_src      = read(os.path.join(SRC_PRACTICE, "practice_main.c"))
+    level_src     = read(os.path.join(SRC_PRACTICE, "practice_level.c"))
+    patch_src     = read("tools/patch_linker_script.py")
+
+    if "gPracticeForceCarrier" not in boss_test_src:
+        error("practice_boss_test.c missing gPracticeForceCarrier definition")
+    if "gPracticeForceCarrier" not in fox_co_src:
+        error("fox_co.c missing gPracticeForceCarrier override")
+    if "Practice_BossTest_Launch" not in practice_h:
+        error("practice.h missing Practice_BossTest_Launch declaration")
+    if "Practice_BossTest_Launch" not in boss_test_src:
+        error("practice_boss_test.c missing Practice_BossTest_Launch definition")
+    if "gPracticeForceCarrier = false" not in main_src:
+        error("Practice_Init missing gPracticeForceCarrier = false reset")
+    if "gPracticeForceCarrier = false" not in level_src:
+        error("Practice_LevelSelect_Update missing gPracticeForceCarrier = false on non-boss A-press")
+    if '"practice_boss_test"' not in patch_src:
+        error('tools/patch_linker_script.py missing "practice_boss_test" in PRACTICE_OBJS')
+
+    # Negative check: gPracticeForceCarrier must NOT be a PracticeConfig field (runtime only)
+    config_match = re.search(
+        r"typedef struct PracticeConfig\s*\{(.*?)\}\s*PracticeConfig;",
+        practice_h, re.DOTALL
+    )
+    if config_match and "gPracticeForceCarrier" in config_match.group(1):
+        error("gPracticeForceCarrier must not be a PracticeConfig field (runtime-only state)")
+```
+
+- [ ] **Step 9.2: Register the new check in `main()`**
+
+In `main()` (around line 1370+, in the long sequence of `check_*()` calls), add:
+
+```python
+    check_boss_test()
+```
+
+Place it near other practice-feature checks (e.g., after `check_hit64_logo()` or `check_owl_logo()`).
+
+- [ ] **Step 9.3: Run the invariants**
+
+Run: `python3 tools/practice_invariants.py`
+Expected: PASS. If any `error(...)` fires, fix the corresponding source — don't relax the invariant.
+
+- [ ] **Step 9.4: Commit**
+
+```bash
+git add tools/practice_invariants.py
+git commit -m "test(boss-test): add static invariants for boss-test wiring"
+```
+
+---
+
+## Task 10: Functional test (BizHawk Lua)
+
+End-to-end regression test that boots the ROM, drives the menu, asserts the Carrier spawns, and then asserts the force flag is cleared by a subsequent vanilla A-press.
 
 **Files:**
 - Create: `tests/test_boss_test_carrier.lua`
-- Modify: `tools/extract_symbols.py` (add `sFightCarrier` and `gPracticeForceCarrier` symbols; verify `gBosses` is already present; add `OBJ_BOSS_CO_CARRIER` and `Boss.obj.id` offset)
+- Modify: `tools/extract_symbols.py` (add `sFightCarrier` and `gPracticeForceCarrier` to `SYMBOLS`; add `BOSS_OFFSETS` dict + emit it to Lua)
 
-- [ ] **Step 7.1: Read `tools/extract_symbols.py` to understand the format**
+- [ ] **Step 10.1: Add new symbols to `tools/extract_symbols.py`**
 
-Run: `head -200 tools/extract_symbols.py`
-Identify:
-- The `SYMBOLS = [...]` list (linker-map symbol names).
-- The `CONFIG_OFFSETS`, `PLAYER_OFFSETS`, `ACTOR_OFFSETS` dicts (struct offsets).
-- Any enum/const dict (search for `OBJ_BOSS\|consts =`); if there is no enum-export mechanism, hardcode the boss obj.id value in the Lua test with a comment citing `include/sf64object.h:619-620`.
+Append to the `SYMBOLS = [...]` list:
 
-- [ ] **Step 7.2: Add the new symbols**
-
-Append to `SYMBOLS`:
 ```python
     "sFightCarrier",
     "gPracticeForceCarrier",
 ```
 
-(Verify `gBosses` is already in `SYMBOLS` — it appears in the existing list near `gActors`.)
+(`gBosses` is already present at line 36 — do not duplicate.)
 
-If a `BOSS_OFFSETS` dict does not exist, add one alongside `PLAYER_OFFSETS` / `ACTOR_OFFSETS`:
+- [ ] **Step 10.2: Add `BOSS_OFFSETS` and emit it**
+
+Just below `PLAYER_OFFSETS` (or `ACTOR_OFFSETS`, whichever is closer to the bottom), add:
+
 ```python
-# Boss struct offsets (include/sf64object.h Boss)
-# Confirm offsets by inspecting include/sf64object.h Boss struct definition
-# and Object struct (Boss has an Object field at offset 0).
+# Boss struct offsets (include/sf64object.h Boss).
+# Boss.obj is at offset 0; Object.id is u16 at offset 0x02.
 BOSS_OFFSETS = {
-    "obj_id":   0x00 + <object_id_offset>,  # Object.id offset within Boss.obj
+    "obj_id": 0x02,  # u16
 }
+BOSS_SIZEOF = 0x408  # explicit comment in include/sf64object.h
 ```
 
-Run: `grep -n "typedef struct\\|Object\\|Object_id\\|obj.id\\|s32 id" include/sf64object.h | head -30` to find the exact byte offset of `Object.id` within `Object`, and the offset of `obj` within `Boss`. (If `Boss.obj` is at offset 0 and `Object.id` is at offset 0, then `obj_id = 0`. Verify with the actual struct.)
+In the Lua emission block (search for how `PLAYER_OFFSETS` is written out to the Lua table — usually a `print("S.player = { ... }")`-style block), mirror the pattern for `BOSS_OFFSETS`:
 
-If `BOSS_OFFSETS` is added, also emit it in the Lua output (search for how `PLAYER_OFFSETS` is emitted, mirror that).
+```python
+print("-- Boss (gBosses[0]) field offsets")
+print("S.boss = {")
+for name, off in BOSS_OFFSETS.items():
+    print(f"    {name} = 0x{off:02X},")
+print(f"    sizeof = 0x{BOSS_SIZEOF:X},")
+print("}")
+```
 
-If determining the offset is tricky, alternative: read the Boss struct as `u32`s and look for the boss `id` (which for `OBJ_BOSS_CO_CARRIER` is 293) at small offsets. Hardcode the offset once observed.
-
-- [ ] **Step 7.3: Regenerate symbols**
+- [ ] **Step 10.3: Regenerate `tests/symbols.lua`**
 
 Run: `python3 tools/extract_symbols.py > tests/symbols.lua`
-Expected: completes without errors. Verify the new symbols appear: `grep -E "sFightCarrier|gPracticeForceCarrier" tests/symbols.lua`.
+Expected: completes; verify with `grep -E "sFightCarrier|gPracticeForceCarrier|S\\.boss" tests/symbols.lua`.
 
-- [ ] **Step 7.4: Write the failing functional test**
+- [ ] **Step 10.4: Write the functional test**
 
 Create `tests/test_boss_test_carrier.lua`:
 
 ```lua
 -- Test: Selecting BOSSES → CARRIER from the level select warps into Corneria
--- with the Attack Carrier spawning instead of Granga.
+-- with the Attack Carrier spawning instead of Granga, and the force flag is
+-- cleared by a subsequent vanilla A-press.
 
 local H = dofile("tests/harness.lua")
 H.test_name = "boss_test_carrier"
 
 local OBJ_BOSS_CO_CARRIER = 293  -- include/sf64object.h:620
-local OBJ_BOSS_CO_GRANGA  = 292  -- include/sf64object.h:619
-local LEVEL_CORNERIA      = 0    -- include/sf64level.h (verify)
-local CARRIER_BOSS_INDEX  = 0    -- gBosses[0] is the main Carrier slot (CARRIER enum, fox_co.h:158)
+-- local OBJ_BOSS_CO_GRANGA  = 292  -- include/sf64object.h:619
+local LEVEL_CORNERIA      = 0    -- include/sf64level.h
+local CARRIER_INDEX       = 0    -- gBosses[CARRIER]: include/fox_co.h:158
 
--- Wait for level select
+-- Wait for level select.
 local ok = H.wait_until(function()
     return H.practice_screen() == H.S.const.PSCREEN_LEVEL_SELECT
         and H.game_state() == H.S.const.GSTATE_MAP
 end, 600, "level select")
 H.assert_true(ok, "reached level select")
 
--- BOSSES is the last entry in sLevelList. Press D-pad down repeatedly
--- until we wrap around or reach the end. The current count is fixed in
--- practice_level.c; we navigate by counting. To be robust, press Down
--- many times so we definitely land on BOSSES (the entry's name is
--- "BOSSES"; we can verify by reading sSelectedLevel against LEVEL_COUNT - 1
--- if exposed, or just trust the count).
-local LEVEL_COUNT = 17  -- 16 vanilla + 1 BOSSES; UPDATE if sLevelList grows
+-- BOSSES is the last entry in sLevelList. Press D-pad down enough times
+-- to definitely land on it. Current LEVEL_COUNT = 17 (16 vanilla + BOSSES);
+-- updating this constant if sLevelList grows is part of feature work, not
+-- this test.
+local LEVEL_COUNT = 17
 for i = 1, LEVEL_COUNT - 1 do
     H.press({Down = true})
     H.advance(2)
 end
 
--- A: launch the boss test
+-- A: launch the boss test.
 H.press({A = true})
 
--- Wait for gameplay to be active
+-- Wait for gameplay to be active.
 ok = H.wait_for_gameplay(900)
 H.assert_true(ok, "gameplay became active")
 
--- gNextLevel should have been LEVEL_CORNERIA
-H.assert_eq(H.read_s32(H.S.gCurrentLevel), LEVEL_CORNERIA, "current level is Corneria")
+-- Verify we landed in Corneria.
+H.assert_eq(H.read_s32(H.S.gCurrentLevel), LEVEL_CORNERIA,
+    "current level is Corneria")
 
--- Force-flag should be set
-H.assert_eq(H.read_u8(H.S.gPracticeForceCarrier), 1, "gPracticeForceCarrier set")
+-- Force-flag should be set during the warp.
+H.assert_eq(H.read_u8(H.S.gPracticeForceCarrier), 1,
+    "gPracticeForceCarrier set during boss-test launch")
 
--- Wait for the Carrier boss to spawn (timeout 600 frames ≈ 10s @ 60fps)
+-- Wait for the Carrier boss to spawn (timeout 600 frames ≈ 10s).
+local boss_addr = H.S.gBosses + CARRIER_INDEX * H.S.boss.sizeof
 local boss_ok = H.wait_until(function()
-    -- gBosses[0].obj.id != 0 means a boss has been initialized
-    -- For the offset, use the BOSS_OFFSETS exposed by symbols.lua
-    -- (or hardcode below; comment cites struct layout).
-    local id = H.read_s32(H.S.gBosses + 0 + (H.S.boss and H.S.boss.obj_id or 0))
-    return id ~= 0
+    return H.read_u16(boss_addr + H.S.boss.obj_id) ~= 0
 end, 600, "boss spawn")
 H.assert_true(boss_ok, "a boss spawned within 600 frames")
 
--- The boss must be the Carrier, not Granga
-local boss_id = H.read_s32(H.S.gBosses + 0 + (H.S.boss and H.S.boss.obj_id or 0))
-H.assert_eq(boss_id, OBJ_BOSS_CO_CARRIER, "boss is Carrier, not Granga")
+-- The boss must be the Carrier, not Granga.
+local boss_id = H.read_u16(boss_addr + H.S.boss.obj_id)
+H.assert_eq(boss_id, OBJ_BOSS_CO_CARRIER,
+    "boss id is OBJ_BOSS_CO_CARRIER (293), not Granga (292)")
 
--- And sFightCarrier must be 1 (true)
+-- And sFightCarrier must be 1 (true).
 H.assert_eq(H.read_u8(H.S.sFightCarrier), 1, "sFightCarrier == 1")
 
 H.finish()
 ```
 
-- [ ] **Step 7.5: Run the test**
+NOTE on `H.read_u16`: if the harness does not yet expose `read_u16`, add it to `tests/harness.lua` alongside `read_u8`/`read_s32`:
+
+```lua
+function H.read_u16(addr)
+    return mainmemory.read_u16_be(addr)
+end
+```
+
+(Verify with `grep -n "read_u16" tests/harness.lua` first.)
+
+- [ ] **Step 10.5: Run the test**
 
 Run: `python3 tools/run_tests.py test_boss_test_carrier`
-Expected: PASS (Carrier spawns, all assertions hold).
+Expected: PASS.
 
-If the test fails on "boss spawn" timeout, revisit Task 6 — the `warpProgress` is wrong. Adjust and re-run.
+Failure-mode triage:
+- **"boss spawn" timeout** → `warpProgress` (Task 8) is wrong. Lower it (warp earlier) or raise it (warp closer to the trigger).
+- **"current level is Corneria" fails** → `LEVEL_CORNERIA != 0`. Check `include/sf64level.h` and update the constant.
+- **`sFightCarrier == 1` fails but Carrier spawned** → engine hook polarity bug. Re-read the patch from Task 3.
+- **Boss obj.id is 0 forever** → `BOSS_SIZEOF` or `BOSS_OFFSETS.obj_id` wrong. Re-verify against `include/sf64object.h:244-249`.
+- **`gPracticeForceCarrier == 1` after the test (and test wants 0)** → not applicable here; this test only checks the set side. Manual smoke (Task 11) covers the reset.
 
-If the test fails on "current level is Corneria", `LEVEL_CORNERIA` is not 0 — fix the constant by checking `include/sf64level.h`.
-
-If the test fails on `sFightCarrier == 1` but Carrier spawned: the engine hook in Task 3 was applied wrong; re-read fox_co.c around line 1668 and confirm the polarity.
-
-- [ ] **Step 7.6: Commit**
+- [ ] **Step 10.6: Commit**
 
 ```bash
-git add tests/test_boss_test_carrier.lua tools/extract_symbols.py tests/symbols.lua
-git commit -m "test(boss-test): add functional test for Carrier boss warp"
+git add tests/test_boss_test_carrier.lua tools/extract_symbols.py tests/symbols.lua tests/harness.lua
+git commit -m "test(boss-test): add functional test for Carrier warp"
 ```
 
 ---
 
-## Task 8: Integration verification
+## Task 11: Integration verification
 
-Make sure nothing else broke.
-
-- [ ] **Step 8.1: Full pre-commit pipeline**
+- [ ] **Step 11.1: Full pre-commit pipeline**
 
 Run: `python3 tools/practice_invariants.py && make practice -j4 && python3 tools/run_tests.py`
 Expected: all green.
 
-- [ ] **Step 8.2: Spot-check no other test regressed**
+- [ ] **Step 11.2: Manual smoke (REQUIRED, not optional)**
 
-Run: `python3 tools/run_tests.py` (without filter, runs all tests).
-Expected: every test passes. If any previously-green test now fails, the level-select changes in Task 5 likely broke navigation. Re-read Task 5's diffs and confirm L_JPAD/R_JPAD behavior is unchanged for non-BOSSES entries.
+Boot the ROM in BizHawk or Dolphin:
 
-- [ ] **Step 8.3: Manual smoke (optional but recommended)**
+1. Verify the level-select shows BOSSES at the bottom of the list.
+2. Highlight BOSSES — phase line reads `BOSS: CARRIER`.
+3. Press L/R — name doesn't change (only one boss in v1).
+4. Press A — Corneria loads. Within ~3 seconds the Attack Carrier (flying ship) appears. Granga (the walker) does NOT appear.
+5. Pause → return to level-select.
+6. Highlight CORNERIA, START, press A — vanilla Corneria runs. **Granga appears at the boss event, NOT the Carrier.** This proves the non-boss A-press cleared `gPracticeForceCarrier`.
+7. Optional: highlight BOSSES while paying attention to BGM. Per Open Question 4 (spec), `planetId = PLANET_CORNERIA` may cause the Corneria audio preview to start when BOSSES is highlighted. If it does, that's an acceptable v1 quirk; record the observation and move on.
 
-Boot the ROM in Dolphin or BizHawk:
-1. Verify the level-select shows BOSSES at the bottom.
-2. Highlight BOSSES — phase line should read "BOSS: CARRIER".
-3. Press L/R — name doesn't change (only one boss in v1; if you had time you could add a stub second entry to verify scroll, but that's out of scope).
-4. Press A — Corneria loads, Carrier appears within a few seconds, no Granga.
-5. Restart, pick CORNERIA START, A — vanilla Granga path runs (force flag was cleared on the non-boss A-press).
+If step 6 fails (Carrier appears on a vanilla CORNERIA START launch), the reset in Task 6.1 is missing or misplaced — re-inspect `Practice_LevelSelect_Update`.
 
-If step 5 fails (Carrier spawns instead of Granga on a vanilla launch), the reset in Task 5 step 5.3 is missing or misplaced.
+- [ ] **Step 11.3: Commit any fixes from manual smoke**
 
-- [ ] **Step 8.4: No commit needed unless something was fixed**
-
-If you fixed anything during Step 8, commit it as a follow-up.
+If the smoke surfaced bugs, fix and commit. Otherwise no commit needed.
 
 ---
 
@@ -745,8 +802,10 @@ If you fixed anything during Step 8, commit it as a follow-up.
 - [ ] `make practice -j4` succeeds.
 - [ ] `python3 tools/run_tests.py test_boss_test_carrier` passes.
 - [ ] `python3 tools/run_tests.py` (full suite) passes.
-- [ ] Manual smoke confirms: BOSSES → CARRIER warps to Carrier fight; vanilla CORNERIA START still spawns Granga.
-- [ ] Spec's open questions 1 (warpProgress), 2 (xPath consistency), and 4 (planet id audio leak) are resolved or explicitly accepted as v1 quirks (with a follow-up note in code or commit).
+- [ ] No commit in this branch used `--no-verify`.
+- [ ] Manual smoke (Task 11.2) confirmed: BOSSES → CARRIER spawns Carrier; CORNERIA START still spawns Granga.
+- [ ] Spec's Open Question 1 (warpProgress) resolved (Task 8).
+- [ ] Spec's Open Question 4 (planet audio preview) observed and either accepted as v1 quirk or fixed.
 
 ## Out of Scope
 
