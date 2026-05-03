@@ -1,0 +1,82 @@
+-- Test: frame advance - D-Down pauses, D-Up steps one frame, D-Down resumes.
+--
+-- Verifies that:
+--   1. D-Down press toggles pause: gGameFrameCount freezes.
+--   2. Pressing D-Up while paused advances exactly one frame.
+--   3. A short D-Up hold does not accidentally advance again.
+--   4. A long D-Up hold starts repeat-advancing frames.
+--   5. A second D-Down press resumes normal play.
+
+local H = dofile("tests/harness.lua")
+local S = H.S
+
+H.test_name = "frame_advance"
+
+-- Boot to level select
+local ok = H.wait_until(function()
+    return H.practice_screen() == S.const.PSCREEN_LEVEL_SELECT
+end, 300, "boot")
+H.assert_true(ok, "Booted to level select")
+
+-- Launch Corneria (index 0 — no down presses needed)
+ok = H.select_and_launch_level(0)
+H.assert_true(ok, "Level launched")
+
+-- Wait for gameplay to be fully active
+ok = H.wait_for_gameplay(300)
+H.assert_true(ok, "Gameplay active")
+
+-- Let the game settle for a few frames
+H.advance(10)
+
+-- --- PAUSE TEST ---
+-- Record gGameFrameCount before pausing
+local before_pause = H.read_s32(S.gGameFrameCount)
+
+-- Press D-Down to enter paused state
+H.press({Down = true})
+
+-- Advance 3 emulator ticks — Play_Main should be frozen, gGameFrameCount must not change
+H.advance(3)
+
+local after_pause = H.read_s32(S.gGameFrameCount)
+H.assert_eq(after_pause, before_pause, "gGameFrameCount did not advance while paused")
+
+-- --- SHORT HOLD STEP TEST ---
+-- Hold D-Up for 5 ticks while paused. Only the press edge should run one frame.
+local before_step = H.read_s32(S.gGameFrameCount)
+H.hold({Up = true}, 5)
+
+local after_step_hold = H.read_s32(S.gGameFrameCount)
+local step_delta = after_step_hold - before_step
+H.assert_eq(step_delta, 1,
+    "gGameFrameCount advanced exactly 1 while D-Up held (delta=" .. tostring(step_delta) .. ")")
+
+-- --- RE-FREEZE / LONG HOLD REPEAT TEST ---
+-- Release D-Up; wait 3 ticks — game must stay frozen.
+H.advance(3)
+local after_release_settle = H.read_s32(S.gGameFrameCount)
+H.assert_eq(after_release_settle, after_step_hold,
+    "gGameFrameCount stayed frozen after the queued step")
+
+-- Hold D-Up long enough to pass the repeat delay; it should advance multiple frames.
+H.hold({Up = true}, 18)
+local after_long_hold = H.read_s32(S.gGameFrameCount)
+local long_hold_delta = after_long_hold - after_release_settle
+H.assert_true(long_hold_delta > 1,
+    "gGameFrameCount repeat-advanced on a long D-Up hold (delta=" .. tostring(long_hold_delta) .. ")")
+
+-- --- RESUME TEST ---
+-- Press D-Down again to resume normal play.
+H.press({Down = true})
+
+-- Advance 5 emulator ticks and check that frame count grew by at least 3.
+H.advance(5)
+local after_resume = H.read_s32(S.gGameFrameCount)
+local resumed_delta = after_resume - after_long_hold
+H.assert_true(resumed_delta >= 3,
+    "gGameFrameCount advanced normally after resume (delta=" .. tostring(resumed_delta) .. ")")
+
+H.assert_eq(H.game_state(), S.const.GSTATE_PLAY, "Game still in GSTATE_PLAY after frame advance cycle")
+
+H.finish()

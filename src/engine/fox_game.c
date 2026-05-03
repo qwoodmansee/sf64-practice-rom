@@ -536,7 +536,7 @@ void Game_Update(void) {
                 break;
             case GSTATE_PLAY:
 #ifdef PRACTICE_ROM
-                if (gPracticeMenuState != PMENU_OPEN_FROZEN) {
+                if ((gPracticeMenuState != PMENU_OPEN_FROZEN) && !Practice_FrameAdvance_IsFrozen()) {
                     Play_Main();
                 }
 #else

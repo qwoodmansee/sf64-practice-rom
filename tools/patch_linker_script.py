@@ -41,6 +41,7 @@ PRACTICE_OBJS = [
     "practice_slot_test",  # Phase 3: in-ROM slot_manager fake-state smoke test
     "practice_test_fatfs",  # Phase 2: gated by IODEV_DIAG_FATFS, otherwise empty .o
     "practice_sd",          # Phase 6: OSK + file browser rendering and glue
+    "practice_frame_advance",  # Frame advance / pause feature
 ]
 
 # Order matters: each entry's predecessor must precede it in the list,

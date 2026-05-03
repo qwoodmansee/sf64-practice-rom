@@ -1082,6 +1082,33 @@ def check_practice_pool_no_overlay_overlap():
         )
 
 
+def check_boot_main_rom_budget():
+    """The boot-loaded main segment must stay below the IPL copy ceiling.
+
+    Hardware and mupen both wedge on the solid blue boot fill if main_ROM_END
+    creeps past this boundary: early code/data beyond it is not resident when
+    boot threads start.
+    """
+    map_path = "build/starfox64.us.rev1.map"
+    if not os.path.isfile(map_path):
+        return
+
+    src = read(map_path)
+    match = re.search(r"0x([0-9a-fA-F]+)\s+main_ROM_END\s*=", src)
+    if not match:
+        error(f"{map_path}: could not locate main_ROM_END (check_boot_main_rom_budget)")
+        return
+
+    main_rom_end = int(match.group(1), 16)
+    limit = 0xFB000
+    if main_rom_end > limit:
+        error(
+            f"{map_path}: main_ROM_END 0x{main_rom_end:06X} exceeds boot-safe "
+            f"limit 0x{limit:06X}; shrink/move main assets or boot hangs on blue screen "
+            "(check_boot_main_rom_budget)"
+        )
+
+
 def check_practice_text_glyphs():
     """Practice_DrawText* string literals must use only the glyphs supported
     by Graphics_DisplaySmallText. Per CLAUDE.md the renderer's table is
@@ -1320,8 +1347,10 @@ def check_owl_logo():
         error(f"{owl_c}: Practice_Owl_Draw function missing")
     if "RCP_SetupDL_76" not in src:
         error(f"{owl_c}: missing RCP_SetupDL_76 setup before texture draw")
-    if "Lib_TextureRect_RGBA16" not in src:
-        error(f"{owl_c}: missing Lib_TextureRect_RGBA16 call")
+    if "sPracticeOwlTLUT" not in src:
+        error(f"{owl_c}: sPracticeOwlTLUT palette missing")
+    if "Lib_TextureRect_CI8" not in src:
+        error(f"{owl_c}: missing Lib_TextureRect_CI8 call")
 
     level_src = read(PRACTICE_LEVEL)
     if "Practice_Owl_Draw" not in level_src:
@@ -1342,8 +1371,10 @@ def check_hit64_logo():
         error(f"{logo_c}: Practice_Logo_Draw function missing")
     if "RCP_SetupDL_76" not in src:
         error(f"{logo_c}: missing RCP_SetupDL_76 setup before texture draw")
-    if "Lib_TextureRect_RGBA16" not in src:
-        error(f"{logo_c}: missing Lib_TextureRect_RGBA16 call")
+    if "sPracticeLogoTLUT" not in src:
+        error(f"{logo_c}: sPracticeLogoTLUT palette missing")
+    if "Lib_TextureRect_CI8" not in src:
+        error(f"{logo_c}: missing Lib_TextureRect_CI8 call")
 
     level_src = read(PRACTICE_LEVEL)
     if "Practice_Logo_Draw" not in level_src:
@@ -1389,6 +1420,39 @@ def check_build_info():
     gitignore = read(".gitignore")
     if "practice_build_info.h" not in gitignore:
         error(".gitignore: practice_build_info.h not gitignored (generated file)")
+
+
+def check_frame_advance_hook():
+    """Practice_FrameAdvance_IsFrozen must guard Play_Main in Game_Update's
+    GSTATE_PLAY block in fox_game.c.
+
+    Without this hook, frame advance cannot block Play_Main from running.
+    The check locates Game_Update, then finds the GSTATE_PLAY case inside
+    it, and verifies Practice_FrameAdvance_IsFrozen appears there.
+    """
+    src = read(FOX_GAME)
+
+    # Find Game_Update body using brace matching.
+    game_update_body = find_c_function(src, "Game_Update")
+    if game_update_body is None:
+        error("check_frame_advance_hook: could not locate Game_Update in fox_game.c")
+        return
+
+    # Find the GSTATE_PLAY case block within Game_Update.
+    gstate_play_match = re.search(
+        r"case\s+GSTATE_PLAY\s*:(.*?)break\s*;",
+        game_update_body, re.DOTALL,
+    )
+    if not gstate_play_match:
+        error("check_frame_advance_hook: could not locate GSTATE_PLAY case in Game_Update (fox_game.c)")
+        return
+
+    block = gstate_play_match.group(1)
+    if "Practice_FrameAdvance_IsFrozen" not in block:
+        error(
+            "Practice_FrameAdvance_IsFrozen() must guard Play_Main in the "
+            "GSTATE_PLAY block of Game_Update in fox_game.c (check_frame_advance_hook)"
+        )
 
 
 def check_cs_tap_slot_baseline():
@@ -1449,6 +1513,7 @@ def main():
     check_phase3_ram_detection()
     check_practice_pool_placement()
     check_practice_pool_no_overlay_overlap()
+    check_boot_main_rom_budget()
     check_practice_text_glyphs()
     check_osk_declared()
     check_file_browser_declared()
@@ -1458,6 +1523,7 @@ def main():
     check_sd_save_implemented()
     check_sd_load_implemented()
     check_sd_per_op_release()
+    check_frame_advance_hook()
     check_cs_tap_slot_baseline()
     check_hit64_logo()
     check_owl_logo()
