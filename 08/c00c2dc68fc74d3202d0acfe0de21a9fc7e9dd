@@ -1,0 +1,23 @@
+src/practice/practice_level.c
+  aec6acbaf991dad6 58-59,160-164,233-236
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "08c00c2dc68fc74d3202d0acfe0de21a9fc7e9dd",
+  "prompts": {
+    "aec6acbaf991dad6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a736df88-f3c9-4786-a14f-8aaf1c1fd136",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 11,
+      "total_deletions": 13,
+      "accepted_lines": 11,
+      "overriden_lines": 0
+    }
+  }
+}
