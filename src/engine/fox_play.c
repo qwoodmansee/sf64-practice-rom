@@ -50,6 +50,30 @@ Environment* sEnvironment;
 
 #define MEM_ARRAY_ALLOCATE(arr, count) ((arr) = Memory_Allocate((count) * sizeof(*(arr))))
 
+#ifdef PRACTICE_ROM
+static ObjectInit* Practice_Play_GetLevelObjectsForCurrentPhase(void) {
+    if ((gCurrentLevel == LEVEL_METEO) && (gLevelPhase == 1)) {
+        return SEGMENTED_TO_VIRTUAL(aMeWarpZoneLevelObjects);
+    }
+    if ((gCurrentLevel == LEVEL_SECTOR_X) && (gLevelPhase == 1)) {
+        return SEGMENTED_TO_VIRTUAL(aSxWarpZoneLevelObjects);
+    }
+    if ((gCurrentLevel == LEVEL_VENOM_ANDROSS) && (gLevelPhase == 1)) {
+        return SEGMENTED_TO_VIRTUAL(aVe1AndBossLevelObjects);
+    }
+    if ((gCurrentLevel == LEVEL_VENOM_1) && (gLevelPhase == 1)) {
+        return SEGMENTED_TO_VIRTUAL(aVe1BetaLevelObjects);
+    }
+    if ((gCurrentLevel < LEVEL_CORNERIA) || (gCurrentLevel > LEVEL_VERSUS)) {
+        return NULL;
+    }
+    if (gLevelObjectInits[gCurrentLevel] == NULL) {
+        return NULL;
+    }
+    return SEGMENTED_TO_VIRTUAL(gLevelObjectInits[gCurrentLevel]);
+}
+#endif
+
 bool Play_CheckMedalStatus(u16 hitCount) {
     if ((gTeamShields[TEAM_ID_SLIPPY] > 0) && (gTeamShields[TEAM_ID_PEPPY] > 0) && (gTeamShields[TEAM_ID_FALCO] > 0) &&
         (gHitCount >= hitCount)) {
@@ -4592,10 +4616,7 @@ void Player_Setup(Player* playerx) {
          * compile-time level table directly - same lookup the engine uses. */
         ObjectInit* ckObjs = gLevelObjects;
         s32 ckIdx = 0;
-        if (ckObjs == NULL && (u32)gCurrentLevel <= (u32)LEVEL_VERSUS &&
-            gLevelObjectInits[gCurrentLevel] != NULL) {
-            ckObjs = SEGMENTED_TO_VIRTUAL(gLevelObjectInits[gCurrentLevel]);
-        }
+        ckObjs = Practice_Play_GetLevelObjectsForCurrentPhase();
         while ((ckObjs != NULL) && (ckIdx < 10000) && (ckObjs[ckIdx].id > OBJ_INVALID) &&
                (ckObjs[ckIdx].zPos1 <= gPracticeCheckpointProgress)) {
             ckIdx++;
@@ -4619,6 +4640,7 @@ void Player_Setup(Player* playerx) {
     if (gPracticeForceCarrier) {
         player->xPath = player->xPathTarget = 7096.0f;
         player->pos.x = 7096.0f;
+        gGroundSurface = gSavedGroundSurface = SURFACE_WATER;
     }
 #endif
 
