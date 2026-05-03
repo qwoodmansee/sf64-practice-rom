@@ -249,9 +249,12 @@ void Practice_LevelSelect_Update(void) {
 
     if (press->button & A_BUTTON) {
         if (IsBossTestEntry(sSelectedLevel)) {
-            /* Task 6 will replace this with Practice_BossTest_Launch dispatch. */
+            Practice_BossTest_Launch(sSelectedPhase);
             return;
         }
+        /* Non-boss launch: clear the override so a previous boss-test run
+         * does not leak its force flag into a subsequent vanilla launch. */
+        gPracticeForceCarrier = false;
         phase = &sLevelList[sSelectedLevel].phases[sSelectedPhase];
         levelId = (phase->levelId == LEVEL_INVALID) ? sLevelList[sSelectedLevel].levelId : phase->levelId;
         Practice_LaunchLevel(levelId, phase->phase, phase->checkpointProgress);
