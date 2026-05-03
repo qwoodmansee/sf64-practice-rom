@@ -1,0 +1,29 @@
+tools/practice_invariants.py
+  a26b81b6ade01dd7 104,1341-1354,1421
+src/practice/practice_minimap.c
+  a26b81b6ade01dd7 89,93,152-173
+src/practice/practice_level.c
+  a26b81b6ade01dd7 27
+src/engine/fox_play.c
+  a26b81b6ade01dd7 4590-4593,4595-4600
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "eed501e5430443475f3341c0c52b8a0bcfac67e5",
+  "prompts": {
+    "a26b81b6ade01dd7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2a38f54f-1455-435c-be01-1506ae718938",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 73,
+      "total_deletions": 25,
+      "accepted_lines": 51,
+      "overriden_lines": 0
+    }
+  }
+}
