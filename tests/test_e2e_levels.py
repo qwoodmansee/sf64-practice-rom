@@ -37,15 +37,18 @@ class LevelE2ETests:
             (passed: bool, message: str)
         """
         try:
-            # Run mupen64plus with the ROM
-            # Just boot the ROM and let it run; we'll terminate after timeout
+            dtm_path = self.dtm_dir / f"test_level_{level_num}.dtm"
+            if not dtm_path.exists():
+                return False, f"Level {level_num} DTM not found: {dtm_path}"
+
             cmd = [
                 'mupen64plus',
                 '--noosd',
+                '--movie', str(dtm_path),
                 str(self.rom_path)
             ]
 
-            print(f"[Level {level_num}] Starting ROM (will run for {timeout_seconds}s)...")
+            print(f"[Level {level_num}] Starting ROM with DTM {dtm_path.name} (will run for {timeout_seconds}s)...")
 
             result = subprocess.run(
                 cmd,

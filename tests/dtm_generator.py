@@ -29,23 +29,18 @@ class DTMGenerator:
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
-    def _pack_controller_state(self, buttons=0, stick_x=0x80, stick_y=0x80):
+    def _pack_controller_state(self, buttons=0, stick_x=0, stick_y=0):
         """Pack a single controller input frame.
 
         Args:
             buttons: Bitmask of button presses
-            stick_x: Analog stick X (0-255, 128 is center)
-            stick_y: Analog stick Y (0-255, 128 is center)
+            stick_x: Analog stick X (-128..127, 0 is center)
+            stick_y: Analog stick Y (-128..127, 0 is center)
 
         Returns:
-            14 bytes of controller state
+            4 bytes of controller state (M64 format: 2-byte buttons big-endian, signed X, signed Y)
         """
-        # Button mapping for N64 controller
-        return struct.pack('<HHBB',
-                          buttons,           # 2 bytes: button state
-                          0,                 # 2 bytes: padding
-                          stick_x,          # 1 byte: analog X
-                          stick_y)          # 1 byte: analog Y
+        return struct.pack('>H', buttons) + struct.pack('bb', stick_x, stick_y)
 
     def generate_level_test(self, level_num, frames_per_level=600):
         """Generate a DTM that tests entering a specific level.
@@ -100,25 +95,26 @@ class DTMGenerator:
         dtm_path = self.output_dir / f"test_level_{level_num}.dtm"
 
         with open(dtm_path, 'wb') as f:
-            # Write header
-            f.write(self.MAGIC)
-            f.write(struct.pack('<I', self.VERSION))
-            f.write(self.game_id)
-            f.write(b'\x00' * (4 - len(self.game_id)))  # Pad game ID to 4 bytes
+            # Write full 1024-byte M64 header (input data starts at 0x400)
+            header = bytearray(1024)
+            struct.pack_into('4s', header, 0x000, self.MAGIC)        # magic "M64\x1a"
+            struct.pack_into('<I', header, 0x004, self.VERSION)       # version 3
+            # 0x008: UID (unix timestamp) — leave 0 for generated files
+            struct.pack_into('<I', header, 0x00C, len(frames))        # VI count
+            struct.pack_into('<I', header, 0x010, 0)                  # rerecord count
+            struct.pack_into('B',  header, 0x014, 60)                 # fps (NTSC)
+            struct.pack_into('B',  header, 0x015, 1)                  # num controllers
+            struct.pack_into('<I', header, 0x018, len(frames))        # input sample count
+            struct.pack_into('<H', header, 0x01C, 2)                  # start type: 2 = power-on
+            struct.pack_into('<I', header, 0x020, 0x0001)             # controller flags: P1 present
+            # 0x100: ROM internal name (192 bytes, null-padded)
+            rom_name = b'Star Fox 64'
+            struct.pack_into('192s', header, 0x100, rom_name.ljust(192, b'\x00'))
+            # 0x1C4: country code ('E' = US NTSC)
+            struct.pack_into('<H', header, 0x1C4, 0x45)
+            f.write(bytes(header))
 
-            # Controller config (1 byte per controller, 4 controllers)
-            f.write(bytes([self.CONTROLLER_CONFIG, 0, 0, 0]))
-
-            # Frame count (number of input frames)
-            f.write(struct.pack('<I', len(frames)))
-
-            # Rerecord count (0 for generated)
-            f.write(struct.pack('<I', 0))
-
-            # Vis config (visualization, unused)
-            f.write(struct.pack('<I', 0))
-
-            # Write all input frames
+            # Write all input frames (4 bytes each)
             for frame in frames:
                 f.write(frame)
 
