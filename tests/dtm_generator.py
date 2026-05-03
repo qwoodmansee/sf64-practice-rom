@@ -14,6 +14,10 @@ class DTMGenerator:
     VERSION = 3
     CONTROLLER_CONFIG = 0x05  # Controller 1 plugged in
 
+    # N64 controller button bits, matching include/PR/os_cont.h.
+    BUTTON_A = 0x8000
+    BUTTON_D_DOWN = 0x0400
+
     def __init__(self, game_id="NG2E01", output_dir="tests/dtm"):
         """Initialize generator.
 
@@ -67,13 +71,13 @@ class DTMGenerator:
         # 2. Navigate to level and select
         # D-pad down N times to get to level N
         for _ in range(level_num):
-            # Press D-pad down (0x4000 = D_DOWN)
-            frames.append(self._pack_controller_state(buttons=0x4000))
+            # Press D-pad down
+            frames.append(self._pack_controller_state(buttons=self.BUTTON_D_DOWN))
             # Release and wait a frame
             frames.append(self._pack_controller_state())
 
-        # Press A button (0x8000 = A)
-        frames.append(self._pack_controller_state(buttons=0x8000))
+        # Press A button
+        frames.append(self._pack_controller_state(buttons=self.BUTTON_A))
         frames.append(self._pack_controller_state())  # Release
 
         # 3. Wait for level to load
