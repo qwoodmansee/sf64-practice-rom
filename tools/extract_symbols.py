@@ -54,6 +54,9 @@ SYMBOLS = [
     "gPracticeLastSaveResult",
     "gPracticeLastLoadResult",
     "gPracticeSaveDisabled",
+    # Boss-test feature symbols.
+    "sFightCarrier",
+    "gPracticeForceCarrier",
     # Phase 5 — cross-scene state machine + frame counter for the timeout test.
     "gPracticeCrossLoadState",
     "gPracticeCrossLoadSlot",
@@ -162,6 +165,13 @@ ACTOR_OFFSETS = {
     "state": 0x0B8,
 }
 
+# Boss struct offsets (include/sf64object.h Boss).
+# Boss.obj is at offset 0; Object.id is u16 at offset 0x02.
+BOSS_OFFSETS = {
+    "obj_id": 0x02,  # u16
+}
+BOSS_SIZEOF = 0x408  # explicit comment in include/sf64object.h
+
 # Enum constants needed by tests
 CONSTANTS = {
     "SAVE_OK":                  0,
@@ -232,6 +242,13 @@ def main():
     print("S.actor = {}")
     for field, off in sorted(ACTOR_OFFSETS.items(), key=lambda x: x[1]):
         print(f"S.actor.{field} = 0x{off:03X}")
+    print("")
+
+    print("-- Boss struct field offsets (include/sf64object.h Boss)")
+    print("S.boss = {}")
+    for field, off in sorted(BOSS_OFFSETS.items(), key=lambda x: x[1]):
+        print(f"S.boss.{field} = 0x{off:03X}")
+    print(f"S.boss.sizeof = 0x{BOSS_SIZEOF:03X}")
     print("")
 
     print("-- Enum constants")
