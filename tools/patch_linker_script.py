@@ -42,6 +42,7 @@ PRACTICE_OBJS = [
     "practice_test_fatfs",  # Phase 2: gated by IODEV_DIAG_FATFS, otherwise empty .o
     "practice_sd",          # Phase 6: OSK + file browser rendering and glue
     "practice_frame_advance",  # Frame advance / pause feature
+    "practice_boss_test",   # Boss test stage: data table + launch API
 ]
 
 # Order matters: each entry's predecessor must precede it in the list,
