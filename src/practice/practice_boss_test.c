@@ -13,12 +13,15 @@ typedef struct {
 } BossEntry;
 
 /* warpProgress: OBJ_BOSS_CO_CARRIER has TWO spawn entries in
- * aCoOnRailsLevelObjects: 163074.7f (xPos=1118, intro flyby seen on both
- * paths) and 203017.9f (xPos=4000, the actual shortcut-path fight, after
- * the waterfall and the path rejoin area). We target entry 2.
- * Warp ~2000 units before spawn for a quick run-up; the xPath override in
- * Play_Init places the player on the shortcut lane (xPath ~= xPos of the
- * boss entry) so the boss positioning math lands in the right geometry. */
+ * aCoOnRailsLevelObjects. ObjectInit fields (per sf64object.h) are
+ * { zPos1, zPos2, xPos, yPos, rot, id }, so for entry 2:
+ *   zPos1=203017.9f, zPos2=4000, xPos=7096, yPos=600.
+ * Entry 1 (zPos1=163074.7f, xPos=-1223) is the early flyby cameo seen
+ * on both Granga and shortcut routes. Entry 2 is the actual shortcut
+ * fight, after the waterfall (165943) and the late-Corneria path-rejoin
+ * area where shortcut actors cluster.
+ * Warp ~2000 units before spawn for a quick run-up; the xPath override
+ * in Play_Init pins the player to xPos=7096 to align with the boss. */
 static BossEntry sBossList[] = {
     { "CARRIER", LEVEL_CORNERIA, 0, 201000.0f, true },
 };

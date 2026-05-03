@@ -4613,12 +4613,12 @@ void Player_Setup(Player* playerx) {
 #ifdef PRACTICE_ROM
     /* Boss-test Carrier warp: force player onto the shortcut x-lane so
      * Corneria_CoCarrier_Init takes the sFightCarrier=true branch and the
-     * boss positioning math lands in the right geometry. xPath value
-     * matches the xPos of the second OBJ_BOSS_CO_CARRIER entry in
-     * aCoOnRailsLevelObjects (the actual fight, not the intro flyby). */
+     * boss positioning math lands in the right geometry. Value matches
+     * ObjectInit.xPos (offset 0x06, the THIRD numeric field) of the
+     * second OBJ_BOSS_CO_CARRIER entry in aCoOnRailsLevelObjects. */
     if (gPracticeForceCarrier) {
-        player->xPath = player->xPathTarget = 4000.0f;
-        player->pos.x = 4000.0f;
+        player->xPath = player->xPathTarget = 7096.0f;
+        player->pos.x = 7096.0f;
     }
 #endif
 
