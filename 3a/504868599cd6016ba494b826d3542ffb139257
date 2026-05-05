@@ -1,0 +1,27 @@
+src/practice/practice_boss_test.c
+  5e1688539845d091 33-34
+tests/test_boss_test_crusher.lua
+  5e1688539845d091 1-60
+tools/practice_invariants.py
+  5e1688539845d091 1400-1406
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "3a504868599cd6016ba494b826d3542ffb139257",
+  "prompts": {
+    "5e1688539845d091": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "17854085-8c5c-4726-8812-0718ed059e12",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 108,
+      "total_deletions": 2,
+      "accepted_lines": 107,
+      "overriden_lines": 0
+    }
+  }
+}
