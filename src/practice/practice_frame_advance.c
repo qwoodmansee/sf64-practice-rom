@@ -21,9 +21,13 @@ static bool sIsPaused = false;
 static s32 sQueuedFrameSteps = 0;
 static s32 sFrameAdvanceHoldTimer = 0;
 static s32 sFrameAdvanceRepeatTimer = 0;
+static bool sSavedWhilePaused = false;
+/* Survives Practice_FrameAdvance_Init so cross-scene loads restore pause. */
+static bool sPendingPauseRestore = false;
 
 void Practice_FrameAdvance_Init(void) {
-    sIsPaused = false;
+    sIsPaused = sPendingPauseRestore;
+    sPendingPauseRestore = false;
     sQueuedFrameSteps = 0;
     sFrameAdvanceHoldTimer = 0;
     sFrameAdvanceRepeatTimer = 0;
@@ -69,13 +73,16 @@ void Practice_FrameAdvance_Update(void) {
         }
     }
 
-    /* D-Left (no L): save to active slot */
+    /* D-Left (no L): save to active slot; remember pause state for restore on load */
     if ((press->button & L_JPAD) && !(hold->button & L_TRIG)) {
+        sSavedWhilePaused = sIsPaused;
         Practice_SaveState();
     }
 
-    /* D-Right (no L, no Z): load from active slot */
+    /* D-Right (no L, no Z): load from active slot; restore pause state from save */
     if ((press->button & R_JPAD) && !(hold->button & L_TRIG) && !(hold->button & Z_TRIG)) {
+        sIsPaused = sSavedWhilePaused;
+        sPendingPauseRestore = sSavedWhilePaused;
         Practice_LoadState();
     }
 
