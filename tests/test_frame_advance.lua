@@ -119,10 +119,11 @@ local before_menu = H.read_s32(S.gGameFrameCount)
 H.advance(3)
 H.assert_eq(H.read_s32(S.gGameFrameCount), before_menu, "gGameFrameCount frozen before menu open")
 
--- Hold Start long enough to open the practice menu (START_HOLD_FRAMES = 45)
-H.hold({Start = true}, 50)
-H.assert_eq(H.read_s32(S.gPracticeMenuState), S.const.PMENU_OPEN,
-    "Practice menu opened after Start hold")
+-- Open the practice menu with the Z+D-Right hotkey (PACTION_OPEN_MENU)
+H.press({Z = true, Right = true})
+H.advance(2)
+H.assert_eq(H.read_s32(S.gPracticeMenuState), S.const.PMENU_OPEN_FROZEN,
+    "Practice menu opened after Z+D-Right")
 
 -- Close the menu with B
 H.press({B = true})
