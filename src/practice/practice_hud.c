@@ -130,6 +130,11 @@ void Practice_Hud_Draw(void) {
     s32 valueX;
     s32 lineCount = 0;
 
+    /* Draw before the PLAY_UPDATE guard so it remains visible while frozen. */
+    if ((gGameState == GSTATE_PLAY) && Practice_FrameAdvance_IsPaused()) {
+        Practice_DrawTextColor(8, 8, "PAUSED", 255, 220, 60);
+    }
+
     if ((gGameState != GSTATE_PLAY) || (gPlayState != PLAY_UPDATE)) {
         return;
     }

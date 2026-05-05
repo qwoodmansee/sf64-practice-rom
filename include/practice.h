@@ -280,6 +280,12 @@ s32  Practice_GetRamSlotCount(void);
 /* Read-only handle into the slot meta table. NULL on out-of-range slot. */
 const PracticeSlotMeta* Practice_GetSlotMeta(s32 slot);
 
+/* practice_frame_advance.c */
+void Practice_FrameAdvance_Init(void);
+void Practice_FrameAdvance_Update(void);
+bool Practice_FrameAdvance_IsFrozen(void);
+bool Practice_FrameAdvance_IsPaused(void);
+
 /* practice_heap_audit.c */
 void Practice_HeapAudit_Boot(void);
 void Practice_HeapAudit_PerFrame(void);

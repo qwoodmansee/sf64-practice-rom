@@ -12,6 +12,7 @@ void Practice_Init(void) {
     gPracticeScreen = PSCREEN_LEVEL_SELECT;
     Practice_LevelSelect_OnEnter();
     gPracticeMenuState = PMENU_CLOSED;
+    Practice_FrameAdvance_Init();
 
     gPracticeConfig.laserStrength = LASERS_HYPER;
     gPracticeConfig.bombCount = 3;
@@ -84,6 +85,7 @@ void Practice_Init(void) {
 
 void Practice_Update(void) {
     Practice_Cheats_Apply();
+    Practice_FrameAdvance_Update();
 
     if (Practice_Sd_IsActive()) {
         Practice_Sd_Update();
