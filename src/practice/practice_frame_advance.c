@@ -17,6 +17,11 @@
 #define FRAME_ADVANCE_REPEAT_DELAY 12
 #define FRAME_ADVANCE_REPEAT_RATE 2
 
+/* D-pad bits used as frame-advance controls; excluded from input injection so
+ * they don't re-trigger practice actions (step, toggle, save, load) when the
+ * game logic runs on the stepped frame. */
+#define FRAME_ADVANCE_DPAD_MASK (U_JPAD | D_JPAD | L_JPAD | R_JPAD)
+
 static bool sIsPaused = false;
 static s32 sQueuedFrameSteps = 0;
 static s32 sFrameAdvanceHoldTimer = 0;
@@ -110,6 +115,12 @@ bool Practice_FrameAdvance_IsFrozen(void) {
     }
     if (sQueuedFrameSteps > 0) {
         sQueuedFrameSteps--;
+        /* Inject held non-dpad buttons as fresh presses on the stepped frame.
+         * Without this, buttons held across frozen frames are absent from
+         * gControllerPress (XOR-with-prev clears them) and game logic
+         * that checks press (firing, bombs, etc.) won't see them. */
+        gControllerPress[gMainController].button |=
+            gControllerHold[gMainController].button & ~(u16)FRAME_ADVANCE_DPAD_MASK;
         return false;
     }
     return true;
