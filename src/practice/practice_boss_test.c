@@ -30,7 +30,8 @@ typedef struct {
  * Warp ~2000 units before spawn for a quick run-up; the xPath override
  * in Play_Init pins the player to xPos=7096 to align with the boss. */
 static BossEntry sBossList[] = {
-    { "CARRIER", LEVEL_CORNERIA, 0, 201000.0f, true },
+    { "CARRIER", LEVEL_CORNERIA, 0, 201000.0f, true  },
+    { "CRUSHER", LEVEL_METEO,   0, 300000.0f, false },
 };
 
 #define BOSS_COUNT ARRAY_COUNT(sBossList)

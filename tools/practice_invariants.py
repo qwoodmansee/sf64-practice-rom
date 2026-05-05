@@ -1562,6 +1562,13 @@ def check_boss_test():
     if config_match and "gPracticeForceCarrier" in config_match.group(1):
         error("gPracticeForceCarrier must not be a PracticeConfig field (runtime-only state)")
 
+    if '"CRUSHER"' not in boss_test_src:
+        error('practice_boss_test.c missing "CRUSHER" entry in sBossList')
+
+    crusher_test = os.path.join("tests", "test_boss_test_crusher.lua")
+    if not os.path.isfile(crusher_test):
+        error(f"Boss Crusher functional test missing: {crusher_test}")
+
 
 def main():
     check_config_inits()
