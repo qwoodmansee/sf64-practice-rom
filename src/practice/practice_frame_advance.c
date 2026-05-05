@@ -33,6 +33,10 @@ void Practice_FrameAdvance_Update(void) {
         return;
     }
     if (gPracticeMenuState != PMENU_CLOSED) {
+        sIsPaused = false;
+        sQueuedFrameSteps = 0;
+        sFrameAdvanceHoldTimer = 0;
+        sFrameAdvanceRepeatTimer = 0;
         return;
     }
 

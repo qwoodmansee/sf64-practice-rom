@@ -79,4 +79,30 @@ H.assert_true(resumed_delta >= 3,
 
 H.assert_eq(H.game_state(), S.const.GSTATE_PLAY, "Game still in GSTATE_PLAY after frame advance cycle")
 
+-- --- MENU-OPEN CLEARS PAUSE TEST ---
+-- Pause again, then open the practice menu — this should clear frame advance.
+H.press({Down = true})
+H.advance(2)
+local before_menu = H.read_s32(S.gGameFrameCount)
+H.advance(3)
+H.assert_eq(H.read_s32(S.gGameFrameCount), before_menu, "gGameFrameCount frozen before menu open")
+
+-- Hold Start long enough to open the practice menu (START_HOLD_FRAMES = 45)
+H.hold({Start = true}, 50)
+H.assert_eq(H.read_s32(S.gPracticeMenuState), S.const.PMENU_OPEN,
+    "Practice menu opened after Start hold")
+
+-- Close the menu with B
+H.press({B = true})
+H.advance(2)
+H.assert_eq(H.read_s32(S.gPracticeMenuState), S.const.PMENU_CLOSED,
+    "Practice menu closed after B press")
+
+-- Frame advance should be cleared — game must tick normally
+local after_menu_close = H.read_s32(S.gGameFrameCount)
+H.advance(5)
+local after_settle = H.read_s32(S.gGameFrameCount)
+H.assert_true(after_settle > after_menu_close,
+    "gGameFrameCount advances after menu closes (was frozen by frame advance before menu)")
+
 H.finish()

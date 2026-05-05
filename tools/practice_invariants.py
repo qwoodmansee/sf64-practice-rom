@@ -1454,6 +1454,50 @@ def check_frame_advance_hook():
             "GSTATE_PLAY block of Game_Update in fox_game.c (check_frame_advance_hook)"
         )
 
+    # IsFrozen must only apply when PMENU_CLOSED — PMENU_OPEN must always
+    # let Play_Main tick so that frame advance doesn't freeze menu navigation.
+    if "PMENU_OPEN" not in block:
+        error(
+            "GSTATE_PLAY block in fox_game.c must gate IsFrozen() on PMENU_CLOSED "
+            "so that PMENU_OPEN always runs Play_Main (check_frame_advance_hook)"
+        )
+
+
+def check_frame_advance_clears_on_menu():
+    """Practice_FrameAdvance_Update must clear sIsPaused when the menu is open.
+
+    If the update just returns early on menu open, sIsPaused stays latched and
+    gameplay stays frozen after the menu closes.
+    """
+    fa_path = os.path.join("src", "practice", "practice_frame_advance.c")
+    src = read(fa_path)
+
+    update_body = find_c_function(src, "Practice_FrameAdvance_Update")
+    if update_body is None:
+        error("check_frame_advance_clears_on_menu: could not locate Practice_FrameAdvance_Update")
+        return
+
+    # There must be an assignment to sIsPaused inside the PMENU_CLOSED guard block,
+    # meaning state is cleared when the menu is open.
+    menu_guard = re.search(
+        r"gPracticeMenuState\s*!=\s*PMENU_CLOSED(.*?)return\s*;",
+        update_body, re.DOTALL,
+    )
+    if not menu_guard:
+        error(
+            "check_frame_advance_clears_on_menu: could not find PMENU_CLOSED guard "
+            "in Practice_FrameAdvance_Update"
+        )
+        return
+
+    guard_block = menu_guard.group(1)
+    if "sIsPaused" not in guard_block:
+        error(
+            "Practice_FrameAdvance_Update must clear sIsPaused when gPracticeMenuState "
+            "!= PMENU_CLOSED — otherwise frame advance stays latched across menu opens "
+            "(check_frame_advance_clears_on_menu)"
+        )
+
 
 def check_cs_tap_slot_baseline():
     """CS TAP timing must use slot-aware baseline for unlocked shots.
@@ -1524,6 +1568,7 @@ def main():
     check_sd_load_implemented()
     check_sd_per_op_release()
     check_frame_advance_hook()
+    check_frame_advance_clears_on_menu()
     check_cs_tap_slot_baseline()
     check_hit64_logo()
     check_owl_logo()
