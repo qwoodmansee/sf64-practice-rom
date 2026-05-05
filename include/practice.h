@@ -148,6 +148,13 @@ void Practice_SetBinding(PracticeAction action, u16 button);
 const char* Practice_GetActionName(PracticeAction action);
 const char* Practice_GetDPadName(u16 button);
 
+/* practice_boss_test.c */
+extern bool gPracticeForceCarrier;
+
+s32  Practice_BossTest_GetCount(void);
+const char* Practice_BossTest_GetName(s32 index);
+void Practice_BossTest_Launch(s32 index);
+
 /* practice_level.c */
 void Practice_LevelSelect_OnEnter(void);
 void Practice_LevelSelect_Update(void);

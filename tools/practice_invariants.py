@@ -1525,6 +1525,72 @@ def check_cs_tap_slot_baseline():
         error(f"{cs}: gPlayerShots[14] poll missing from Practice_ChargeAssist_LockOnBegin")
 
 
+def check_boss_test():
+    """Boss-test feature: file exists, flag is wired, reset paths are present."""
+    boss_test_path = os.path.join(SRC_PRACTICE, "practice_boss_test.c")
+    if not os.path.isfile(boss_test_path):
+        error(f"Boss-test source missing: {boss_test_path}")
+        return
+
+    boss_test_src = read(boss_test_path)
+    fox_co_src    = read("src/overlays/ovl_i1/fox_co.c")
+    practice_h    = read(INCLUDE_PRACTICE)
+    main_src      = read(os.path.join(SRC_PRACTICE, "practice_main.c"))
+    level_src     = read(PRACTICE_LEVEL)
+    patch_src     = read("tools/patch_linker_script.py")
+
+    if "gPracticeForceCarrier" not in boss_test_src:
+        error("practice_boss_test.c missing gPracticeForceCarrier definition")
+    if "gPracticeForceCarrier" not in fox_co_src:
+        error("fox_co.c missing gPracticeForceCarrier override")
+    if "Practice_BossTest_Launch" not in practice_h:
+        error("practice.h missing Practice_BossTest_Launch declaration")
+    if "Practice_BossTest_Launch" not in boss_test_src:
+        error("practice_boss_test.c missing Practice_BossTest_Launch definition")
+    if "gPracticeForceCarrier = false" not in main_src:
+        error("Practice_Init missing gPracticeForceCarrier = false reset")
+    if "gPracticeForceCarrier = false" not in level_src:
+        error("Practice_LevelSelect_Update missing gPracticeForceCarrier = false on non-boss A-press")
+    if '"practice_boss_test"' not in patch_src:
+        error('tools/patch_linker_script.py missing "practice_boss_test" in PRACTICE_OBJS')
+
+    # Negative check: gPracticeForceCarrier must NOT be a PracticeConfig field (runtime only)
+    config_match = re.search(
+        r"typedef struct PracticeConfig\s*\{(.*?)\}\s*PracticeConfig;",
+        practice_h, re.DOTALL
+    )
+    if config_match and "gPracticeForceCarrier" in config_match.group(1):
+        error("gPracticeForceCarrier must not be a PracticeConfig field (runtime-only state)")
+
+    if '"CRUSHER"' not in boss_test_src:
+        error('practice_boss_test.c missing "CRUSHER" entry in sBossList')
+
+    crusher_test = os.path.join("tests", "test_boss_test_crusher.lua")
+    if not os.path.isfile(crusher_test):
+        error(f"Boss Crusher functional test missing: {crusher_test}")
+
+    for name, fname in [
+        ('"BACOON"',    "tests/test_boss_test_bacoon.lua"),
+        ('"SPYBORG"',   "tests/test_boss_test_spyborg.lua"),
+        ('"VULKAIN"',   "tests/test_boss_test_vulkain.lua"),
+        ('"SARUMAR"',   "tests/test_boss_test_sarumar.lua"),
+        ('"GORAS"',     "tests/test_boss_test_goras.lua"),
+        ('"GORGON"',    "tests/test_boss_test_gorgon.lua"),
+        ('"GOLEMECH"',  "tests/test_boss_test_golemech.lua"),
+        ('"ANDROSS"',   "tests/test_boss_test_andross.lua"),
+    ]:
+        if name not in boss_test_src:
+            error(f'practice_boss_test.c missing {name} entry in sBossList')
+        if not os.path.isfile(fname):
+            error(f'Boss test missing: {fname}')
+
+    if '"A.BRAIN"' not in boss_test_src:
+        error('practice_boss_test.c missing "A.BRAIN" entry in sBossList')
+    brain_test = os.path.join("tests", "test_boss_test_andross_brain.lua")
+    if not os.path.isfile(brain_test):
+        error(f"Boss brain functional test missing: {brain_test}")
+
+
 def main():
     check_config_inits()
     check_function_definitions()
@@ -1574,6 +1640,7 @@ def main():
     check_owl_logo()
     check_minimap_boss()
     check_build_info()
+    check_boss_test()
 
     if errors:
         print("Practice ROM invariant check FAILED:")

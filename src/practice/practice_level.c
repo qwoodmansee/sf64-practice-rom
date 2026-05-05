@@ -55,6 +55,8 @@ static LevelEntry sLevelList[] = {
       { { "START", LEVEL_INVALID, 0 }, { "ANDROSS", LEVEL_VENOM_ANDROSS, 0 }, { "CP 1", LEVEL_INVALID, 0, 150379.9f } } },
     { "VENOM 2",  LEVEL_VENOM_2,  PLANET_VENOM,    7, 2,
       { { "START", LEVEL_INVALID, 0 }, { "GREAT FOX", LEVEL_INVALID, 2 } } },
+    { "BOSSES",   LEVEL_INVALID,  PLANET_CORNERIA, 8, 0,
+      { { "", LEVEL_INVALID, 0 } } },
 };
 
 #define LEVEL_COUNT (s32)(sizeof(sLevelList) / sizeof(sLevelList[0]))
@@ -155,6 +157,11 @@ void Practice_LevelSelect_OnEnter(void) {
     sBgmLastSpecPacked = 0xFFFF;
 }
 
+static bool IsBossTestEntry(s32 levelIndex) {
+    return (sLevelList[levelIndex].levelId == LEVEL_INVALID) &&
+           (sLevelList[levelIndex].phaseCount == 0);
+}
+
 void Practice_LevelSelect_Update(void) {
     OSContPad* press = &gControllerPress[gMainController];
     s32 phaseCount;
@@ -197,18 +204,36 @@ void Practice_LevelSelect_Update(void) {
         sSelectedPhase = 0;
     }
 
-    phaseCount = sLevelList[sSelectedLevel].phaseCount;
-    if (phaseCount > 1) {
-        if (press->button & L_JPAD) {
-            sSelectedPhase--;
-            if (sSelectedPhase < 0) {
-                sSelectedPhase = phaseCount - 1;
+    if (IsBossTestEntry(sSelectedLevel)) {
+        s32 bossCount = Practice_BossTest_GetCount();
+        if (bossCount > 0) {
+            if (press->button & L_JPAD) {
+                sSelectedPhase--;
+                if (sSelectedPhase < 0) {
+                    sSelectedPhase = bossCount - 1;
+                }
+            }
+            if (press->button & R_JPAD) {
+                sSelectedPhase++;
+                if (sSelectedPhase >= bossCount) {
+                    sSelectedPhase = 0;
+                }
             }
         }
-        if (press->button & R_JPAD) {
-            sSelectedPhase++;
-            if (sSelectedPhase >= phaseCount) {
-                sSelectedPhase = 0;
+    } else {
+        phaseCount = sLevelList[sSelectedLevel].phaseCount;
+        if (phaseCount > 1) {
+            if (press->button & L_JPAD) {
+                sSelectedPhase--;
+                if (sSelectedPhase < 0) {
+                    sSelectedPhase = phaseCount - 1;
+                }
+            }
+            if (press->button & R_JPAD) {
+                sSelectedPhase++;
+                if (sSelectedPhase >= phaseCount) {
+                    sSelectedPhase = 0;
+                }
             }
         }
     }
@@ -223,6 +248,13 @@ void Practice_LevelSelect_Update(void) {
     }
 
     if (press->button & A_BUTTON) {
+        if (IsBossTestEntry(sSelectedLevel)) {
+            Practice_BossTest_Launch(sSelectedPhase);
+            return;
+        }
+        /* Non-boss launch: clear the override so a previous boss-test run
+         * does not leak its force flag into a subsequent vanilla launch. */
+        gPracticeForceCarrier = false;
         phase = &sLevelList[sSelectedLevel].phases[sSelectedPhase];
         levelId = (phase->levelId == LEVEL_INVALID) ? sLevelList[sSelectedLevel].levelId : phase->levelId;
         Practice_LaunchLevel(levelId, phase->phase, phase->checkpointProgress);
@@ -278,14 +310,20 @@ void Practice_LevelSelect_Draw(void) {
     Practice_DrawText(20, 168, "BGM:");
     Practice_DrawTextColor(52, 168, sBgmList[sBgmIndex].name, 100, 200, 255);
 
-    phaseCount = sLevelList[sSelectedLevel].phaseCount;
-    Practice_DrawText(20, 180, "PHASE:");
-    if (phaseCount > 1) {
+    if (IsBossTestEntry(sSelectedLevel)) {
+        Practice_DrawText(20, 180, "BOSS:");
         Practice_DrawTextColor(72, 180,
-            sLevelList[sSelectedLevel].phases[sSelectedPhase].name,
-            255, 220, 0);
+            Practice_BossTest_GetName(sSelectedPhase), 255, 220, 0);
     } else {
-        Practice_DrawTextColor(72, 180, "START", 150, 150, 150);
+        phaseCount = sLevelList[sSelectedLevel].phaseCount;
+        Practice_DrawText(20, 180, "PHASE:");
+        if (phaseCount > 1) {
+            Practice_DrawTextColor(72, 180,
+                sLevelList[sSelectedLevel].phases[sSelectedPhase].name,
+                255, 220, 0);
+        } else {
+            Practice_DrawTextColor(72, 180, "START", 150, 150, 150);
+        }
     }
 
     Practice_DrawText(20, 192, "EXPERT:");

@@ -54,6 +54,9 @@ SYMBOLS = [
     "gPracticeLastSaveResult",
     "gPracticeLastLoadResult",
     "gPracticeSaveDisabled",
+    # Boss-test feature symbols.
+    "sFightCarrier",
+    "gPracticeForceCarrier",
     # Phase 5 — cross-scene state machine + frame counter for the timeout test.
     "gPracticeCrossLoadState",
     "gPracticeCrossLoadSlot",
@@ -162,6 +165,13 @@ ACTOR_OFFSETS = {
     "state": 0x0B8,
 }
 
+# Boss struct offsets (include/sf64object.h Boss).
+# Boss.obj is at offset 0; Object.id is u16 at offset 0x02.
+BOSS_OFFSETS = {
+    "obj_id": 0x02,  # u16
+}
+BOSS_SIZEOF = 0x408  # explicit comment in include/sf64object.h
+
 # Enum constants needed by tests
 CONSTANTS = {
     "SAVE_OK":                  0,
@@ -185,6 +195,14 @@ CONSTANTS = {
     "LEVEL_SECTOR_Y":           2,
     "LEVEL_FORTUNA":            3,
     "LEVEL_KATINA":             4,
+    "LEVEL_AQUAS":              13,
+    "LEVEL_SECTOR_X":           2,
+    "LEVEL_SOLAR":              7,
+    "LEVEL_ZONESS":             8,
+    "LEVEL_TITANIA":            12,
+    "LEVEL_AREA_6":             3,
+    "LEVEL_VENOM_1":            6,
+    "LEVEL_VENOM_ANDROSS":      9,
 }
 
 def kseg0_to_rdram(addr):
@@ -232,6 +250,13 @@ def main():
     print("S.actor = {}")
     for field, off in sorted(ACTOR_OFFSETS.items(), key=lambda x: x[1]):
         print(f"S.actor.{field} = 0x{off:03X}")
+    print("")
+
+    print("-- Boss struct field offsets (include/sf64object.h Boss)")
+    print("S.boss = {}")
+    for field, off in sorted(BOSS_OFFSETS.items(), key=lambda x: x[1]):
+        print(f"S.boss.{field} = 0x{off:03X}")
+    print(f"S.boss.sizeof = 0x{BOSS_SIZEOF:03X}")
     print("")
 
     print("-- Enum constants")

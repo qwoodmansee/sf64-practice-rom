@@ -51,6 +51,12 @@ void Practice_Init(void) {
     gPracticeConfig.infLives = false;
     gPracticeConfig.infBoost = false;
 
+    /* Boss-test override flag: runtime-only, reset on every boot.
+     * Per-launch resets happen in Practice_LevelSelect_Update's non-boss
+     * A-press branch (Task 6) and in Practice_BossTest_Launch (which sets
+     * it true after Practice_LaunchLevel returns). */
+    gPracticeForceCarrier = false;
+
     osSyncPrintf("=== PRACTICE ROM boot @ %s %s ===\n", __DATE__, __TIME__);
 
     {
