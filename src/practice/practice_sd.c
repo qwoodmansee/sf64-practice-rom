@@ -119,12 +119,16 @@ static void on_load_file_selected(const char *path, void *ud) {
     sd_op_end();
     osSyncPrintf("[sd] slot_load=%d\n", res);
     Practice_Menu_Close();
+    osSyncPrintf("[sd] menu_closed\n");
     if (res == SLOT_MANAGER_OK) {
         if (Practice_Sd_LoadIsPending()) {
             Practice_Hud_ShowStatus("XSCENE WAIT", 220, 220, 80);
+        } else if (Practice_Save_LastLoadWasXBuild()) {
+            Practice_Hud_ShowStatus("SD XBLD OK", 220, 220, 80);
         } else {
             Practice_Hud_ShowStatus("SD LOAD OK", 80, 255, 120);
         }
+        osSyncPrintf("[sd] load_cb done pending=%d\n", (s32)Practice_Sd_LoadIsPending());
         return;
     }
     switch (res) {

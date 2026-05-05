@@ -240,10 +240,10 @@ def check_iodev_sc64():
 def check_iodev_ed64():
     """ED64 X iodev backend must preserve protocol invariants.
 
-    Phase 1b Tasks 1-2 only ship cart detection + the verified CRC layer;
-    SD init / read / write are stubs. The invariants below cover what is
-    actually implemented; once Tasks 3-5 land, additional checks (sd_crc.h
-    include, sd_crc7 callsite) should be added here.
+    Covers both the cart detection layer and the SD SPI implementation.
+    The SD ops are a bit-bang SPI protocol driven through the FPGA registers;
+    the invariants below guard the key protocol patterns that, if removed,
+    would silently break SD I/O on real EverDrive X hardware.
     """
     path = "lib/iodev/iodev_ed64.c"
     if not os.path.isfile(path):
@@ -277,6 +277,31 @@ def check_iodev_ed64():
     # cart on the bus.
     if "0xED64" not in src:
         error(f"{path}: detection must check REG_EDID for 0xED64 magic")
+
+    # SD init must implement the full SPI sequence, not just return a stub.
+    # CMD8 echo check (0x01AA) distinguishes SDHC from SD v1/MMC — without
+    # it, SDHC cards use byte addressing and all reads/writes land at wrong
+    # sectors.
+    if "0x01AA" not in src and "SD_CMD8_ARG" not in src:
+        error(f"{path}: ed64_sd_init must check CMD8 echo for SDHC detection (0x01AA)")
+
+    # CMD0 requires a valid CRC7 (0x95) in SPI mode before the card accepts
+    # any other command. Without it the card ignores CMD0 and stays in native
+    # mode, making every subsequent command fail.
+    if "0x95u" not in src and "SD_CMD0_CRC" not in src:
+        error(f"{path}: ed64_sd_init must use CMD0 CRC byte 0x95 (SD_CMD0_CRC)")
+
+    # Data token 0xFE must be present for both block reads and block writes.
+    if "SD_DATA_TOKEN" not in src and "0xFEu" not in src:
+        error(f"{path}: read/write sector helpers must use SD data token 0xFE")
+
+    # Sector-level helpers must exist as separate static functions so that
+    # the multi-sector loops in sd_read/write_sectors stay readable and the
+    # single-sector path is testable in isolation.
+    if "ed64_read_sector" not in src:
+        error(f"{path}: ed64_read_sector helper missing from ED64 backend")
+    if "ed64_write_sector" not in src:
+        error(f"{path}: ed64_write_sector helper missing from ED64 backend")
 
 
 def check_spawn_zone_typing():
@@ -1368,6 +1393,57 @@ def check_minimap_boss():
         error(f"{minimap_c}: boss rot.y not NaN-guarded - SIN_DEG on a NaN freezes the N64")
 
 
+def check_xbld_load_zeros_entities():
+    """Cross-build loads must zero actor/boss/playerShots arrays when the overlay
+    build ID mismatches, to prevent a MIPS float-to-int trap on the next update frame."""
+    save_c = os.path.join(SRC_PRACTICE, "practice_save.c")
+    src = read(save_c)
+    if "sSdLastLoadWasXBld" not in src:
+        error(f"{save_c}: sSdLastLoadWasXBld flag missing - cross-build load safety not implemented")
+    for arr in ('actors', 'bosses', 'scenery', 'sprites', 'effects', 'items', 'playerShots'):
+        if f'bzero(sn->{arr}' not in src:
+            error(f"{save_c}: bzero(sn->{arr}) missing - entity array not cleared on overlay mismatch")
+    if "SD XBLD OK" not in src:
+        error(f"{save_c}: 'SD XBLD OK' status missing - cross-build loads must show distinct status")
+
+    sd_c = os.path.join(SRC_PRACTICE, "practice_sd.c")
+    sd_src = read(sd_c)
+    if "Practice_Save_LastLoadWasXBuild" not in sd_src:
+        error(f"{sd_c}: Practice_Save_LastLoadWasXBuild not called - cross-build status not shown to user")
+
+
+def check_status_banner_draws_during_pause():
+    """Practice_Hud_Draw must render the SD save/load status banner before the
+    PLAY_UPDATE early-return, otherwise results triggered from the in-game pause
+    menu finish silently. See practice_hud.c bug found 2026-05-02."""
+    hud_c = os.path.join(SRC_PRACTICE, "practice_hud.c")
+    src = read(hud_c)
+
+    func_match = re.search(
+        r"void\s+Practice_Hud_Draw\s*\(\s*void\s*\)\s*\{(.*?)\n\}",
+        src, re.DOTALL
+    )
+    if not func_match:
+        error(f"{hud_c}: Practice_Hud_Draw function not found")
+        return
+
+    body = func_match.group(1)
+    status_idx = body.find("sStatusTimer > 0")
+    guard_idx = body.find("gPlayState != PLAY_UPDATE")
+
+    if status_idx < 0:
+        error(f"{hud_c}: status banner draw (sStatusTimer > 0) missing from Practice_Hud_Draw")
+        return
+    if guard_idx < 0:
+        error(f"{hud_c}: PLAY_UPDATE guard missing from Practice_Hud_Draw")
+        return
+    if status_idx > guard_idx:
+        error(
+            f"{hud_c}: status banner draw must come BEFORE the PLAY_UPDATE guard, "
+            f"otherwise SD save/load results from the pause menu render silently"
+        )
+
+
 def check_build_info():
     """Build hash header is generated and included in the level-select draw path."""
     gen_script = os.path.join("tools", "gen_build_info.py")
@@ -1462,6 +1538,8 @@ def main():
     check_hit64_logo()
     check_owl_logo()
     check_minimap_boss()
+    check_xbld_load_zeros_entities()
+    check_status_banner_draws_during_pause()
     check_build_info()
 
     if errors:

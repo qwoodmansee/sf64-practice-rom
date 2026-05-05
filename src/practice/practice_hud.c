@@ -130,13 +130,15 @@ void Practice_Hud_Draw(void) {
     s32 valueX;
     s32 lineCount = 0;
 
-    if ((gGameState != GSTATE_PLAY) || (gPlayState != PLAY_UPDATE)) {
-        return;
-    }
-
+    /* Status banner must draw during PLAY_PAUSE too, otherwise SD save/load
+     * results triggered from the pause menu finish silently. */
     if ((sStatusTimer > 0) && (sStatusText != NULL)) {
         Practice_DrawBox(74, 36, 172, 14, 0, 0, 0, 170);
         Practice_DrawTextColor(80, 39, sStatusText, sStatusR, sStatusG, sStatusB);
+    }
+
+    if ((gGameState != GSTATE_PLAY) || (gPlayState != PLAY_UPDATE)) {
+        return;
     }
 
     if (!gPracticeConfig.showHudOverlay) {

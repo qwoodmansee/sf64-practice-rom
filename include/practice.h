@@ -99,6 +99,7 @@ extern s32 gPracticeActiveSlot;
 extern s32 gPracticeSlotValidBits;
 extern s32 gPracticeLastSaveResult;
 extern s32 gPracticeLastLoadResult;
+extern s32 gPracticePostLoadDiag;
 
 /* Phase 3 — RAM checkpoint selection (Practice_Save_Init at boot).
  * These live in .main_bss. The slot pool megabyte sits in Expansion Pak DRAM
@@ -260,6 +261,7 @@ bool Practice_Sd_IsActive(void);
 void Practice_Sd_StartSave(void);
 void Practice_Sd_StartLoad(void);
 bool Practice_Sd_LoadIsPending(void);
+bool Practice_Save_LastLoadWasXBuild(void);
 
 /* Per-slot metadata captured at save time. */
 typedef struct PracticeSlotMeta {

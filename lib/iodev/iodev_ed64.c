@@ -20,8 +20,11 @@
  * cart space drop after the first few. A dummy IO_READ between writes
  * drains the PI bus. Enforced by the PI_WRITE_FLUSH macro.
  *
- * Phase 1b ships cart detection only; SD ops return IODEV_ERR_NO_DEVICE
- * (stubs) until Tasks 3-5 wire them up against the verified sd_crc layer.
+ * SD I/O is implemented as SPI bit-bang via the FPGA registers. Unlike SC64,
+ * there is no firmware-side DMA: the N64 CPU transfers each byte directly
+ * through the SD_CMD_WR / SD_DAT_WR registers and polls SD_STATUS.BUSY.
+ * This is slower than SC64's DMA path, but is the only mechanism exposed
+ * by the EverDrive X FPGA for CPU-initiated SD access.
  */
 
 #include "PR/rcp.h"
@@ -88,10 +91,54 @@
     (void) IO_READ(ED64_REG_EDID);                \
 } while (0)
 
-/* SD-bus cap and timing: standard 8-byte alignment for any RDRAM buffer
- * we DMA into / from (placeholder for Tasks 3-5). The 128-sector cap
- * matches SC64 for caller-contract consistency. */
+/* SD-bus cap: 128-sector max matches SC64's caller-contract. */
 #define ED64_SD_MAX_SECTORS  128u
+
+/* ---- SD SPI configuration ---- */
+
+/* SD_STATUS config word written before each byte transfer.
+ * BITLEN = 7 means 8-bit transfer (7 + 1 = 8). */
+#define ED64_SD_INIT_CFG   7u                       /* SPD=0: ~400 kHz init clock */
+#define ED64_SD_HS_CFG     (7u | ED64_SD_CFG_SPD)  /* SPD=1: 50 MHz after init */
+
+/* Polling retry budget for the BUSY bit and data-token waits.
+ * IO_READ at worst-case wait states is ~200 ns; 500000 retries gives a
+ * generous ~100 ms ceiling for a single byte transfer that should complete
+ * in ~20 us at init speed. */
+#define ED64_SD_TIMEOUT     500000
+
+/* ---- SD SPI protocol constants ---- */
+
+#define SD_R1_IDLE          0x01u  /* in-idle-state: normal after CMD0 */
+#define SD_R1_OK            0x00u  /* ready: ACMD41 complete */
+
+#define SD_DATA_TOKEN       0xFEu  /* start of a 512-byte data block */
+#define SD_RESP_MASK        0x1Fu  /* data response token mask */
+#define SD_RESP_ACCEPTED    0x05u  /* data accepted */
+
+#define SD_CMD0             0u
+#define SD_CMD8             8u
+#define SD_CMD16            16u
+#define SD_CMD17            17u
+#define SD_CMD24            24u
+#define SD_CMD55            55u
+#define SD_ACMD41           41u
+
+/* CMD8 SEND_IF_COND argument: VHS=0001 (2.7-3.6V) | check pattern 0xAA. */
+#define SD_CMD8_ARG         0x000001AAu
+
+/* CRC7 values. Only CMD0 and CMD8 require a valid CRC in SPI mode;
+ * all subsequent commands accept a dummy 0xFF. */
+#define SD_CMD0_CRC         0x95u
+#define SD_CMD8_CRC         0x87u
+
+/* ---- File-static SD state ---- */
+
+/* SD_STATUS config word; updated to HS after successful init. */
+static uint32_t sSdCfg  = ED64_SD_INIT_CFG;
+
+/* Non-zero if the card identified itself as SDHC/SDXC during CMD8. */
+static int      sSdIsHC = 0;
 
 /* ---- Cart unlock ---- */
 
@@ -111,6 +158,262 @@ static void ed64_lock(void) {
     PI_WRITE_FLUSH(ED64_REG_KEY, ED64_KEY_LOCK);
 }
 
+/* ---- SPI byte transfer helpers ---- */
+
+/* Send one byte on the CMD line and optionally receive one back.
+ * Sequence: write SD_STATUS config, write CMD_WR (triggers SPI), poll BUSY,
+ * read CMD_RD. */
+static iodev_result_t ed64_cmd_byte(uint8_t out, uint8_t *in) {
+    int n;
+    PI_WRITE_FLUSH(ED64_REG_SD_STATUS, sSdCfg);
+    PI_WRITE_FLUSH(ED64_REG_SD_CMD_WR, (uint32_t)out);
+    n = ED64_SD_TIMEOUT;
+    while (n > 0 && (IO_READ(ED64_REG_SD_STATUS) & ED64_SD_STA_BUSY)) {
+        n--;
+    }
+    if (n <= 0) return IODEV_ERR_TIMEOUT;
+    if (in) *in = (uint8_t)(IO_READ(ED64_REG_SD_CMD_RD) & 0xFFu);
+    return IODEV_OK;
+}
+
+/* Send one byte on the DAT0 line and optionally receive one back.
+ * Same protocol as ed64_cmd_byte but routes through DAT_WR/DAT_RD. */
+static iodev_result_t ed64_dat_byte(uint8_t out, uint8_t *in) {
+    int n;
+    PI_WRITE_FLUSH(ED64_REG_SD_STATUS, sSdCfg);
+    PI_WRITE_FLUSH(ED64_REG_SD_DAT_WR, (uint32_t)out);
+    n = ED64_SD_TIMEOUT;
+    while (n > 0 && (IO_READ(ED64_REG_SD_STATUS) & ED64_SD_STA_BUSY)) {
+        n--;
+    }
+    if (n <= 0) return IODEV_ERR_TIMEOUT;
+    if (in) *in = (uint8_t)(IO_READ(ED64_REG_SD_DAT_RD) & 0xFFu);
+    return IODEV_OK;
+}
+
+/* Send a 6-byte SD command frame: 0x40|cmd, arg[31:24..7:0], crc. */
+static iodev_result_t ed64_send_cmd(uint8_t cmd, uint32_t arg, uint8_t crc) {
+    iodev_result_t r;
+    r = ed64_cmd_byte(0x40u | cmd,              NULL); if (r != IODEV_OK) return r;
+    r = ed64_cmd_byte((uint8_t)(arg >> 24),     NULL); if (r != IODEV_OK) return r;
+    r = ed64_cmd_byte((uint8_t)(arg >> 16),     NULL); if (r != IODEV_OK) return r;
+    r = ed64_cmd_byte((uint8_t)(arg >>  8),     NULL); if (r != IODEV_OK) return r;
+    r = ed64_cmd_byte((uint8_t)(arg),           NULL); if (r != IODEV_OK) return r;
+    return    ed64_cmd_byte(crc,                NULL);
+}
+
+/* Receive R1 response. SD holds MISO high until ready; clock 0xFF bytes
+ * until bit 7 clears. Returns IODEV_ERR_TIMEOUT if no valid byte in 8 tries. */
+static iodev_result_t ed64_recv_r1(uint8_t *r1_out) {
+    uint8_t b;
+    int i;
+    iodev_result_t r;
+    b = 0xFFu;
+    for (i = 0; i < 8; i++) {
+        r = ed64_cmd_byte(0xFFu, &b);
+        if (r != IODEV_OK) return r;
+        if (!(b & 0x80u)) {
+            if (r1_out) *r1_out = b;
+            return IODEV_OK;
+        }
+    }
+    return IODEV_ERR_TIMEOUT;
+}
+
+/* ---- SD init sequence ---- */
+
+static iodev_result_t ed64_sd_init(void) {
+    /* IDO C89: all declarations before any statements. */
+    iodev_result_t r;
+    uint8_t r1;
+    uint8_t echo[4];
+    uint32_t v8;
+    int i;
+
+    sSdCfg  = ED64_SD_INIT_CFG;
+    sSdIsHC = 0;
+
+    /* >= 74 clock pulses with MOSI=1 before CMD0 to enter SPI mode.
+     * 10 bytes = 80 clocks. */
+    for (i = 0; i < 10; i++) {
+        r = ed64_cmd_byte(0xFFu, NULL);
+        if (r != IODEV_OK) return r;
+    }
+
+    /* CMD0: GO_IDLE_STATE. CRC is required at this point. */
+    r = ed64_send_cmd(SD_CMD0, 0u, SD_CMD0_CRC);
+    if (r != IODEV_OK) return r;
+    r = ed64_recv_r1(&r1);
+    if (r != IODEV_OK) return r;
+    if (r1 != SD_R1_IDLE) return IODEV_ERR_IO;
+
+    /* CMD8: SEND_IF_COND. Distinguishes SDHC/SDXC (v2+) from SD v1/MMC.
+     * CRC is required here too. */
+    r = ed64_send_cmd(SD_CMD8, SD_CMD8_ARG, SD_CMD8_CRC);
+    if (r != IODEV_OK) return r;
+    r = ed64_recv_r1(&r1);
+    if (r != IODEV_OK) return r;
+    if (r1 == SD_R1_IDLE) {
+        /* SD v2+: trailing 4 bytes echo the argument. */
+        for (i = 0; i < 4; i++) {
+            r = ed64_cmd_byte(0xFFu, &echo[i]);
+            if (r != IODEV_OK) return r;
+        }
+        /* Lower 12 bits must match 0x1AA (VHS=1, pattern=0xAA). */
+        v8 = (((uint32_t)(echo[2] & 0x0Fu)) << 8) | (uint32_t)echo[3];
+        if (v8 != 0x01AAu) return IODEV_ERR_IO;
+        sSdIsHC = 1;
+    }
+    /* r1 == 0x05 (illegal command): SD v1 or MMC; sSdIsHC stays 0. */
+
+    /* ACMD41: send CMD55 + CMD41 until R1 == 0x00 (card initialized). */
+    r1 = SD_R1_IDLE;
+    for (i = 0; i < 4000; i++) {
+        r = ed64_send_cmd(SD_CMD55, 0u, 0xFFu);
+        if (r != IODEV_OK) return r;
+        r = ed64_recv_r1(NULL);
+        if (r != IODEV_OK) return r;
+
+        r = ed64_send_cmd(SD_ACMD41, sSdIsHC ? 0x40000000u : 0u, 0xFFu);
+        if (r != IODEV_OK) return r;
+        r = ed64_recv_r1(&r1);
+        if (r != IODEV_OK) return r;
+        if (r1 == SD_R1_OK) break;
+    }
+    if (r1 != SD_R1_OK) return IODEV_ERR_IO;
+
+    /* Card initialized: switch to 50 MHz. */
+    sSdCfg = ED64_SD_HS_CFG;
+
+    /* CMD16: SET_BLOCKLEN = 512 bytes. Required for SD v1; SDHC ignores it. */
+    r = ed64_send_cmd(SD_CMD16, 512u, 0xFFu);
+    if (r != IODEV_OK) return r;
+    r = ed64_recv_r1(&r1);
+    if (r != IODEV_OK) return r;
+    if (r1 != SD_R1_OK) return IODEV_ERR_IO;
+
+    return IODEV_OK;
+}
+
+/* ---- Single-sector read (CMD17) ---- */
+
+static iodev_result_t ed64_read_sector(uint32_t lba, uint8_t *buf) {
+    iodev_result_t r;
+    uint8_t r1;
+    uint8_t tok;
+    uint32_t addr;
+    int n;
+    int i;
+
+    /* SDHC uses LBA directly; SD v1 uses byte address. */
+    addr = sSdIsHC ? lba : (lba * 512u);
+
+    r = ed64_send_cmd(SD_CMD17, addr, 0xFFu);
+    if (r != IODEV_OK) return r;
+    r = ed64_recv_r1(&r1);
+    if (r != IODEV_OK) return r;
+    if (r1 != SD_R1_OK) return IODEV_ERR_IO;
+
+    /* Poll for the data token 0xFE; any other non-0xFF byte is an error token. */
+    tok = 0xFFu;
+    n = ED64_SD_TIMEOUT;
+    while (n > 0) {
+        r = ed64_dat_byte(0xFFu, &tok);
+        if (r != IODEV_OK) return r;
+        if (tok == SD_DATA_TOKEN) break;
+        if (tok != 0xFFu) return IODEV_ERR_IO;
+        n--;
+    }
+    if (tok != SD_DATA_TOKEN) return IODEV_ERR_TIMEOUT;
+
+    /* Read 512 data bytes. */
+    for (i = 0; i < 512; i++) {
+        r = ed64_dat_byte(0xFFu, &buf[i]);
+        if (r != IODEV_OK) return r;
+    }
+
+    /* Discard 2 CRC bytes. */
+    r = ed64_dat_byte(0xFFu, NULL); if (r != IODEV_OK) return r;
+    return  ed64_dat_byte(0xFFu, NULL);
+}
+
+static iodev_result_t ed64_sd_read_sectors(uint32_t lba, uint32_t count, void *buf) {
+    uint32_t i;
+    iodev_result_t r;
+    if (count == 0 || count > ED64_SD_MAX_SECTORS) return IODEV_ERR_PARAM;
+    if (((uintptr_t)buf) & 7u) return IODEV_ERR_PARAM;
+    for (i = 0; i < count; i++) {
+        r = ed64_read_sector(lba + i, (uint8_t *)buf + i * 512u);
+        if (r != IODEV_OK) return r;
+    }
+    return IODEV_OK;
+}
+
+/* ---- Single-sector write (CMD24) ---- */
+
+static iodev_result_t ed64_write_sector(uint32_t lba, const uint8_t *buf) {
+    iodev_result_t r;
+    uint8_t r1;
+    uint8_t resp;
+    uint32_t addr;
+    int n;
+    int i;
+
+    addr = sSdIsHC ? lba : (lba * 512u);
+
+    r = ed64_send_cmd(SD_CMD24, addr, 0xFFu);
+    if (r != IODEV_OK) return r;
+    r = ed64_recv_r1(&r1);
+    if (r != IODEV_OK) return r;
+    if (r1 != SD_R1_OK) return IODEV_ERR_IO;
+
+    /* One dummy byte before the data token (SD spec requirement). */
+    r = ed64_dat_byte(0xFFu, NULL); if (r != IODEV_OK) return r;
+
+    /* Send data token. */
+    r = ed64_dat_byte(SD_DATA_TOKEN, NULL); if (r != IODEV_OK) return r;
+
+    /* Write 512 data bytes. */
+    for (i = 0; i < 512; i++) {
+        r = ed64_dat_byte(buf[i], NULL);
+        if (r != IODEV_OK) return r;
+    }
+
+    /* Two dummy CRC bytes. */
+    r = ed64_dat_byte(0xFFu, NULL); if (r != IODEV_OK) return r;
+    r = ed64_dat_byte(0xFFu, NULL); if (r != IODEV_OK) return r;
+
+    /* Read data response token; lower 5 bits must be 0b00101. */
+    r = ed64_dat_byte(0xFFu, &resp);
+    if (r != IODEV_OK) return r;
+    if ((resp & SD_RESP_MASK) != SD_RESP_ACCEPTED) return IODEV_ERR_IO;
+
+    /* Wait for card to finish programming (busy = 0x00 on DAT0). */
+    resp = 0x00u;
+    n = ED64_SD_TIMEOUT;
+    while (n > 0) {
+        r = ed64_dat_byte(0xFFu, &resp);
+        if (r != IODEV_OK) return r;
+        if (resp != 0x00u) break;
+        n--;
+    }
+    if (resp == 0x00u) return IODEV_ERR_TIMEOUT;
+
+    return IODEV_OK;
+}
+
+static iodev_result_t ed64_sd_write_sectors(uint32_t lba, uint32_t count, const void *buf) {
+    uint32_t i;
+    iodev_result_t r;
+    if (count == 0 || count > ED64_SD_MAX_SECTORS) return IODEV_ERR_PARAM;
+    if (((uintptr_t)buf) & 7u) return IODEV_ERR_PARAM;
+    for (i = 0; i < count; i++) {
+        r = ed64_write_sector(lba + i, (const uint8_t *)buf + i * 512u);
+        if (r != IODEV_OK) return r;
+    }
+    return IODEV_OK;
+}
+
 /* ---- Backend hooks ---- */
 
 static iodev_id_t ed64_detect(void) {
@@ -125,37 +428,6 @@ static iodev_id_t ed64_detect(void) {
      * in an unexpected state for whatever backend probes next. */
     ed64_lock();
     return IODEV_NONE;
-}
-
-static iodev_result_t ed64_sd_init(void) {
-    /* Phase 1b Task 3 will implement the full SD init sequence. */
-    return IODEV_ERR_NO_DEVICE;
-}
-
-static iodev_result_t ed64_sd_read_sectors(uint32_t lba, uint32_t count, void *buf) {
-    /* Phase 1b Task 4 will implement single-block reads via CMD17. */
-    (void)lba;
-    /* Apply caller-contract guards now so the static invariant
-     * (count > 128 / 8-byte alignment) passes ahead of Task 4 wiring. */
-    if (count == 0 || count > ED64_SD_MAX_SECTORS) {
-        return IODEV_ERR_PARAM;
-    }
-    if (((uintptr_t)buf) & 7u) {
-        return IODEV_ERR_PARAM;
-    }
-    return IODEV_ERR_NO_DEVICE;
-}
-
-static iodev_result_t ed64_sd_write_sectors(uint32_t lba, uint32_t count, const void *buf) {
-    /* Phase 1b Task 5 will implement single-block writes via CMD24. */
-    (void)lba;
-    if (count == 0 || count > ED64_SD_MAX_SECTORS) {
-        return IODEV_ERR_PARAM;
-    }
-    if (((uintptr_t)buf) & 7u) {
-        return IODEV_ERR_PARAM;
-    }
-    return IODEV_ERR_NO_DEVICE;
 }
 
 static iodev_result_t ed64_sd_release(void) {
