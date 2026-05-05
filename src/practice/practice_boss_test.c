@@ -30,8 +30,35 @@ typedef struct {
  * Warp ~2000 units before spawn for a quick run-up; the xPath override
  * in Play_Init pins the player to xPos=7096 to align with the boss. */
 static BossEntry sBossList[] = {
-    { "CARRIER", LEVEL_CORNERIA, 0, 201000.0f, true  },
-    { "CRUSHER", LEVEL_METEO,   0, 300000.0f, false },
+    /* Corneria Carrier: shortcut route, xPath=7096 lane.
+     * OBJ_BOSS_CO_CARRIER entry 2 in aCoOnRailsLevelObjects: zPos1=203017.9, xPos=7096.
+     * Warp ~2000 before spawn; the xPath override in Play_Init aligns player to carrier lane. */
+    { "CARRIER",    LEVEL_CORNERIA,      0, 201000.0f, true  },
+    /* Meteo Crusher: sole on-rails boss in aMeLevelObjects entry 872: zPos1=302180.9, xPos=-5. */
+    { "CRUSHER",    LEVEL_METEO,         0, 300000.0f, false },
+    /* Aquas Bacoon: aAqLevelObjects entry 321: zPos1=90735.6, xPos=0. */
+    { "BACOON",     LEVEL_AQUAS,         0,  88700.0f, false },
+    /* Sector X Spyborg: aSxLevelObjects entry 1024: zPos1=226773.5, xPos=0.
+     * Spyborg_Update case 0 snaps pos.x to gPlayer[0].xPath; no xPath override needed. */
+    { "SPYBORG",    LEVEL_SECTOR_X,      0, 224000.0f, false },
+    /* Solar Vulkain: aSoLevelObjects entry 178: zPos1=170800.0, xPos=0. */
+    { "VULKAIN",    LEVEL_SOLAR,         0, 168800.0f, false },
+    /* Zoness Sarumarine: aZoLevelObjects entry 499: zPos1=291489.9, xPos=-30.
+     * gMissedZoSearchlight initialises false in Play_Init -- "all searchlights hit" route. */
+    { "SARUMAR",    LEVEL_ZONESS,        0, 289000.0f, false },
+    /* Titania Goras: aTiLevelObjects entry 598: zPos1=87100.0, xPos=0. */
+    { "GORAS",      LEVEL_TITANIA,       0,  85100.0f, false },
+    /* Area 6 Gorgon: aA6LevelObjects entry 435: zPos1=255100.0, xPos=0. */
+    { "GORGON",     LEVEL_AREA_6,        0, 253100.0f, false },
+    /* Venom 1 Golemech: aVe1LevelObjects entry 1190: zPos1=174177.2, xPos=0. Phase 0 only. */
+    { "GOLEMECH",   LEVEL_VENOM_1,       0, 172000.0f, false },
+    /* Andross: aVe1AndLevelObjects entry 66: zPos1=58986.0, xPos=20.
+     * LEVEL_VENOM_ANDROSS is the dedicated Andross sub-level. */
+    { "ANDROSS",    LEVEL_VENOM_ANDROSS, 0,  56000.0f, false },
+    /* gLevelPhase=1 routes Andross face death through state 32, spawning the brain
+     * (OBJ_BOSS_AND_BRAIN, gBosses[1]) at frame 180 of the death sequence.
+     * gLevelPhase=0 (ANDROSS entry above) routes to James rescue instead. */
+    { "A.BRAIN",    LEVEL_VENOM_ANDROSS, 1,  56000.0f, false },
 };
 
 #define BOSS_COUNT ARRAY_COUNT(sBossList)

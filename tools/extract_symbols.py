@@ -195,6 +195,14 @@ CONSTANTS = {
     "LEVEL_SECTOR_Y":           2,
     "LEVEL_FORTUNA":            3,
     "LEVEL_KATINA":             4,
+    "LEVEL_AQUAS":              13,
+    "LEVEL_SECTOR_X":           2,
+    "LEVEL_SOLAR":              7,
+    "LEVEL_ZONESS":             8,
+    "LEVEL_TITANIA":            12,
+    "LEVEL_AREA_6":             3,
+    "LEVEL_VENOM_1":            6,
+    "LEVEL_VENOM_ANDROSS":      9,
 }
 
 def kseg0_to_rdram(addr):

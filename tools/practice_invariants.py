@@ -1569,6 +1569,27 @@ def check_boss_test():
     if not os.path.isfile(crusher_test):
         error(f"Boss Crusher functional test missing: {crusher_test}")
 
+    for name, fname in [
+        ('"BACOON"',    "tests/test_boss_test_bacoon.lua"),
+        ('"SPYBORG"',   "tests/test_boss_test_spyborg.lua"),
+        ('"VULKAIN"',   "tests/test_boss_test_vulkain.lua"),
+        ('"SARUMAR"',   "tests/test_boss_test_sarumar.lua"),
+        ('"GORAS"',     "tests/test_boss_test_goras.lua"),
+        ('"GORGON"',    "tests/test_boss_test_gorgon.lua"),
+        ('"GOLEMECH"',  "tests/test_boss_test_golemech.lua"),
+        ('"ANDROSS"',   "tests/test_boss_test_andross.lua"),
+    ]:
+        if name not in boss_test_src:
+            error(f'practice_boss_test.c missing {name} entry in sBossList')
+        if not os.path.isfile(fname):
+            error(f'Boss test missing: {fname}')
+
+    if '"A.BRAIN"' not in boss_test_src:
+        error('practice_boss_test.c missing "A.BRAIN" entry in sBossList')
+    brain_test = os.path.join("tests", "test_boss_test_andross_brain.lua")
+    if not os.path.isfile(brain_test):
+        error(f"Boss brain functional test missing: {brain_test}")
+
 
 def main():
     check_config_inits()
