@@ -106,6 +106,11 @@ H.press({Right = true})  -- D-Right: load from active slot
 local ok_after_load = H.wait_for_gameplay(300)
 H.assert_true(ok_after_load, "Game returned to GSTATE_PLAY+PLAY_UPDATE after D-Right load")
 
+-- Load restored the paused state (saved while paused); unpause to leave
+-- game running for the next test which controls pause state independently.
+H.press({Down = true})
+H.advance(2)
+
 -- --- MENU-OPEN CLEARS PAUSE TEST ---
 -- Pause again, then open the practice menu — this should clear frame advance.
 H.press({Down = true})
