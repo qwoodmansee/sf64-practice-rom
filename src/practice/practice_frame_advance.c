@@ -8,10 +8,11 @@
  *           frame step
  *
  * D-Down press  : toggle sIsPaused on/off
- * D-Up press    : while paused, let exactly one Play_Main tick execute.
+ * D-Up press    : if running, pause; if already paused, step one frame
  * D-Up hold     : after a short delay, continue stepping frames at a repeat
- *                 cadence.
- * D-Up input    : no effect when not paused.
+ *                 cadence
+ * D-Left press  : save to active slot (only without L held)
+ * D-Right press : load from active slot (only without L or Z held)
  */
 #define FRAME_ADVANCE_REPEAT_DELAY 12
 #define FRAME_ADVANCE_REPEAT_RATE 2
@@ -29,6 +30,9 @@ void Practice_FrameAdvance_Init(void) {
 }
 
 void Practice_FrameAdvance_Update(void) {
+    OSContPad* press;
+    OSContPad* hold;
+
     if (gGameState != GSTATE_PLAY) {
         return;
     }
@@ -40,22 +44,42 @@ void Practice_FrameAdvance_Update(void) {
         return;
     }
 
+    press = &gControllerPress[gMainController];
+    hold  = &gControllerHold[gMainController];
+
     /* D-Down press: toggle pause */
-    if (gControllerPress[gMainController].button & D_JPAD) {
+    if (press->button & D_JPAD) {
         sIsPaused = !sIsPaused;
         sQueuedFrameSteps = 0;
         sFrameAdvanceHoldTimer = 0;
         sFrameAdvanceRepeatTimer = 0;
     }
 
-    /* D-Up press: step one frame while paused */
-    if (sIsPaused && (gControllerPress[gMainController].button & U_JPAD)) {
-        sQueuedFrameSteps = 1;
-        sFrameAdvanceHoldTimer = 0;
-        sFrameAdvanceRepeatTimer = FRAME_ADVANCE_REPEAT_RATE;
+    /* D-Up press: pause if running; step one frame if already paused */
+    if (press->button & U_JPAD) {
+        if (!sIsPaused) {
+            sIsPaused = true;
+            sQueuedFrameSteps = 0;
+            sFrameAdvanceHoldTimer = 0;
+            sFrameAdvanceRepeatTimer = 0;
+        } else {
+            sQueuedFrameSteps = 1;
+            sFrameAdvanceHoldTimer = 0;
+            sFrameAdvanceRepeatTimer = FRAME_ADVANCE_REPEAT_RATE;
+        }
     }
 
-    if (!sIsPaused || !(gControllerHold[gMainController].button & U_JPAD)) {
+    /* D-Left (no L): save to active slot */
+    if ((press->button & L_JPAD) && !(hold->button & L_TRIG)) {
+        Practice_SaveState();
+    }
+
+    /* D-Right (no L, no Z): load from active slot */
+    if ((press->button & R_JPAD) && !(hold->button & L_TRIG) && !(hold->button & Z_TRIG)) {
+        Practice_LoadState();
+    }
+
+    if (!sIsPaused || !(hold->button & U_JPAD)) {
         sFrameAdvanceHoldTimer = 0;
         sFrameAdvanceRepeatTimer = 0;
         return;

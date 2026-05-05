@@ -1,11 +1,13 @@
--- Test: frame advance - D-Down pauses, D-Up steps one frame, D-Down resumes.
+-- Test: frame advance controls.
 --
 -- Verifies that:
 --   1. D-Down press toggles pause: gGameFrameCount freezes.
---   2. Pressing D-Up while paused advances exactly one frame.
---   3. A short D-Up hold does not accidentally advance again.
---   4. A long D-Up hold starts repeat-advancing frames.
---   5. A second D-Down press resumes normal play.
+--   2. D-Up press while running pauses (new: D-Up also enters pause).
+--   3. Pressing D-Up while paused advances exactly one frame.
+--   4. A short D-Up hold does not accidentally advance again.
+--   5. A long D-Up hold starts repeat-advancing frames.
+--   6. A second D-Down press resumes normal play.
+--   7. D-Left (no L) triggers save; D-Right (no L/Z) triggers load (smoke).
 
 local H = dofile("tests/harness.lua")
 local S = H.S
@@ -29,7 +31,19 @@ H.assert_true(ok, "Gameplay active")
 -- Let the game settle for a few frames
 H.advance(10)
 
--- --- PAUSE TEST ---
+-- --- D-UP PAUSES TEST ---
+-- Pressing D-Up while running should pause (not just step).
+local before_up_pause = H.read_s32(S.gGameFrameCount)
+H.press({Up = true})
+H.advance(3)
+local after_up_pause = H.read_s32(S.gGameFrameCount)
+H.assert_eq(after_up_pause, before_up_pause, "D-Up paused when running (gGameFrameCount frozen)")
+
+-- D-Down to unpause before continuing the rest of the tests
+H.press({Down = true})
+H.advance(2)
+
+-- --- PAUSE TEST (D-Down) ---
 -- Record gGameFrameCount before pausing
 local before_pause = H.read_s32(S.gGameFrameCount)
 
@@ -40,7 +54,7 @@ H.press({Down = true})
 H.advance(3)
 
 local after_pause = H.read_s32(S.gGameFrameCount)
-H.assert_eq(after_pause, before_pause, "gGameFrameCount did not advance while paused")
+H.assert_eq(after_pause, before_pause, "gGameFrameCount did not advance while paused (D-Down)")
 
 -- --- SHORT HOLD STEP TEST ---
 -- Hold D-Up for 5 ticks while paused. Only the press edge should run one frame.
@@ -78,6 +92,19 @@ H.assert_true(resumed_delta >= 3,
     "gGameFrameCount advanced normally after resume (delta=" .. tostring(resumed_delta) .. ")")
 
 H.assert_eq(H.game_state(), S.const.GSTATE_PLAY, "Game still in GSTATE_PLAY after frame advance cycle")
+
+-- --- D-LEFT SAVE / D-RIGHT LOAD SMOKE TEST ---
+-- Pause, press D-Left to save, then D-Right to load. Verify the game stays
+-- in GSTATE_PLAY and doesn't crash (functional save/load correctness is
+-- covered in test_save_state.lua).
+H.press({Down = true})
+H.advance(2)
+H.press({Left = true})   -- D-Left: save to active slot
+H.advance(2)
+H.press({Right = true})  -- D-Right: load from active slot
+-- After load the game should still be in play state
+local ok_after_load = H.wait_for_gameplay(300)
+H.assert_true(ok_after_load, "Game returned to GSTATE_PLAY+PLAY_UPDATE after D-Right load")
 
 -- --- MENU-OPEN CLEARS PAUSE TEST ---
 -- Pause again, then open the practice menu — this should clear frame advance.
