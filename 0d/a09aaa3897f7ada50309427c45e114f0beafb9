@@ -1,0 +1,27 @@
+src/practice/practice_boss_test.c
+  aec6acbaf991dad6 1-14,16,18-49
+include/practice.h
+  aec6acbaf991dad6 151-157
+tools/patch_linker_script.py
+  aec6acbaf991dad6 45
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "0da09aaa3897f7ada50309427c45e114f0beafb9",
+  "prompts": {
+    "aec6acbaf991dad6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a736df88-f3c9-4786-a14f-8aaf1c1fd136",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 57,
+      "total_deletions": 13,
+      "accepted_lines": 55,
+      "overriden_lines": 0
+    }
+  }
+}

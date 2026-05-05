@@ -1,0 +1,25 @@
+src/engine/fox_play.c
+  aec6acbaf991dad6 4613,4619,4622-4624
+src/practice/practice_boss_test.c
+  aec6acbaf991dad6 1-14,20,22-53
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "c31a81b26ce7286eb0a5c00f2302db96e3ee060c",
+  "prompts": {
+    "aec6acbaf991dad6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a736df88-f3c9-4786-a14f-8aaf1c1fd136",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 16,
+      "total_deletions": 15,
+      "accepted_lines": 5,
+      "overriden_lines": 0
+    }
+  }
+}

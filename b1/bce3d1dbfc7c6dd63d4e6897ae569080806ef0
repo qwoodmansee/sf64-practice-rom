@@ -1,0 +1,25 @@
+tests/dtm_generator.py
+  059542250aebf848 1-133
+tests/test_e2e_levels.py
+  059542250aebf848 1-144
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "b1bce3d1dbfc7c6dd63d4e6897ae569080806ef0",
+  "prompts": {
+    "059542250aebf848": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "90829b3d-2b63-4764-bad4-86ad8cac61f4",
+        "model": "claude-haiku-4-5-20251001"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 392,
+      "total_deletions": 24,
+      "accepted_lines": 36,
+      "overriden_lines": 0
+    }
+  }
+}

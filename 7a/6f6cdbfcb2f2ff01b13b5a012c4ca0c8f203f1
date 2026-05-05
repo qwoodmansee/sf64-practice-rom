@@ -1,0 +1,23 @@
+src/practice/practice_boss_test.c
+  aec6acbaf991dad6 1-14,32,34-65
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "7a6f6cdbfcb2f2ff01b13b5a012c4ca0c8f203f1",
+  "prompts": {
+    "aec6acbaf991dad6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a736df88-f3c9-4786-a14f-8aaf1c1fd136",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 7,
+      "total_deletions": 13,
+      "accepted_lines": 7,
+      "overriden_lines": 0
+    }
+  }
+}
