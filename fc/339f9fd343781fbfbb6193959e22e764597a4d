@@ -1,0 +1,33 @@
+tools/patch_linker_script.py
+  s_c341f71a793ff4::t_63428464e8ea4c 46
+include/practice.h
+  s_c341f71a793ff4::t_060706c33f3057 299-315
+  s_c341f71a793ff4::t_82361ce5174f27 59
+src/practice/practice_macro.c
+  s_c341f71a793ff4::t_9f2af999ef7e7f 218-222
+  s_c341f71a793ff4::t_6995fda6b0d9e5 1-217,223-294
+src/practice/practice_main.c
+  s_c341f71a793ff4::t_fb10c23577cc27 54
+  s_c341f71a793ff4::t_6a1615515c412f 110
+src/engine/fox_game.c
+  s_c341f71a793ff4::t_69d85b49f41ff5 541
+tools/practice_invariants.py
+  s_c341f71a793ff4::t_934e0c1c730c4c 1726
+  s_c341f71a793ff4::t_23be77ed1d403f 1529-1610
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.1",
+  "base_commit_sha": "fc339f9fd343781fbfbb6193959e22e764597a4d",
+  "prompts": {},
+  "sessions": {
+    "s_c341f71a793ff4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "80076ee3-b498-4767-be0a-babd402c60db",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "qwoodmansee <github@qwoodmansee.xyz>"
+    }
+  }
+}
