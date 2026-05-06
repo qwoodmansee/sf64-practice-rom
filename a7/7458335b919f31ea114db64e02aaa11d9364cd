@@ -1,0 +1,38 @@
+src/overlays/ovl_i1/fox_co.c
+  a5426299151a42ae 1676-1776,1834-1835,2243-2334
+tools/practice_invariants.py
+  a5426299151a42ae 1756-1790,1847
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "a77458335b919f31ea114db64e02aaa11d9364cd",
+  "prompts": {
+    "432e1d84d72938c5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "65365c7e-8dc4-4758-b905-c7564d6ed50c",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 579,
+      "overriden_lines": 0
+    },
+    "a5426299151a42ae": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "609555c6-2dd9-4609-a892-a33d8c49d167",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 231,
+      "total_deletions": 0,
+      "accepted_lines": 231,
+      "overriden_lines": 0
+    }
+  }
+}
