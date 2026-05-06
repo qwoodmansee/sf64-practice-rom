@@ -1,0 +1,23 @@
+src/overlays/ovl_i1/fox_co.c
+  432e1d84d72938c5 3076-3100,3122-3135
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "02d290acf182399addfcc4412834bf81d6c56366",
+  "prompts": {
+    "432e1d84d72938c5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "65365c7e-8dc4-4758-b905-c7564d6ed50c",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 52,
+      "total_deletions": 24,
+      "accepted_lines": 618,
+      "overriden_lines": 0
+    }
+  }
+}
