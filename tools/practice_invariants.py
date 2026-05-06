@@ -1346,8 +1346,8 @@ def check_owl_logo():
         error(f"{owl_c}: sPracticeOwlTex array missing")
     if "Practice_Owl_Draw" not in src:
         error(f"{owl_c}: Practice_Owl_Draw function missing")
-    if "RCP_SetupDL_76" not in src:
-        error(f"{owl_c}: missing RCP_SetupDL_76 setup before texture draw")
+    if "SETUPDL_85" not in src:
+        error(f"{owl_c}: CI8 texture draw must use SETUPDL_85 (G_TT_RGBA16), not SETUPDL_76 (G_TT_NONE)")
     if "sPracticeOwlTLUT" not in src:
         error(f"{owl_c}: sPracticeOwlTLUT palette missing")
     if "Lib_TextureRect_CI8" not in src:
@@ -1370,8 +1370,8 @@ def check_hit64_logo():
         error(f"{logo_c}: sPracticeLogoTex array missing")
     if "Practice_Logo_Draw" not in src:
         error(f"{logo_c}: Practice_Logo_Draw function missing")
-    if "RCP_SetupDL_76" not in src:
-        error(f"{logo_c}: missing RCP_SetupDL_76 setup before texture draw")
+    if "SETUPDL_85" not in src:
+        error(f"{logo_c}: CI8 texture draw must use SETUPDL_85 (G_TT_RGBA16), not SETUPDL_76 (G_TT_NONE)")
     if "sPracticeLogoTLUT" not in src:
         error(f"{logo_c}: sPracticeLogoTLUT palette missing")
     if "Lib_TextureRect_CI8" not in src:

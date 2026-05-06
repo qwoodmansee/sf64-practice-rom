@@ -106,7 +106,7 @@ static u16 sPracticeOwlTLUT[256] = {
 };
 
 void Practice_Owl_Draw(f32 x, f32 y) {
-    RCP_SetupDL_76();
+    RCP_SetupDL(&gMasterDisp, SETUPDL_85);
     gDPSetPrimColor(gMasterDisp++, 0, 0, 255, 255, 255, 255);
     Lib_TextureRect_CI8(&gMasterDisp, sPracticeOwlTex, sPracticeOwlTLUT, 32, 32, x, y, 1.0f, 1.0f);
 }
