@@ -1,0 +1,30 @@
+src/practice/practice_state.c
+  s_c341f71a793ff4::t_bea2e24a79efb1 755
+  s_c341f71a793ff4::t_0022639547ec40 73
+  s_c341f71a793ff4::t_6b2d1848a05d1e 401-406
+  s_c341f71a793ff4::t_5cd09fde930c45 749-754,756-759,772,775-776,778-779,785-786,788-789,791-792,799,815-825
+  s_c341f71a793ff4::t_5e9825cb7b6035 345-353,359-362
+include/practice.h
+  s_c341f71a793ff4::t_127eb5e3a0d9d8 338
+src/practice/practice_macro.c
+  s_c341f71a793ff4::t_233f1df0ecb4ba 111-114,131
+  s_c341f71a793ff4::t_795f80b6379be9 209-214,222,225-230,232-238,241-262
+  s_c341f71a793ff4::t_87b67b2d6f613d 151-205
+  s_c341f71a793ff4::t_aa39f993483e27 339-342
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.1",
+  "base_commit_sha": "e33da35aa82ee2c98e92ce45d3abacefe12ad261",
+  "prompts": {},
+  "sessions": {
+    "s_c341f71a793ff4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "80076ee3-b498-4767-be0a-babd402c60db",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "qwoodmansee <github@qwoodmansee.xyz>"
+    }
+  }
+}
