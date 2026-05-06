@@ -1619,18 +1619,17 @@ def check_macro_hook():
 
 
 def check_macro_buf_section():
-    """practice_macro_buf.o(.bss) must be placed in .practice_macro_pak
-    (not in .main_bss) to keep the large Pak-only buffer out of stock RAM.
+    """practice_macro_buf.o(.bss) must be in .practice_macro_pak and
+    practice_macro_snap.o(.bss) must be in .practice_macro_snap_pak --
+    both kept out of stock RAM.
     """
     ld = read("linker_scripts/us/rev1/starfox64.ld")
     if ".practice_macro_pak" not in ld:
         error(
-            ".practice_macro_pak section missing from linker script — run "
+            ".practice_macro_pak section missing from linker script -- run "
             "tools/patch_linker_script.py (check_macro_buf_section)"
         )
         return
-    # The buf object must appear INSIDE .practice_macro_pak, not anywhere else
-    # in the linker script's .bss sections.
     macro_section_match = re.search(
         r"\.practice_macro_pak\s+0x[0-9a-fA-F]+.*?\{(.*?)\}",
         ld, re.DOTALL,
@@ -1641,6 +1640,30 @@ def check_macro_buf_section():
             error(
                 ".practice_macro_pak section exists but practice_macro_buf.o(.bss) "
                 "is not inside it (check_macro_buf_section)"
+            )
+    if ".practice_macro_snap_pak" not in ld:
+        error(
+            ".practice_macro_snap_pak section missing from linker script -- run "
+            "tools/patch_linker_script.py (check_macro_buf_section)"
+        )
+        return
+    snap_section_match = re.search(
+        r"\.practice_macro_snap_pak\s+0x[0-9a-fA-F]+.*?\{(.*?)\}",
+        ld, re.DOTALL,
+    )
+    if snap_section_match:
+        section_body = snap_section_match.group(1)
+        if "practice_macro_snap.o(.bss)" not in section_body:
+            error(
+                ".practice_macro_snap_pak section exists but practice_macro_snap.o(.bss) "
+                "is not inside it (check_macro_buf_section)"
+            )
+    # Verify the two new wrappers exist in practice_save.c.
+    save_src = read("src/practice/practice_save.c")
+    for fn in ("Practice_Save_MacroSnap", "Practice_Save_MacroApply"):
+        if fn not in save_src:
+            error(
+                f"{fn} not found in practice_save.c (check_macro_buf_section)"
             )
 
 

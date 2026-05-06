@@ -35,6 +35,7 @@ typedef enum MacroOption {
     MOPT_PLAY,
     MOPT_REWIND,
     MOPT_FRAMES,
+    MOPT_BIND_STATE,
     MOPT_BACK,
     MOPT_MAX,
 } MacroOption;
@@ -357,6 +358,9 @@ static void StateMenu_UpdateMacro(u16 buttons) {
                 break;
             case MOPT_REWIND:
                 Practice_Macro_Rewind();
+                break;
+            case MOPT_BIND_STATE:
+                gPracticeConfig.macroBindState = !gPracticeConfig.macroBindState;
                 break;
         }
     }
@@ -748,6 +752,14 @@ static void StateMenu_DrawMacro(void) {
             case MOPT_REWIND:
                 Practice_DrawTextColor(54, y, "REWIND", 200, 200, 255);
                 break;
+            case MOPT_BIND_STATE:
+                Practice_DrawText(54, y, "BIND STATE:");
+                Practice_DrawTextColor(142, y,
+                    gPracticeConfig.macroBindState ? "ON" : "OFF",
+                    gPracticeConfig.macroBindState ? 60  : 100,
+                    gPracticeConfig.macroBindState ? 220 : 100,
+                    gPracticeConfig.macroBindState ? 60  : 60);
+                break;
             case MOPT_FRAMES:
                 Practice_DrawText(54, y, "FRAMES:");
                 Practice_DrawNumber(130, y, Practice_Macro_GetHead());
@@ -794,8 +806,8 @@ void Practice_StateMenu_Draw(void) {
             break;
         case PSUBMENU_MACRO:
             title = "MACRO";
-            boxHeight = 100;
-            helpY = 132;
+            boxHeight = 114;
+            helpY = 146;
             break;
         default:
             return;

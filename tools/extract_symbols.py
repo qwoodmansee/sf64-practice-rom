@@ -153,6 +153,7 @@ CONFIG_OFFSETS = {
     "infLives": 0x84,
     "infBoost": 0x88,
     "prevPlanetsMask": 0x8C,
+    "macroBindState":  0x90,
 }
 
 # Player struct field offsets (include/sf64player.h Player)

@@ -1,4 +1,5 @@
 #include "practice.h"
+#include "practice_overlay.h"
 
 #ifdef PRACTICE_ROM
 
@@ -14,15 +15,25 @@ static s32        sMacroHead  = 0;
 static s32        sMacroLen   = 0;
 static u16        sPrevButton = 0;
 
+/* State-bind: level/phase recorded alongside the macro snap. */
+static bool       sMacroSnapValid       = false;
+static s32        sMacroSnapLevel       = 0;
+static s32        sMacroSnapPhase       = 0;
+static bool       sMacroRestorePending  = false;
+
 static bool Macro_HasPak(void) {
     return osMemSize >= 0x00800000U;
 }
 
 void Practice_Macro_Init(void) {
-    sMacroState = MACRO_IDLE;
-    sMacroHead  = 0;
-    sMacroLen   = 0;
-    sPrevButton = 0;
+    sMacroState          = MACRO_IDLE;
+    sMacroHead           = 0;
+    sMacroLen            = 0;
+    sPrevButton          = 0;
+    sMacroSnapValid      = false;
+    sMacroSnapLevel      = 0;
+    sMacroSnapPhase      = 0;
+    sMacroRestorePending = false;
 }
 
 /* Called from fox_game.c immediately before Play_Main() so injected inputs
@@ -50,7 +61,14 @@ void Practice_Macro_PrePlay(void) {
     if (sMacroState == MACRO_ARMED) {
         hold = &gControllerHold[gMainController];
         if (hold->button != 0 || hold->stick_x != 0 || hold->stick_y != 0) {
-            /* First real input -- transition to recording and capture this frame. */
+            /* First real input -- optionally snap state, then start recording. */
+            if (gPracticeConfig.macroBindState &&
+                practice_overlay_is_saveable((LevelId)gCurrentLevel)) {
+                Practice_Save_MacroSnap();
+                sMacroSnapLevel = (s32)gCurrentLevel;
+                sMacroSnapPhase = (s32)gLevelPhase;
+                sMacroSnapValid = true;
+            }
             sMacroState = MACRO_RECORDING;
             buf[0].button  = hold->button;
             buf[0].stick_x = hold->stick_x;
@@ -60,7 +78,21 @@ void Practice_Macro_PrePlay(void) {
         }
         /* If no input yet, caller sees IsArmed() == true and skips Play_Main. */
         return;
-    } else if (sMacroState == MACRO_RECORDING) {
+    } else if (sMacroState == MACRO_PLAYING) {
+        /* If a state restore is pending, wait for the target scene before
+         * injecting frames. Apply once the destination reaches PLAY_UPDATE. */
+        if (sMacroRestorePending) {
+            if ((s32)gCurrentLevel == sMacroSnapLevel &&
+                gPlayer != NULL &&
+                !gPracticeSaveDisabled) {
+                Practice_Save_MacroApply();
+                sMacroRestorePending = false;
+            }
+            return;
+        }
+    }
+
+    if (sMacroState == MACRO_RECORDING) {
         if (sMacroHead < cap) {
             hold = &gControllerHold[gMainController];
             buf[sMacroHead].button  = hold->button;
@@ -143,12 +175,21 @@ void Practice_Macro_StartPlay(void) {
     sMacroState = MACRO_PLAYING;
     sMacroHead  = 0;
     sPrevButton = 0;
+
+    if (gPracticeConfig.macroBindState && sMacroSnapValid) {
+        sMacroRestorePending = true;
+        if ((s32)gCurrentLevel != sMacroSnapLevel ||
+            (s32)gLevelPhase   != sMacroSnapPhase) {
+            practice_overlay_request_load((LevelId)sMacroSnapLevel, sMacroSnapPhase);
+        }
+    }
 }
 
 void Practice_Macro_StopPlay(void) {
     if (sMacroState == MACRO_PLAYING) {
-        sMacroState = MACRO_IDLE;
-        sPrevButton = 0;
+        sMacroState          = MACRO_IDLE;
+        sPrevButton          = 0;
+        sMacroRestorePending = false;
     }
 }
 

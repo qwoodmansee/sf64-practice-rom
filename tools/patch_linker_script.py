@@ -44,7 +44,8 @@ PRACTICE_OBJS = [
     "practice_frame_advance",  # Frame advance / pause feature
     "practice_boss_test",   # Boss test stage: data table + launch API
     "practice_macro",       # Macro recording / playback logic
-    "practice_macro_buf",   # Macro frame buffer — Pak-only BSS in .practice_macro_pak
+    "practice_macro_buf",   # Macro frame buffer -- Pak-only BSS in .practice_macro_pak
+    "practice_macro_snap",  # Macro snapshot buffer -- Pak-only BSS in .practice_macro_snap_pak
 ]
 
 # Order matters: each entry's predecessor must precede it in the list,
@@ -107,13 +108,26 @@ PRACTICE_POOL_SECTION = """\
 # that occupies 0x80400000–0x80680000; comfortably below the 0x80800000 ceiling).
 # 18 000 MacroFrames × 4 bytes = 72 000 bytes ≈ 70 KB.
 PRACTICE_MACRO_SECTION = """\
-    /* Macro frame buffer: 18 000 frames × 4 bytes at 0x80680000 (Pak only). */
+    /* Macro frame buffer: 18 000 frames x 4 bytes at 0x80680000 (Pak only). */
     .practice_macro_pak 0x80680000 (NOLOAD) : SUBALIGN(8)
     {
         practice_macro_pak_BSS_START = .;
         build/src/practice/practice_macro_buf.o(.bss);
         . = ALIGN(., 8);
         practice_macro_pak_BSS_END = .;
+    }
+"""
+
+# Macro snapshot buffer at 0x80691940 (= 0x80680000 + 18000*4 bytes, aligned 8).
+# MAX_STATE_SIZE = 0x80000 (512 KB); end = 0x80711940. Total Pak use: ~3.07 MB.
+PRACTICE_MACRO_SNAP_SECTION = """\
+    /* Macro snapshot buffer: MAX_STATE_SIZE bytes at 0x80691940 (Pak only). */
+    .practice_macro_snap_pak 0x80691940 (NOLOAD) : SUBALIGN(8)
+    {
+        practice_macro_snap_pak_BSS_START = .;
+        build/src/practice/practice_macro_snap.o(.bss);
+        . = ALIGN(., 8);
+        practice_macro_snap_pak_BSS_END = .;
     }
 """
 
@@ -390,6 +404,28 @@ def patch():
         )
         if macro_bss in new_content:
             new_content = new_content.replace(macro_bss, macro_comment, 1)
+        content = new_content
+        inject_count += 1
+
+    # Inject .practice_macro_snap_pak immediately after .practice_macro_pak if absent.
+    if ".practice_macro_snap_pak" not in content:
+        if ".practice_macro_pak" not in content:
+            raise RuntimeError(
+                "Linker patcher: .practice_macro_pak anchor not found for "
+                ".practice_macro_snap_pak injection."
+            )
+        import re as _re
+        pat = r"(    \.practice_macro_pak 0x80680000.*?\})\n"
+        new_content = _re.sub(
+            pat, r"\1\n\n" + PRACTICE_MACRO_SNAP_SECTION, content, count=1, flags=_re.DOTALL
+        )
+        snap_bss = "        build/src/practice/practice_macro_snap.o(.bss);\n"
+        snap_comment = (
+            "        /* practice_macro_snap BSS is in .practice_macro_snap_pak "
+            "(0x80691940, Pak only). */\n"
+        )
+        if snap_bss in new_content:
+            new_content = new_content.replace(snap_bss, snap_comment, 1)
         content = new_content
         inject_count += 1
 

@@ -56,6 +56,7 @@ typedef struct PracticeConfig {
     bool infLives;
     bool infBoost;
     u32 prevPlanetsMask;
+    bool macroBindState;
 } PracticeConfig;
 
 typedef enum PracticeSubMenu {
@@ -327,6 +328,9 @@ void Practice_Macro_Rewind(void);
 bool Practice_Macro_IsArmed(void);
 bool Practice_Macro_IsRecording(void);
 bool Practice_Macro_IsPlaying(void);
+u8*  Practice_Macro_SnapBase(void);
+void Practice_Save_MacroSnap(void);
+void Practice_Save_MacroApply(void);
 bool Practice_Macro_HasData(void);
 s32  Practice_Macro_GetHead(void);
 s32  Practice_Macro_GetLen(void);

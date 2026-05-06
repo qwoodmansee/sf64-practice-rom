@@ -1707,6 +1707,14 @@ void Practice_Save_Tick(void) {
     }
 }
 
+void Practice_Save_MacroSnap(void) {
+    Snapshot_FillFromGame((PracticeSnapshot*)Practice_Macro_SnapBase());
+}
+
+void Practice_Save_MacroApply(void) {
+    Snapshot_ApplyToGame((const PracticeSnapshot*)Practice_Macro_SnapBase());
+}
+
 void Practice_CycleSlot(s32 delta) {
     s32 n;
 
