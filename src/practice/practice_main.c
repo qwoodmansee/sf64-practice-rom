@@ -52,6 +52,7 @@ void Practice_Init(void) {
     gPracticeConfig.infBoost = false;
     gPracticeConfig.prevPlanetsMask  = 0;
     gPracticeConfig.macroBindState   = false;
+    gPracticeConfig.macroLoop        = false;
 
     /* Boss-test override flag: runtime-only, reset on every boot.
      * Per-launch resets happen in Practice_LevelSelect_Update's non-boss

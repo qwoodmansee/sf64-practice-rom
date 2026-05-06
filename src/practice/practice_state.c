@@ -36,6 +36,7 @@ typedef enum MacroOption {
     MOPT_REWIND,
     MOPT_FRAMES,
     MOPT_BIND_STATE,
+    MOPT_LOOP,
     MOPT_BACK,
     MOPT_MAX,
 } MacroOption;
@@ -361,6 +362,9 @@ static void StateMenu_UpdateMacro(u16 buttons) {
                 break;
             case MOPT_BIND_STATE:
                 gPracticeConfig.macroBindState = !gPracticeConfig.macroBindState;
+                break;
+            case MOPT_LOOP:
+                gPracticeConfig.macroLoop = !gPracticeConfig.macroLoop;
                 break;
         }
     }
@@ -743,11 +747,13 @@ static void StateMenu_DrawMacro(void) {
                 break;
             case MOPT_PLAY:
                 Practice_DrawText(54, y, "PLAY:");
-                Practice_DrawTextColor(130, y,
-                    Practice_Macro_IsPlaying() ? "ON" : "OFF",
-                    Practice_Macro_IsPlaying() ? 60  : 100,
-                    Practice_Macro_IsPlaying() ? 220 : 100,
-                    Practice_Macro_IsPlaying() ? 255 : 60);
+                if (Practice_Macro_IsPlaying()) {
+                    Practice_DrawTextColor(130, y, "ON",  60, 220, 255);
+                } else if (Practice_Macro_HasData()) {
+                    Practice_DrawTextColor(130, y, "OFF", 100, 100, 60);
+                } else {
+                    Practice_DrawTextColor(130, y, "---", 60,  60,  60);
+                }
                 break;
             case MOPT_REWIND:
                 Practice_DrawTextColor(54, y, "REWIND", 200, 200, 255);
@@ -759,6 +765,14 @@ static void StateMenu_DrawMacro(void) {
                     gPracticeConfig.macroBindState ? 60  : 100,
                     gPracticeConfig.macroBindState ? 220 : 100,
                     gPracticeConfig.macroBindState ? 60  : 60);
+                break;
+            case MOPT_LOOP:
+                Practice_DrawText(54, y, "LOOP:");
+                Practice_DrawTextColor(130, y,
+                    gPracticeConfig.macroLoop ? "ON" : "OFF",
+                    gPracticeConfig.macroLoop ? 60  : 100,
+                    gPracticeConfig.macroLoop ? 220 : 100,
+                    gPracticeConfig.macroLoop ? 60  : 60);
                 break;
             case MOPT_FRAMES:
                 Practice_DrawText(54, y, "FRAMES:");
@@ -806,8 +820,8 @@ void Practice_StateMenu_Draw(void) {
             break;
         case PSUBMENU_MACRO:
             title = "MACRO";
-            boxHeight = 114;
-            helpY = 146;
+            boxHeight = 128;
+            helpY = 160;
             break;
         default:
             return;

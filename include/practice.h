@@ -57,6 +57,7 @@ typedef struct PracticeConfig {
     bool infBoost;
     u32 prevPlanetsMask;
     bool macroBindState;
+    bool macroLoop;
 } PracticeConfig;
 
 typedef enum PracticeSubMenu {

@@ -20,6 +20,7 @@ static bool       sMacroSnapValid       = false;
 static s32        sMacroSnapLevel       = 0;
 static s32        sMacroSnapPhase       = 0;
 static bool       sMacroRestorePending  = false;
+static bool       sMacroBufFull         = false;
 
 static bool Macro_HasPak(void) {
     return osMemSize >= 0x00800000U;
@@ -34,6 +35,7 @@ void Practice_Macro_Init(void) {
     sMacroSnapLevel      = 0;
     sMacroSnapPhase      = 0;
     sMacroRestorePending = false;
+    sMacroBufFull        = false;
 }
 
 /* Called from fox_game.c immediately before Play_Main() so injected inputs
@@ -102,7 +104,8 @@ void Practice_Macro_PrePlay(void) {
             sMacroLen = sMacroHead;
         } else {
             /* Buffer full -- stop recording automatically. */
-            sMacroState = MACRO_IDLE;
+            sMacroState  = MACRO_IDLE;
+            sMacroBufFull = true;
         }
     } else if (sMacroState == MACRO_PLAYING) {
         if (sMacroHead < sMacroLen) {
@@ -123,8 +126,20 @@ void Practice_Macro_PrePlay(void) {
             sPrevButton = f.button;
             sMacroHead++;
         } else {
-            sMacroState = MACRO_IDLE;
-            sPrevButton = 0;
+            if (gPracticeConfig.macroLoop) {
+                sMacroHead  = 0;
+                sPrevButton = 0;
+                if (gPracticeConfig.macroBindState && sMacroSnapValid) {
+                    sMacroRestorePending = true;
+                    if ((s32)gCurrentLevel != sMacroSnapLevel ||
+                        (s32)gLevelPhase   != sMacroSnapPhase) {
+                        practice_overlay_request_load((LevelId)sMacroSnapLevel, sMacroSnapPhase);
+                    }
+                }
+            } else {
+                sMacroState = MACRO_IDLE;
+                sPrevButton = 0;
+            }
         }
     }
 }
@@ -149,6 +164,8 @@ void Practice_Macro_Draw(void) {
     } else if (sMacroState == MACRO_PLAYING) {
         Practice_DrawTextColor(240, 8, "PLAY:", 60, 220, 255);
         Practice_DrawNumber(276, 8, sMacroHead);
+    } else if (sMacroBufFull) {
+        Practice_DrawTextColor(240, 8, "FULL", 255, 60, 60);
     }
 }
 
@@ -156,10 +173,11 @@ void Practice_Macro_StartRecord(void) {
     if (!Macro_HasPak()) {
         return;
     }
-    sMacroState = MACRO_ARMED;
-    sMacroHead  = 0;
-    sMacroLen   = 0;
-    sPrevButton = 0;
+    sMacroState   = MACRO_ARMED;
+    sMacroHead    = 0;
+    sMacroLen     = 0;
+    sPrevButton   = 0;
+    sMacroBufFull = false;
 }
 
 void Practice_Macro_StopRecord(void) {
