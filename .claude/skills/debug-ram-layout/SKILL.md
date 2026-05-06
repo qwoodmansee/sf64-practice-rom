@@ -1,6 +1,6 @@
 ---
 name: debug-ram-layout
-description: Use when an SF64 practice ROM feature boots but renders wrong - invisible text, garbage textures, missing menu sprites, corrupt level-select, scrambled overlays, or any symptom suggesting memory corruption near overlays or assets. Especially after adding large BSS allocations, custom NOLOAD linker sections, or bzero/memset on practice buffers. The linker map proves overlap statically without re-running the ROM.
+description: Use when an SF64 practice ROM feature renders wrong — invisible text, garbage textures, scrambled overlays — suggesting memory corruption near overlays or assets. Linker-map analysis.
 ---
 
 ## Overview

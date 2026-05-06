@@ -1,6 +1,6 @@
 ---
 name: practice-hw-isv-trace
-description: Use when debugging Star Fox 64 Practice ROM on real hardware (SummerCart64 + IS-Viewer) — save/load crashes, silent hangs, no deployer "crash frame", or confirming the save hotkey path. Covers PRACTICE_SAVE_TRACE bracketing, interpreting [save_tr] lines, PSCREEN_GAMEPLAY vs engine state, and the large PracticeSnapshot stack/BSS placement rule.
+description: Use when debugging SF64 practice ROM on real hardware (SummerCart64 + IS-Viewer) — save/load crashes, silent hangs, or no deployer crash frame. Covers PRACTICE_SAVE_TRACE and [save_tr] interpretation.
 ---
 
 ## When to use
