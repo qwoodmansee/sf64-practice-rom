@@ -1,0 +1,26 @@
+src/practice/practice_macro.c
+  s_c341f71a793ff4::t_9abbb9fdb04534 66-74,76,78-82,224,248-264,266-271
+  s_c341f71a793ff4::t_dc8359bde79978 226
+  s_c341f71a793ff4::t_b1ad1b5aaa01cd 265,272
+include/practice.h
+  s_c341f71a793ff4::t_9abbb9fdb04534 336
+src/practice/practice_state.c
+  s_c341f71a793ff4::t_9abbb9fdb04534 37,360-362,365,379-381,799,803-804,874-875
+  s_c341f71a793ff4::t_05934678407dfd 797-798,800-802
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.1",
+  "base_commit_sha": "a4e62ef69586cc6f10986cb60243efa7d70718b4",
+  "prompts": {},
+  "sessions": {
+    "s_c341f71a793ff4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "80076ee3-b498-4767-be0a-babd402c60db",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "qwoodmansee <github@qwoodmansee.xyz>"
+    }
+  }
+}
