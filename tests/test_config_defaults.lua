@@ -54,5 +54,6 @@ H.assert_eq(H.config_field("infHealth"), 0, "infHealth = false")
 H.assert_eq(H.config_field("infBombs"), 0, "infBombs = false")
 H.assert_eq(H.config_field("infLives"), 0, "infLives = false")
 H.assert_eq(H.config_field("infBoost"), 0, "infBoost = false")
+H.assert_eq(H.config_field("prevPlanetsMask"), 0, "prevPlanetsMask = 0")
 
 H.finish()

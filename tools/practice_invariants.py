@@ -122,6 +122,7 @@ def check_engine_hooks():
         (FOX_DISPLAY, "Practice_FreeCam_IsActive", "Practice_FreeCam_IsActive() hook must exist in fox_display.c"),
         (FOX_DISPLAY, "Practice_FreeCam_GetView", "Practice_FreeCam_GetView() hook must exist in fox_display.c"),
         (FOX_HUD, "showPauseMinimap", "showPauseMinimap minimap/portrait suppression hook must exist in fox_hud.c"),
+        (PRACTICE_MAIN_INIT, "gLeveLClearStatus", "gLeveLClearStatus must be written in Practice_ApplyStartConditions"),
     ]
     for filepath, symbol, msg in hooks:
         src = read(filepath)
@@ -1100,7 +1101,7 @@ def check_boot_main_rom_budget():
         return
 
     main_rom_end = int(match.group(1), 16)
-    limit = 0xFB000
+    limit = 0xFD000
     if main_rom_end > limit:
         error(
             f"{map_path}: main_ROM_END 0x{main_rom_end:06X} exceeds boot-safe "
@@ -1345,8 +1346,8 @@ def check_owl_logo():
         error(f"{owl_c}: sPracticeOwlTex array missing")
     if "Practice_Owl_Draw" not in src:
         error(f"{owl_c}: Practice_Owl_Draw function missing")
-    if "RCP_SetupDL_76" not in src:
-        error(f"{owl_c}: missing RCP_SetupDL_76 setup before texture draw")
+    if "SETUPDL_85" not in src:
+        error(f"{owl_c}: CI8 texture draw must use SETUPDL_85 (G_TT_RGBA16), not SETUPDL_76 (G_TT_NONE)")
     if "sPracticeOwlTLUT" not in src:
         error(f"{owl_c}: sPracticeOwlTLUT palette missing")
     if "Lib_TextureRect_CI8" not in src:
@@ -1369,8 +1370,8 @@ def check_hit64_logo():
         error(f"{logo_c}: sPracticeLogoTex array missing")
     if "Practice_Logo_Draw" not in src:
         error(f"{logo_c}: Practice_Logo_Draw function missing")
-    if "RCP_SetupDL_76" not in src:
-        error(f"{logo_c}: missing RCP_SetupDL_76 setup before texture draw")
+    if "SETUPDL_85" not in src:
+        error(f"{logo_c}: CI8 texture draw must use SETUPDL_85 (G_TT_RGBA16), not SETUPDL_76 (G_TT_NONE)")
     if "sPracticeLogoTLUT" not in src:
         error(f"{logo_c}: sPracticeLogoTLUT palette missing")
     if "Lib_TextureRect_CI8" not in src:

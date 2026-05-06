@@ -150,6 +150,7 @@ CONFIG_OFFSETS = {
     "infBombs": 0x80,
     "infLives": 0x84,
     "infBoost": 0x88,
+    "prevPlanetsMask": 0x8C,
 }
 
 # Player struct field offsets (include/sf64player.h Player)
