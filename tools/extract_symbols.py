@@ -66,6 +66,8 @@ SYMBOLS = [
     "gPracticeBgmPendingSeqId",
     "gPracticeBgmPendingDelay",
     "gPracticeSlotMeta",
+    "gControllerHold",
+    "gControllerPress",
     "gGameFrameCount",
     "gNextLevel",
     "gNextLevelPhase",

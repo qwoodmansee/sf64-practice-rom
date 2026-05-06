@@ -25,9 +25,19 @@ typedef enum DisplayOption {
     DOPT_MINIMAP,
     DOPT_STATS_MENU,
     DOPT_VIS_MENU,
+    DOPT_MACRO_MENU,
     DOPT_BACK,
     DOPT_MAX,
 } DisplayOption;
+
+typedef enum MacroOption {
+    MOPT_RECORD,
+    MOPT_PLAY,
+    MOPT_REWIND,
+    MOPT_FRAMES,
+    MOPT_BACK,
+    MOPT_MAX,
+} MacroOption;
 
 typedef enum StatsOption {
     SOPT_HUD_OVERLAY,
@@ -91,6 +101,7 @@ static s32 StateMenu_GetOptionCount(void) {
         case PSUBMENU_STATS:        return SOPT_MAX;
         case PSUBMENU_VISUALIZERS:  return VOPT_MAX;
         case PSUBMENU_PREV_PLANETS: return PREV_PLANETS_COUNT + 1;
+        case PSUBMENU_MACRO:        return MOPT_MAX;
         default:                    return 0;
     }
 }
@@ -327,6 +338,30 @@ static void StateMenu_UpdateVisualizers(u16 buttons) {
     }
 }
 
+static void StateMenu_UpdateMacro(u16 buttons) {
+    if ((buttons & A_BUTTON) || (buttons & R_JPAD) || (buttons & L_JPAD)) {
+        switch (sSelectedOption) {
+            case MOPT_RECORD:
+                if (Practice_Macro_IsArmed() || Practice_Macro_IsRecording()) {
+                    Practice_Macro_StopRecord();
+                } else {
+                    Practice_Macro_StartRecord();
+                }
+                break;
+            case MOPT_PLAY:
+                if (Practice_Macro_IsPlaying()) {
+                    Practice_Macro_StopPlay();
+                } else {
+                    Practice_Macro_StartPlay();
+                }
+                break;
+            case MOPT_REWIND:
+                Practice_Macro_Rewind();
+                break;
+        }
+    }
+}
+
 static void StateMenu_UpdatePrevPlanets(u16 buttons) {
     if ((buttons & A_BUTTON) || (buttons & R_JPAD) || (buttons & L_JPAD)) {
         if (sSelectedOption < PREV_PLANETS_COUNT) {
@@ -377,6 +412,15 @@ void Practice_StateMenu_Update(void) {
             sSelectedOption = 0;
             return;
         }
+        if (sActiveSubMenu == PSUBMENU_DISPLAY && sSelectedOption == DOPT_MACRO_MENU) {
+            sActiveSubMenu = PSUBMENU_MACRO;
+            sSelectedOption = 0;
+            return;
+        }
+        if (sActiveSubMenu == PSUBMENU_MACRO && sSelectedOption == MOPT_BACK) {
+            Practice_StateMenu_Close();
+            return;
+        }
         if (sActiveSubMenu == PSUBMENU_STATS && sSelectedOption == SOPT_BACK) {
             Practice_StateMenu_Close();
             return;
@@ -411,6 +455,9 @@ void Practice_StateMenu_Update(void) {
             break;
         case PSUBMENU_PREV_PLANETS:
             StateMenu_UpdatePrevPlanets(press->button);
+            break;
+        case PSUBMENU_MACRO:
+            StateMenu_UpdateMacro(press->button);
             break;
     }
 }
@@ -517,6 +564,9 @@ static void StateMenu_DrawDisplay(void) {
                 break;
             case DOPT_VIS_MENU:
                 Practice_DrawTextColor(54, y, "VISUALIZERS...", 200, 200, 255);
+                break;
+            case DOPT_MACRO_MENU:
+                Practice_DrawTextColor(54, y, "MACRO...", 200, 200, 255);
                 break;
             case DOPT_BACK:
                 Practice_DrawTextColor(54, y, "BACK", 150, 150, 150);
@@ -665,6 +715,52 @@ static void StateMenu_DrawPrevPlanets(void) {
     }
 }
 
+static void StateMenu_DrawMacro(void) {
+    s32 y;
+    s32 i;
+
+    for (i = 0; i < MOPT_MAX; i++) {
+        y = 60 + (i * 14);
+
+        if (i == sSelectedOption) {
+            Practice_DrawBox(42, y - 1, 230, 12, 255, 255, 255, 60);
+        }
+
+        switch (i) {
+            case MOPT_RECORD:
+                Practice_DrawText(54, y, "RECORD:");
+                if (Practice_Macro_IsArmed()) {
+                    Practice_DrawTextColor(130, y, "ARMED", 255, 140, 0);
+                } else if (Practice_Macro_IsRecording()) {
+                    Practice_DrawTextColor(130, y, "ON", 255, 60, 60);
+                } else {
+                    Practice_DrawTextColor(130, y, "OFF", 100, 100, 60);
+                }
+                break;
+            case MOPT_PLAY:
+                Practice_DrawText(54, y, "PLAY:");
+                Practice_DrawTextColor(130, y,
+                    Practice_Macro_IsPlaying() ? "ON" : "OFF",
+                    Practice_Macro_IsPlaying() ? 60  : 100,
+                    Practice_Macro_IsPlaying() ? 220 : 100,
+                    Practice_Macro_IsPlaying() ? 255 : 60);
+                break;
+            case MOPT_REWIND:
+                Practice_DrawTextColor(54, y, "REWIND", 200, 200, 255);
+                break;
+            case MOPT_FRAMES:
+                Practice_DrawText(54, y, "FRAMES:");
+                Practice_DrawNumber(130, y, Practice_Macro_GetHead());
+                Practice_DrawText(160, y, "-");
+                Practice_DrawNumber(170, y, Practice_Macro_GetLen());
+                break;
+            case MOPT_BACK:
+                Practice_DrawTextColor(54, y, "BACK", 150, 150, 150);
+                break;
+        }
+    }
+}
+
 void Practice_StateMenu_Draw(void) {
     const char* title;
     s32 boxHeight;
@@ -678,8 +774,8 @@ void Practice_StateMenu_Draw(void) {
             break;
         case PSUBMENU_DISPLAY:
             title = "DISPLAY";
-            boxHeight = 110;
-            helpY = 142;
+            boxHeight = 124;
+            helpY = 156;
             break;
         case PSUBMENU_STATS:
             title = "STATS";
@@ -695,6 +791,11 @@ void Practice_StateMenu_Draw(void) {
             title = "PREV PLANETS";
             boxHeight = 196;
             helpY = 226;
+            break;
+        case PSUBMENU_MACRO:
+            title = "MACRO";
+            boxHeight = 100;
+            helpY = 132;
             break;
         default:
             return;
@@ -723,6 +824,10 @@ void Practice_StateMenu_Draw(void) {
         case PSUBMENU_PREV_PLANETS:
             StateMenu_DrawPrevPlanets();
             Practice_DrawTextColor(50, helpY, "A:TOGGLE  B:BACK", 150, 150, 150);
+            break;
+        case PSUBMENU_MACRO:
+            StateMenu_DrawMacro();
+            Practice_DrawTextColor(50, helpY, "A:SELECT  B:BACK", 150, 150, 150);
             break;
     }
 }

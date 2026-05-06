@@ -43,6 +43,8 @@ PRACTICE_OBJS = [
     "practice_sd",          # Phase 6: OSK + file browser rendering and glue
     "practice_frame_advance",  # Frame advance / pause feature
     "practice_boss_test",   # Boss test stage: data table + launch API
+    "practice_macro",       # Macro recording / playback logic
+    "practice_macro_buf",   # Macro frame buffer — Pak-only BSS in .practice_macro_pak
 ]
 
 # Order matters: each entry's predecessor must precede it in the list,
@@ -98,6 +100,20 @@ PRACTICE_POOL_SECTION = """\
         build/src/practice/practice_save_slotpool.o(.bss);
         . = ALIGN(., 8);
         practice_pool_pak_BSS_END = .;
+    }
+"""
+
+# Macro frame buffer at 0x80680000 (immediately after the 4-slot pool + scratch
+# that occupies 0x80400000–0x80680000; comfortably below the 0x80800000 ceiling).
+# 18 000 MacroFrames × 4 bytes = 72 000 bytes ≈ 70 KB.
+PRACTICE_MACRO_SECTION = """\
+    /* Macro frame buffer: 18 000 frames × 4 bytes at 0x80680000 (Pak only). */
+    .practice_macro_pak 0x80680000 (NOLOAD) : SUBALIGN(8)
+    {
+        practice_macro_pak_BSS_START = .;
+        build/src/practice/practice_macro_buf.o(.bss);
+        . = ALIGN(., 8);
+        practice_macro_pak_BSS_END = .;
     }
 """
 
@@ -345,6 +361,35 @@ def patch():
         )
         if save_bss in new_content:
             new_content = new_content.replace(save_bss, save_comment, 1)
+        content = new_content
+        inject_count += 1
+
+    # Inject .practice_macro_pak immediately after .practice_pool_pak if absent.
+    # practice_macro_buf.o(.bss) must be stripped from .main_bss the same way
+    # practice_save_slotpool.o is.
+    if ".practice_macro_pak" not in content:
+        pool_anchor = "    .practice_pool_pak 0x80400000"
+        if pool_anchor not in content:
+            raise RuntimeError(
+                "Linker patcher: .practice_pool_pak anchor not found for "
+                ".practice_macro_pak injection."
+            )
+        needle = PRACTICE_POOL_SECTION
+        replacement = PRACTICE_POOL_SECTION + "\n" + PRACTICE_MACRO_SECTION
+        new_content = content.replace(needle, replacement, 1)
+        if new_content == content:
+            # The pool section text may have been altered (e.g. by migration).
+            # Fall back: inject after the closing brace of .practice_pool_pak.
+            import re as _re
+            pat = r"(    \.practice_pool_pak 0x80400000.*?\})\n"
+            new_content = _re.sub(pat, r"\1\n\n" + PRACTICE_MACRO_SECTION, content, count=1, flags=_re.DOTALL)
+        macro_bss = "        build/src/practice/practice_macro_buf.o(.bss);\n"
+        macro_comment = (
+            "        /* practice_macro_buf BSS is in .practice_macro_pak "
+            "(0x80680000, Pak only). */\n"
+        )
+        if macro_bss in new_content:
+            new_content = new_content.replace(macro_bss, macro_comment, 1)
         content = new_content
         inject_count += 1
 

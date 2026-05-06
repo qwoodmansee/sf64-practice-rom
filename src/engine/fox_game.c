@@ -536,8 +536,13 @@ void Game_Update(void) {
                 break;
             case GSTATE_PLAY:
 #ifdef PRACTICE_ROM
+                if (gPracticeMenuState == PMENU_CLOSED) {
+                    Practice_Macro_PrePlay();
+                }
                 if ((gPracticeMenuState == PMENU_OPEN) ||
-                    (gPracticeMenuState == PMENU_CLOSED && !Practice_FrameAdvance_IsFrozen())) {
+                    (gPracticeMenuState == PMENU_CLOSED &&
+                     !Practice_FrameAdvance_IsFrozen() &&
+                     !Practice_Macro_IsArmed())) {
                     Play_Main();
                 }
 #else

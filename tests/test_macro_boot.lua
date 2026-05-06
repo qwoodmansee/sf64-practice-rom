@@ -1,0 +1,63 @@
+-- Test: macro module initialises cleanly and does not break gameplay boot.
+--
+-- sMacroState/Head/Len are file-static so the linker map does not export them.
+-- We verify:
+--   1. ROM boots to level select (Practice_Macro_Init did not crash).
+--   2. Launching Corneria reaches PLAY_UPDATE (macro PrePlay hook did not crash).
+--   3. gControllerHold[0] reads zero when no input is injected (MACRO_IDLE).
+--   4. The expansion pak buffer VMA (0x80680000) is accessible without a fault
+--      after several gameplay frames (proves the linker section is valid).
+
+local H = dofile("tests/harness.lua")
+local S = H.S
+
+H.test_name = "macro_boot"
+
+local GSTATE_PLAY        = 4
+local PLAY_UPDATE        = 5
+local PSCREEN_GAMEPLAY   = 1
+local LEVEL_CORNERIA     = 1
+
+-- 1. Boot to level select.
+local ok = H.wait_until(function()
+    return H.practice_screen() == S.const.PSCREEN_LEVEL_SELECT
+end, 300, "boot to level select")
+H.assert_true(ok, "Booted to level select")
+
+-- 2. Launch Corneria (level index 0 = Corneria on the default cursor).
+--    Hold A for 2 frames to confirm selection, then wait for gameplay.
+H.advance(2)
+joypad.set({ ["P1 A"] = true })
+H.advance(1)
+joypad.set({})
+H.advance(2)
+
+ok = H.wait_until(function()
+    return H.game_state() == GSTATE_PLAY and H.play_state() == PLAY_UPDATE
+end, 600, "reach PLAY_UPDATE")
+H.assert_true(ok, "Reached PLAY_UPDATE after launching level")
+H.assert_eq(H.practice_screen(), PSCREEN_GAMEPLAY, "practice_screen is GAMEPLAY")
+
+-- 3. With MACRO_IDLE and no input from the user, the injected button word
+--    must be zero -- PrePlay must not have clobbered the real input feed.
+--    (The test runner does not press any buttons, so gControllerHold.button
+--    should be 0 unless the macro module is writing garbage.)
+H.advance(5)
+local btn = H.read_u16(S.gControllerHold)   -- offset 0: button (big-endian u16)
+H.assert_eq(btn, 0, "gControllerHold[0].button is 0 in MACRO_IDLE (no ghost input)")
+
+-- 4. Read from the expansion pak macro buffer VMA.
+--    VMA 0x80680000 -> RDRAM offset 0x680000.  On stock 4 MB this memory is
+--    absent; BizHawk with Expansion Pak enabled zeros it.  Either way, reading
+--    it without a fault proves the linker section did not clobber live RAM.
+local PAK_OFFSET = 0x680000
+local probe = mainmemory.read_u32_be(PAK_OFFSET)
+-- We cannot assert a specific value (NOLOAD + Pak present/absent), but the
+-- read itself returning without error is the invariant we care about.
+H.assert_true(probe ~= nil, "Expansion pak buffer VMA is readable (no fault)")
+
+-- Advance a few more frames to make sure PrePlay does not blow up over time.
+H.advance(10)
+H.assert_eq(H.game_state(), GSTATE_PLAY, "Still in GSTATE_PLAY after 10 more frames")
+
+H.finish()

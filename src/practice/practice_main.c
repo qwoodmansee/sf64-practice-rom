@@ -87,12 +87,14 @@ void Practice_Init(void) {
      * and follow docs/superpowers/plans/HW_VERIFY_phase2.md. */
     Practice_TestFatfs();
 #endif
+    Practice_Macro_Init();
     osSyncPrintf("[init] Practice_Init returning\n");
 }
 
 void Practice_Update(void) {
     Practice_Cheats_Apply();
     Practice_FrameAdvance_Update();
+    Practice_Macro_Update();
 
     if (Practice_Sd_IsActive()) {
         Practice_Sd_Update();
@@ -139,6 +141,7 @@ void Practice_Draw(void) {
                     Practice_InputDisplay_Draw();
                 }
             }
+            Practice_Macro_Draw();
             Practice_Minimap_Draw();
             if (Practice_Sd_IsActive()) {
                 Practice_Sd_Draw();
