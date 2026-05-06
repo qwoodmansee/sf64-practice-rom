@@ -1,0 +1,27 @@
+src/practice/practice_logo_tex.c
+  2aff8f164821e396 173
+tools/practice_invariants.py
+  2aff8f164821e396 1349-1350,1373-1374
+src/practice/practice_owl_tex.c
+  2aff8f164821e396 109
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "854c2975556392b747ec3490aab51c3705293e51",
+  "prompts": {
+    "2aff8f164821e396": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f385c4c4-3ae1-45a4-be92-e4ce8e698d75",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 6,
+      "total_deletions": 6,
+      "accepted_lines": 6,
+      "overriden_lines": 0
+    }
+  }
+}
