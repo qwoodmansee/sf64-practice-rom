@@ -1,0 +1,33 @@
+src/overlays/ovl_i1/fox_co.c
+  s_a5426299151a42::t_2e27de75998d8d 1707-1710,1712,1714-1717,1719-1720,1732
+  s_a5426299151a42::t_8d0d3db48f8aca 2280-2281
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.1",
+  "base_commit_sha": "c2268515a85979f64415229e6bf09715aed6318b",
+  "prompts": {
+    "a5426299151a42ae": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "609555c6-2dd9-4609-a892-a33d8c49d167",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "qwoodmansee <github@qwoodmansee.xyz>",
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 0,
+      "overriden_lines": 0
+    }
+  },
+  "sessions": {
+    "s_a5426299151a42": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "609555c6-2dd9-4609-a892-a33d8c49d167",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "qwoodmansee <github@qwoodmansee.xyz>"
+    }
+  }
+}
