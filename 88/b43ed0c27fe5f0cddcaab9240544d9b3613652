@@ -1,0 +1,38 @@
+src/practice/practice_main.c
+  s_c341f71a793ff4::t_2ec2b0bb90e319 55
+src/practice/practice_macro.c
+  s_c341f71a793ff4::t_b11bd95ac165fc 23
+  s_c341f71a793ff4::t_3a9077f63fbd2e 107-108
+  s_c341f71a793ff4::t_7c7b3856ae7a87 167-168
+  s_c341f71a793ff4::t_3f44c55f4f0256 38
+  s_c341f71a793ff4::t_3173a60e2d867a 129-142
+  s_c341f71a793ff4::t_9c23566df7c4c3 176-180
+src/practice/practice_state.c
+  s_c341f71a793ff4::t_783c0ec77b570c 39
+  s_c341f71a793ff4::t_689b22c3be8e93 366-368
+  s_c341f71a793ff4::t_226b86fa21ca88 769-776
+  s_c341f71a793ff4::t_d076ec876cd2ba 750-756
+  s_c341f71a793ff4::t_e3ef176ecd7346 823-824
+include/practice.h
+  s_c341f71a793ff4::t_365a11cd03746f 60
+tools/extract_symbols.py
+  s_c341f71a793ff4::t_845edab7aac36c 157
+tests/test_config_defaults.lua
+  s_c341f71a793ff4::t_f088e9786e4bac 59
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.1",
+  "base_commit_sha": "88b43ed0c27fe5f0cddcaab9240544d9b3613652",
+  "prompts": {},
+  "sessions": {
+    "s_c341f71a793ff4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "80076ee3-b498-4767-be0a-babd402c60db",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "qwoodmansee <github@qwoodmansee.xyz>"
+    }
+  }
+}
