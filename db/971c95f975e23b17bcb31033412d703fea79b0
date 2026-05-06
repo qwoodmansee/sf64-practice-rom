@@ -1,0 +1,23 @@
+src/practice/practice_menu.c
+  83101bdef228a8e2 29-31,34-41,46-53,56,60-61,63,66,69-70,72-74,76,79-83,86-91,96-101,107-108,110,113,115,117,122,134-138,144-145,147,152,159,189,275-276,376,381-385,415-417,424-444,448,463-466,482,489-498,604,606
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "db971c95f975e23b17bcb31033412d703fea79b0",
+  "prompts": {
+    "83101bdef228a8e2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "183c1167-d13b-4283-98dc-97dc3551da53",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 127,
+      "total_deletions": 122,
+      "accepted_lines": 116,
+      "overriden_lines": 0
+    }
+  }
+}
