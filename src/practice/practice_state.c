@@ -34,6 +34,7 @@ typedef enum MacroOption {
     MOPT_RECORD,
     MOPT_PLAY,
     MOPT_REWIND,
+    MOPT_TRIM,
     MOPT_FRAMES,
     MOPT_BIND_STATE,
     MOPT_LOOP,
@@ -356,11 +357,12 @@ static void StateMenu_UpdateMacro(u16 buttons) {
             case MOPT_RECORD:
                 if (Practice_Macro_IsArmed() || Practice_Macro_IsRecording()) {
                     Practice_Macro_StopRecord();
-                } else if (!Practice_Macro_IsArmed() && !Practice_Macro_IsRecording() &&
-                           Practice_Macro_HasData()) {
-                    /* Would clobber existing data -- ask for confirmation. */
+                } else if (Practice_Macro_HasData() &&
+                           Practice_Macro_GetHead() < Practice_Macro_GetLen()) {
+                    /* Head is before end: would clobber existing data. */
                     sConfirmOverwrite = true;
                 } else {
+                    /* Fresh (no data) or at trim point (head==len): start/append. */
                     Practice_Macro_StartRecord();
                 }
                 break;
@@ -373,6 +375,9 @@ static void StateMenu_UpdateMacro(u16 buttons) {
                 break;
             case MOPT_REWIND:
                 Practice_Macro_Rewind();
+                break;
+            case MOPT_TRIM:
+                Practice_Macro_Trim();
                 break;
             case MOPT_BIND_STATE:
                 gPracticeConfig.macroBindState = !gPracticeConfig.macroBindState;
@@ -769,31 +774,33 @@ static void StateMenu_DrawMacro(void) {
             case MOPT_RECORD:
                 Practice_DrawText(54, y, "RECORD:");
                 if (Practice_Macro_IsArmed()) {
-                    /* Pressing again will stop arming */
                     Practice_DrawTextColor(130, y, "ARMED", 255, 140, 0);
                 } else if (Practice_Macro_IsRecording()) {
-                    /* Pressing will stop recording */
                     Practice_DrawTextColor(130, y, "STOP", 255, 60, 60);
                 } else {
-                    /* Not recording -- pressing will start */
                     Practice_DrawTextColor(130, y, "START", 100, 220, 100);
                 }
                 break;
             case MOPT_PLAY:
                 Practice_DrawText(54, y, "PLAY:");
                 if (Practice_Macro_IsPlaying()) {
-                    /* Pressing will stop playback */
                     Practice_DrawTextColor(130, y, "STOP", 255, 100, 100);
                 } else if (Practice_Macro_HasData()) {
-                    /* Has data, not playing -- pressing will start */
                     Practice_DrawTextColor(130, y, "START", 100, 220, 100);
                 } else {
-                    /* No data */
                     Practice_DrawTextColor(130, y, "---", 60, 60, 60);
                 }
                 break;
             case MOPT_REWIND:
                 Practice_DrawTextColor(54, y, "REWIND", 200, 200, 255);
+                break;
+            case MOPT_TRIM:
+                if (Practice_Macro_GetHead() < Practice_Macro_GetLen()) {
+                    Practice_DrawTextColor(54, y, "TRIM:", 200, 200, 255);
+                    Practice_DrawNumber(98, y, Practice_Macro_GetHead());
+                } else {
+                    Practice_DrawTextColor(54, y, "TRIM", 60, 60, 60);
+                }
                 break;
             case MOPT_BIND_STATE:
                 Practice_DrawText(54, y, "SAVE START:");
@@ -864,8 +871,8 @@ void Practice_StateMenu_Draw(void) {
             break;
         case PSUBMENU_MACRO:
             title = "MACRO";
-            boxHeight = 128;
-            helpY = 160;
+            boxHeight = 142;
+            helpY = 174;
             break;
         default:
             return;

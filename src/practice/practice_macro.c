@@ -63,20 +63,23 @@ void Practice_Macro_PrePlay(void) {
     if (sMacroState == MACRO_ARMED) {
         hold = &gControllerHold[gMainController];
         if (hold->button != 0 || hold->stick_x != 0 || hold->stick_y != 0) {
-            /* First real input -- optionally snap state, then start recording. */
-            if (gPracticeConfig.macroBindState &&
-                practice_overlay_is_saveable((LevelId)gCurrentLevel)) {
-                Practice_Save_MacroSnap();
-                sMacroSnapLevel = (s32)gCurrentLevel;
-                sMacroSnapPhase = (s32)gLevelPhase;
-                sMacroSnapValid = true;
+            if (sMacroHead == 0) {
+                /* Fresh record: optionally snap state at this start point. */
+                if (gPracticeConfig.macroBindState &&
+                    practice_overlay_is_saveable((LevelId)gCurrentLevel)) {
+                    Practice_Save_MacroSnap();
+                    sMacroSnapLevel = (s32)gCurrentLevel;
+                    sMacroSnapPhase = (s32)gLevelPhase;
+                    sMacroSnapValid = true;
+                }
             }
+            /* Append mode (head > 0 after trim): keep existing snap and frames. */
             sMacroState = MACRO_RECORDING;
-            buf[0].button  = hold->button;
-            buf[0].stick_x = hold->stick_x;
-            buf[0].stick_y = hold->stick_y;
-            sMacroHead = 1;
-            sMacroLen  = 1;
+            buf[sMacroHead].button  = hold->button;
+            buf[sMacroHead].stick_x = hold->stick_x;
+            buf[sMacroHead].stick_y = hold->stick_y;
+            sMacroHead++;
+            sMacroLen = sMacroHead;
         }
         /* If no input yet, caller sees IsArmed() == true and skips Play_Main. */
         return;
@@ -206,8 +209,6 @@ void Practice_Macro_Update(void) {
 }
 
 void Practice_Macro_Draw(void) {
-    s32 barFull;
-    s32 barW;
     s32 recR;
     s32 recG;
     s32 recB;
@@ -219,17 +220,10 @@ void Practice_Macro_Draw(void) {
         return;
     }
     if (sMacroState == MACRO_ARMED) {
-        /* Top-right chip */
         Practice_DrawTextColor(240, 8, "REC:", 255, 140, 0);
-        Practice_DrawNumber(272, 8, 0);
-        /* Centered armed notice */
-        if (gPracticeConfig.macroBindState) {
-            Practice_DrawTextColor(50, 220, "READY - SAVE START ON", 255, 140, 0);
-        } else {
-            Practice_DrawTextColor(50, 220, "READY - PRESS ANY INPUT", 255, 140, 0);
-        }
+        Practice_DrawNumber(272, 8, sMacroHead);
     } else if (sMacroState == MACRO_RECORDING) {
-        /* Near-full warning: amber when >80% full */
+        /* Amber when >80% full, red otherwise. */
         if (sMacroHead > Practice_Macro_BufCapacity() * 4 / 5) {
             recR = 255; recG = 140; recB = 0;
         } else {
@@ -238,28 +232,10 @@ void Practice_Macro_Draw(void) {
         Practice_DrawTextColor(240, 8, "REC:", (u8)recR, (u8)recG, (u8)recB);
         Practice_DrawNumber(272, 8, sMacroHead);
     } else if (sMacroState == MACRO_PLAYING) {
-        /* Show head-of-total in chip */
         Practice_DrawTextColor(232, 8, "PLAY:", 60, 220, 255);
         Practice_DrawNumber(264, 8, sMacroHead);
         Practice_DrawTextColor(282, 8, "-", 60, 220, 255);
         Practice_DrawNumber(288, 8, sMacroLen);
-
-        /* Progress bar: 40px wide, 3px tall, below chip at y=18 */
-        barFull = 40;
-        barW = (sMacroLen > 0) ? (sMacroHead * barFull / sMacroLen) : 0;
-        Practice_DrawBox(232, 18, barFull, 3, 40, 40, 40, 180);
-        if (barW > 0) {
-            Practice_DrawBox(232, 18, barW, 3, 60, 180, 255, 220);
-        }
-
-        /* Loop indicator */
-        if (gPracticeConfig.macroLoop) {
-            Practice_DrawTextColor(232, 23, "LOOP", 80, 255, 80);
-            /* Warn if looping without save start */
-            if (!gPracticeConfig.macroBindState) {
-                Practice_DrawTextColor(50, 220, "LOOP: NO STATE", 255, 140, 0);
-            }
-        }
     } else if (sMacroBufFull) {
         Practice_DrawTextColor(240, 8, "FULL", 255, 60, 60);
     }
@@ -269,11 +245,31 @@ void Practice_Macro_StartRecord(void) {
     if (!Macro_HasPak()) {
         return;
     }
-    sMacroState   = MACRO_ARMED;
-    sMacroHead    = 0;
-    sMacroLen     = 0;
-    sPrevButton   = 0;
-    sMacroBufFull = false;
+    if (sMacroHead == sMacroLen && sMacroLen > 0) {
+        /* Append mode: at trim point, keep existing frames and snap. */
+        sMacroState   = MACRO_ARMED;
+        sPrevButton   = 0;
+        sMacroBufFull = false;
+    } else {
+        /* Fresh record: discard everything. */
+        sMacroState   = MACRO_ARMED;
+        sMacroHead    = 0;
+        sMacroLen     = 0;
+        sPrevButton   = 0;
+        sMacroBufFull = false;
+    }
+}
+
+void Practice_Macro_Trim(void) {
+    if (sMacroLen == 0 || sMacroHead > sMacroLen) {
+        return;
+    }
+    sMacroLen = sMacroHead;
+    if (sMacroLen == 0) {
+        /* Trimmed to zero = full clear; snap is no longer valid. */
+        sMacroSnapValid = false;
+        sMacroBufFull   = false;
+    }
 }
 
 void Practice_Macro_StopRecord(void) {
