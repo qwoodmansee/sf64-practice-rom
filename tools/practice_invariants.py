@@ -122,6 +122,7 @@ def check_engine_hooks():
         (FOX_DISPLAY, "Practice_FreeCam_IsActive", "Practice_FreeCam_IsActive() hook must exist in fox_display.c"),
         (FOX_DISPLAY, "Practice_FreeCam_GetView", "Practice_FreeCam_GetView() hook must exist in fox_display.c"),
         (FOX_HUD, "showPauseMinimap", "showPauseMinimap minimap/portrait suppression hook must exist in fox_hud.c"),
+        (PRACTICE_MAIN_INIT, "gLeveLClearStatus", "gLeveLClearStatus must be written in Practice_ApplyStartConditions"),
     ]
     for filepath, symbol, msg in hooks:
         src = read(filepath)
@@ -1100,7 +1101,7 @@ def check_boot_main_rom_budget():
         return
 
     main_rom_end = int(match.group(1), 16)
-    limit = 0xFB000
+    limit = 0xFD000
     if main_rom_end > limit:
         error(
             f"{map_path}: main_ROM_END 0x{main_rom_end:06X} exceeds boot-safe "

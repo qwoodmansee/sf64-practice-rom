@@ -14,6 +14,7 @@ typedef enum LoadoutOption {
     LOPT_SLIPPY,
     LOPT_PEPPY,
     LOPT_EXPERT,
+    LOPT_PREV_PLANETS,
     LOPT_BACK,
     LOPT_MAX,
 } LoadoutOption;
@@ -62,6 +63,13 @@ static const char* sLaserNames[] = { "SINGLE", "TWIN", "HYPER" };
 static const char* sWingNames[] = { "NONE", "BROKEN", "INTACT" };
 static const char* sHealthNames[] = { "SHORT", "LONG" };
 
+#define PREV_PLANETS_COUNT 13
+static const LevelId sPrevPlanetIds[PREV_PLANETS_COUNT] = {
+    LEVEL_METEO, LEVEL_FORTUNA,  LEVEL_SECTOR_X, LEVEL_TITANIA, LEVEL_BOLSE,
+    LEVEL_SECTOR_Y, LEVEL_KATINA, LEVEL_SOLAR,  LEVEL_MACBETH, LEVEL_AQUAS,
+    LEVEL_ZONESS,   LEVEL_SECTOR_Z, LEVEL_AREA_6,
+};
+
 bool Practice_StateMenuIsOpen(void) {
     return sStateMenuOpen;
 }
@@ -78,11 +86,12 @@ void Practice_StateMenu_Close(void) {
 
 static s32 StateMenu_GetOptionCount(void) {
     switch (sActiveSubMenu) {
-        case PSUBMENU_LOADOUT:     return LOPT_MAX;
-        case PSUBMENU_DISPLAY:     return DOPT_MAX;
-        case PSUBMENU_STATS:       return SOPT_MAX;
-        case PSUBMENU_VISUALIZERS: return VOPT_MAX;
-        default:                   return 0;
+        case PSUBMENU_LOADOUT:      return LOPT_MAX;
+        case PSUBMENU_DISPLAY:      return DOPT_MAX;
+        case PSUBMENU_STATS:        return SOPT_MAX;
+        case PSUBMENU_VISUALIZERS:  return VOPT_MAX;
+        case PSUBMENU_PREV_PLANETS: return PREV_PLANETS_COUNT + 1;
+        default:                    return 0;
     }
 }
 
@@ -318,6 +327,15 @@ static void StateMenu_UpdateVisualizers(u16 buttons) {
     }
 }
 
+static void StateMenu_UpdatePrevPlanets(u16 buttons) {
+    if ((buttons & A_BUTTON) || (buttons & R_JPAD) || (buttons & L_JPAD)) {
+        if (sSelectedOption < PREV_PLANETS_COUNT) {
+            u32 bit = 1u << sPrevPlanetIds[sSelectedOption];
+            gPracticeConfig.prevPlanetsMask ^= bit;
+        }
+    }
+}
+
 void Practice_StateMenu_Update(void) {
     OSContPad* press = &gControllerPress[gMainController];
     s32 optCount = StateMenu_GetOptionCount();
@@ -367,6 +385,15 @@ void Practice_StateMenu_Update(void) {
             Practice_StateMenu_Close();
             return;
         }
+        if (sActiveSubMenu == PSUBMENU_LOADOUT && sSelectedOption == LOPT_PREV_PLANETS) {
+            sActiveSubMenu = PSUBMENU_PREV_PLANETS;
+            sSelectedOption = 0;
+            return;
+        }
+        if (sActiveSubMenu == PSUBMENU_PREV_PLANETS && sSelectedOption == PREV_PLANETS_COUNT) {
+            Practice_StateMenu_Close();
+            return;
+        }
     }
 
     switch (sActiveSubMenu) {
@@ -381,6 +408,9 @@ void Practice_StateMenu_Update(void) {
             break;
         case PSUBMENU_VISUALIZERS:
             StateMenu_UpdateVisualizers(press->button);
+            break;
+        case PSUBMENU_PREV_PLANETS:
+            StateMenu_UpdatePrevPlanets(press->button);
             break;
     }
 }
@@ -444,6 +474,9 @@ static void StateMenu_DrawLoadout(void) {
                 Practice_DrawText(54, y, "EXPERT:");
                 Practice_DrawTextColor(120, y, gPracticeConfig.expertMode ? "ON" : "OFF",
                     gPracticeConfig.expertMode ? 0 : 255, gPracticeConfig.expertMode ? 255 : 100, 0);
+                break;
+            case LOPT_PREV_PLANETS:
+                Practice_DrawTextColor(54, y, "PLANETS...", 200, 200, 255);
                 break;
             case LOPT_BACK:
                 Practice_DrawTextColor(54, y, "BACK", 150, 150, 150);
@@ -610,6 +643,28 @@ static void StateMenu_DrawVisualizers(void) {
     }
 }
 
+static void StateMenu_DrawPrevPlanets(void) {
+    s32 i;
+
+    for (i = 0; i < PREV_PLANETS_COUNT + 1; i++) {
+        s32 y = 60 + (i * 12);
+
+        if (i == sSelectedOption) {
+            Practice_DrawBox(42, y - 1, 230, 12, 255, 255, 255, 60);
+        }
+
+        if (i == PREV_PLANETS_COUNT) {
+            Practice_DrawTextColor(54, y, "BACK", 150, 150, 150);
+        } else {
+            bool cleared = (gPracticeConfig.prevPlanetsMask >> sPrevPlanetIds[i]) & 1;
+            Practice_DrawText(54, y, Practice_LevelAbbrev(sPrevPlanetIds[i]));
+            Practice_DrawText(70, y, ":");
+            Practice_DrawTextColor(84, y, cleared ? "CLEAR" : "---",
+                cleared ? 0 : 100, cleared ? 255 : 100, cleared ? 0 : 100);
+        }
+    }
+}
+
 void Practice_StateMenu_Draw(void) {
     const char* title;
     s32 boxHeight;
@@ -618,8 +673,8 @@ void Practice_StateMenu_Draw(void) {
     switch (sActiveSubMenu) {
         case PSUBMENU_LOADOUT:
             title = "LOADOUT";
-            boxHeight = 193;
-            helpY = 224;
+            boxHeight = 200;
+            helpY = 232;
             break;
         case PSUBMENU_DISPLAY:
             title = "DISPLAY";
@@ -635,6 +690,11 @@ void Practice_StateMenu_Draw(void) {
             title = "VISUALIZERS";
             boxHeight = 180;
             helpY = 212;
+            break;
+        case PSUBMENU_PREV_PLANETS:
+            title = "PREV PLANETS";
+            boxHeight = 196;
+            helpY = 226;
             break;
         default:
             return;
@@ -658,6 +718,10 @@ void Practice_StateMenu_Draw(void) {
             break;
         case PSUBMENU_VISUALIZERS:
             StateMenu_DrawVisualizers();
+            Practice_DrawTextColor(50, helpY, "A:TOGGLE  B:BACK", 150, 150, 150);
+            break;
+        case PSUBMENU_PREV_PLANETS:
+            StateMenu_DrawPrevPlanets();
             Practice_DrawTextColor(50, helpY, "A:TOGGLE  B:BACK", 150, 150, 150);
             break;
     }

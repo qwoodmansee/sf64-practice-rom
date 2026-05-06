@@ -55,6 +55,7 @@ typedef struct PracticeConfig {
     bool infBombs;
     bool infLives;
     bool infBoost;
+    u32 prevPlanetsMask;
 } PracticeConfig;
 
 typedef enum PracticeSubMenu {
@@ -62,6 +63,7 @@ typedef enum PracticeSubMenu {
     PSUBMENU_DISPLAY,
     PSUBMENU_STATS,
     PSUBMENU_VISUALIZERS,
+    PSUBMENU_PREV_PLANETS,
 } PracticeSubMenu;
 
 typedef enum PracticeAction {

@@ -50,6 +50,7 @@ void Practice_Init(void) {
     gPracticeConfig.infBombs = false;
     gPracticeConfig.infLives = false;
     gPracticeConfig.infBoost = false;
+    gPracticeConfig.prevPlanetsMask = 0;
 
     /* Boss-test override flag: runtime-only, reset on every boot.
      * Per-launch resets happen in Practice_LevelSelect_Update's non-boss
@@ -151,6 +152,19 @@ void Practice_Draw(void) {
 }
 
 void Practice_ApplyStartConditions(void) {
+    s32 i;
+
+    for (i = 0; i < 30; i++) {
+        gLeveLClearStatus[i] = (gPracticeConfig.prevPlanetsMask >> i) & 1;
+    }
+
+    /* Bill and Katt are not covered by gClearPlayerInfo, so a -1 shield value
+     * from dying in a prior run persists into the next restart and can kill
+     * them the moment they spawn. Reset explicitly from the mask. */
+    gTeamShields[TEAM_ID_BILL] = (gPracticeConfig.prevPlanetsMask >> LEVEL_KATINA) & 1 ? 255 : 0;
+    gTeamShields[TEAM_ID_KATT] = (((gPracticeConfig.prevPlanetsMask >> LEVEL_AQUAS) & 1) ||
+                                   ((gPracticeConfig.prevPlanetsMask >> LEVEL_ZONESS) & 1)) ? 255 : 0;
+
     gLaserStrength[gPlayerNum] = gPracticeConfig.laserStrength;
     gBombCount[gPlayerNum] = gPracticeConfig.bombCount;
     gLifeCount[gPlayerNum] = gPracticeConfig.lifeCount;
