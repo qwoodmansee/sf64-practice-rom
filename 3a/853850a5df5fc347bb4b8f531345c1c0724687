@@ -1,0 +1,29 @@
+tools/practice_invariants.py
+  432e1d84d72938c5 1669-1712,1766
+include/fox_co.h
+  432e1d84d72938c5 175-178
+tests/test_carrier_phase3.lua
+  432e1d84d72938c5 1-114
+src/overlays/ovl_i1/fox_co.c
+  432e1d84d72938c5 1883-1907,2168-2200,2203,2220-2230,2233-2255,2297-2300
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.4",
+  "base_commit_sha": "3a853850a5df5fc347bb4b8f531345c1c0724687",
+  "prompts": {
+    "432e1d84d72938c5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "65365c7e-8dc4-4758-b905-c7564d6ed50c",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "qwoodmansee",
+      "messages": [],
+      "total_additions": 268,
+      "total_deletions": 9,
+      "accepted_lines": 840,
+      "overriden_lines": 0
+    }
+  }
+}
