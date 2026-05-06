@@ -70,6 +70,7 @@ typedef enum VisualizerOption {
 static s32 sSelectedOption = 0;
 static bool sStateMenuOpen = false;
 static PracticeSubMenu sActiveSubMenu;
+static bool sConfirmOverwrite = false;
 
 static const char* sLaserNames[] = { "SINGLE", "TWIN", "HYPER" };
 static const char* sWingNames[] = { "NONE", "BROKEN", "INTACT" };
@@ -341,11 +342,24 @@ static void StateMenu_UpdateVisualizers(u16 buttons) {
 }
 
 static void StateMenu_UpdateMacro(u16 buttons) {
+    /* Confirm-overwrite dialog: A confirms, B cancels (B handled before this). */
+    if (sConfirmOverwrite) {
+        if (buttons & A_BUTTON) {
+            Practice_Macro_StartRecord();
+            sConfirmOverwrite = false;
+        }
+        return;
+    }
+
     if ((buttons & A_BUTTON) || (buttons & R_JPAD) || (buttons & L_JPAD)) {
         switch (sSelectedOption) {
             case MOPT_RECORD:
                 if (Practice_Macro_IsArmed() || Practice_Macro_IsRecording()) {
                     Practice_Macro_StopRecord();
+                } else if (!Practice_Macro_IsArmed() && !Practice_Macro_IsRecording() &&
+                           Practice_Macro_HasData()) {
+                    /* Would clobber existing data -- ask for confirmation. */
+                    sConfirmOverwrite = true;
                 } else {
                     Practice_Macro_StartRecord();
                 }
@@ -384,6 +398,12 @@ void Practice_StateMenu_Update(void) {
     s32 optCount = StateMenu_GetOptionCount();
 
     if (press->button & B_BUTTON) {
+        /* If confirm-overwrite dialog is showing, B cancels it instead of
+         * closing the whole menu. */
+        if (sConfirmOverwrite) {
+            sConfirmOverwrite = false;
+            return;
+        }
         Practice_StateMenu_Close();
         return;
     }
@@ -726,6 +746,17 @@ static void StateMenu_DrawPrevPlanets(void) {
 static void StateMenu_DrawMacro(void) {
     s32 y;
     s32 i;
+    s32 len;
+    s32 secs;
+    s32 remFrames;
+
+    /* Confirm-overwrite dialog replaces the normal menu rows. */
+    if (sConfirmOverwrite) {
+        Practice_DrawTextColor(54, 70, "OVERWRITE MACRO.", 255, 200, 60);
+        Practice_DrawTextColor(54, 90, "A - YES", 100, 255, 100);
+        Practice_DrawTextColor(54, 104, "B - NO",  255, 100, 100);
+        return;
+    }
 
     for (i = 0; i < MOPT_MAX; i++) {
         y = 60 + (i * 14);
@@ -738,28 +769,34 @@ static void StateMenu_DrawMacro(void) {
             case MOPT_RECORD:
                 Practice_DrawText(54, y, "RECORD:");
                 if (Practice_Macro_IsArmed()) {
+                    /* Pressing again will stop arming */
                     Practice_DrawTextColor(130, y, "ARMED", 255, 140, 0);
                 } else if (Practice_Macro_IsRecording()) {
-                    Practice_DrawTextColor(130, y, "ON", 255, 60, 60);
+                    /* Pressing will stop recording */
+                    Practice_DrawTextColor(130, y, "STOP", 255, 60, 60);
                 } else {
-                    Practice_DrawTextColor(130, y, "OFF", 100, 100, 60);
+                    /* Not recording -- pressing will start */
+                    Practice_DrawTextColor(130, y, "START", 100, 220, 100);
                 }
                 break;
             case MOPT_PLAY:
                 Practice_DrawText(54, y, "PLAY:");
                 if (Practice_Macro_IsPlaying()) {
-                    Practice_DrawTextColor(130, y, "ON",  60, 220, 255);
+                    /* Pressing will stop playback */
+                    Practice_DrawTextColor(130, y, "STOP", 255, 100, 100);
                 } else if (Practice_Macro_HasData()) {
-                    Practice_DrawTextColor(130, y, "OFF", 100, 100, 60);
+                    /* Has data, not playing -- pressing will start */
+                    Practice_DrawTextColor(130, y, "START", 100, 220, 100);
                 } else {
-                    Practice_DrawTextColor(130, y, "---", 60,  60,  60);
+                    /* No data */
+                    Practice_DrawTextColor(130, y, "---", 60, 60, 60);
                 }
                 break;
             case MOPT_REWIND:
                 Practice_DrawTextColor(54, y, "REWIND", 200, 200, 255);
                 break;
             case MOPT_BIND_STATE:
-                Practice_DrawText(54, y, "BIND STATE:");
+                Practice_DrawText(54, y, "SAVE START:");
                 Practice_DrawTextColor(142, y,
                     gPracticeConfig.macroBindState ? "ON" : "OFF",
                     gPracticeConfig.macroBindState ? 60  : 100,
@@ -775,10 +812,17 @@ static void StateMenu_DrawMacro(void) {
                     gPracticeConfig.macroLoop ? 60  : 60);
                 break;
             case MOPT_FRAMES:
-                Practice_DrawText(54, y, "FRAMES:");
-                Practice_DrawNumber(130, y, Practice_Macro_GetHead());
-                Practice_DrawText(160, y, "-");
-                Practice_DrawNumber(170, y, Practice_Macro_GetLen());
+                /* Show length in frames and seconds (60 fps). */
+                len = Practice_Macro_GetLen();
+                secs = len / 60;
+                remFrames = len % 60;
+                Practice_DrawText(54, y, "LEN:");
+                Practice_DrawNumber(90, y, len);
+                Practice_DrawText(122, y, "F");
+                Practice_DrawNumber(134, y, secs);
+                Practice_DrawText(154, y, "S");
+                Practice_DrawNumber(166, y, remFrames);
+                Practice_DrawText(186, y, "F");
                 break;
             case MOPT_BACK:
                 Practice_DrawTextColor(54, y, "BACK", 150, 150, 150);

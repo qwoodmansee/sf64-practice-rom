@@ -335,6 +335,7 @@ void Practice_Save_MacroApply(void);
 bool Practice_Macro_HasData(void);
 s32  Practice_Macro_GetHead(void);
 s32  Practice_Macro_GetLen(void);
+s32  Practice_Macro_GetSnapLevel(void);
 
 #endif
 #endif

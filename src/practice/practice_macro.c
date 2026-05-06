@@ -108,7 +108,10 @@ void Practice_Macro_PrePlay(void) {
             sMacroBufFull = true;
         }
     } else if (sMacroState == MACRO_PLAYING) {
-        if (sMacroHead < sMacroLen) {
+        /* Only inject and advance when the game is actually going to process
+         * the frame. This makes macro playback compatible with frame-advance:
+         * the head stays put while frozen and advances one step per unfreeze. */
+        if (sMacroHead < sMacroLen && !Practice_FrameAdvance_IsFrozen()) {
             f = buf[sMacroHead];
             hold  = &gControllerHold[gMainController];
             press = &gControllerPress[gMainController];
@@ -125,7 +128,7 @@ void Practice_Macro_PrePlay(void) {
 
             sPrevButton = f.button;
             sMacroHead++;
-        } else {
+        } else if (sMacroHead >= sMacroLen) {
             if (gPracticeConfig.macroLoop) {
                 sMacroHead  = 0;
                 sPrevButton = 0;
@@ -145,10 +148,70 @@ void Practice_Macro_PrePlay(void) {
 }
 
 void Practice_Macro_Update(void) {
-    /* Reserved for future per-frame work. */
+    OSContPad* hold;
+    OSContPad* press;
+
+    if (gGameState != GSTATE_PLAY) {
+        return;
+    }
+    if (gPracticeMenuState != PMENU_CLOSED) {
+        return;
+    }
+
+    hold  = &gControllerHold[gMainController];
+    press = &gControllerPress[gMainController];
+
+    if (!(hold->button & L_TRIG)) {
+        return;
+    }
+
+    /* L + D-Up : arm/stop recording */
+    if (press->button & U_JPAD) {
+        if (Practice_Macro_IsArmed() || Practice_Macro_IsRecording()) {
+            Practice_Macro_StopRecord();
+        } else {
+            Practice_Macro_StartRecord();
+        }
+        return;
+    }
+
+    /* L + D-Right : start/stop playback */
+    if (press->button & R_JPAD) {
+        if (Practice_Macro_IsPlaying()) {
+            Practice_Macro_StopPlay();
+        } else {
+            Practice_Macro_StartPlay();
+        }
+        return;
+    }
+
+    /* L + D-Left : rewind to frame 0 */
+    if (press->button & L_JPAD) {
+        Practice_Macro_Rewind();
+        return;
+    }
+
+    /* L + D-Down : toggle loop */
+    if (press->button & D_JPAD) {
+        gPracticeConfig.macroLoop = !gPracticeConfig.macroLoop;
+        return;
+    }
+
+    /* L + Start : replay (rewind + play); swallow Start so game doesn't pause */
+    if (press->button & START_BUTTON) {
+        press->button &= ~(u16)START_BUTTON;
+        Practice_Macro_StartPlay();
+        return;
+    }
 }
 
 void Practice_Macro_Draw(void) {
+    s32 barFull;
+    s32 barW;
+    s32 recR;
+    s32 recG;
+    s32 recB;
+
     if (!Macro_HasPak()) {
         return;
     }
@@ -156,14 +219,47 @@ void Practice_Macro_Draw(void) {
         return;
     }
     if (sMacroState == MACRO_ARMED) {
+        /* Top-right chip */
         Practice_DrawTextColor(240, 8, "REC:", 255, 140, 0);
         Practice_DrawNumber(272, 8, 0);
+        /* Centered armed notice */
+        if (gPracticeConfig.macroBindState) {
+            Practice_DrawTextColor(50, 220, "READY - SAVE START ON", 255, 140, 0);
+        } else {
+            Practice_DrawTextColor(50, 220, "READY - PRESS ANY INPUT", 255, 140, 0);
+        }
     } else if (sMacroState == MACRO_RECORDING) {
-        Practice_DrawTextColor(240, 8, "REC:", 255, 60, 60);
+        /* Near-full warning: amber when >80% full */
+        if (sMacroHead > Practice_Macro_BufCapacity() * 4 / 5) {
+            recR = 255; recG = 140; recB = 0;
+        } else {
+            recR = 255; recG = 60; recB = 60;
+        }
+        Practice_DrawTextColor(240, 8, "REC:", (u8)recR, (u8)recG, (u8)recB);
         Practice_DrawNumber(272, 8, sMacroHead);
     } else if (sMacroState == MACRO_PLAYING) {
-        Practice_DrawTextColor(240, 8, "PLAY:", 60, 220, 255);
-        Practice_DrawNumber(276, 8, sMacroHead);
+        /* Show head-of-total in chip */
+        Practice_DrawTextColor(232, 8, "PLAY:", 60, 220, 255);
+        Practice_DrawNumber(264, 8, sMacroHead);
+        Practice_DrawTextColor(282, 8, "-", 60, 220, 255);
+        Practice_DrawNumber(288, 8, sMacroLen);
+
+        /* Progress bar: 40px wide, 3px tall, below chip at y=18 */
+        barFull = 40;
+        barW = (sMacroLen > 0) ? (sMacroHead * barFull / sMacroLen) : 0;
+        Practice_DrawBox(232, 18, barFull, 3, 40, 40, 40, 180);
+        if (barW > 0) {
+            Practice_DrawBox(232, 18, barW, 3, 60, 180, 255, 220);
+        }
+
+        /* Loop indicator */
+        if (gPracticeConfig.macroLoop) {
+            Practice_DrawTextColor(232, 23, "LOOP", 80, 255, 80);
+            /* Warn if looping without save start */
+            if (!gPracticeConfig.macroBindState) {
+                Practice_DrawTextColor(50, 220, "LOOP: NO STATE", 255, 140, 0);
+            }
+        }
     } else if (sMacroBufFull) {
         Practice_DrawTextColor(240, 8, "FULL", 255, 60, 60);
     }
@@ -238,6 +334,10 @@ s32 Practice_Macro_GetHead(void) {
 
 s32 Practice_Macro_GetLen(void) {
     return sMacroLen;
+}
+
+s32 Practice_Macro_GetSnapLevel(void) {
+    return sMacroSnapValid ? sMacroSnapLevel : -1;
 }
 
 #endif
