@@ -1,0 +1,19 @@
+src/overlays/ovl_i1/fox_co.c
+  s_a5426299151a42::t_dbb6dce8d49142 1715-1717,1720-1723
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.1",
+  "base_commit_sha": "073cadf6e74237d4abb7024b9716d36f66df8402",
+  "prompts": {},
+  "sessions": {
+    "s_a5426299151a42": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "609555c6-2dd9-4609-a892-a33d8c49d167",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "qwoodmansee <github@qwoodmansee.xyz>"
+    }
+  }
+}
