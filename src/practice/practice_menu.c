@@ -26,105 +26,100 @@ typedef struct RadialMenuDef {
     s32 (*getSlice)(s8 sx, s8 sy);
 } RadialMenuDef;
 
-// ── Root radial ───────────────────────────────────────────────────────────────
+// -- Root radial - 8-item octant layout
+// N=RESTART NE=DISPLAY E=SAVE SE=LOAD S=LEVELS SW=LOADOUT W=CHEATS NW=SD CARD
+// Each wedge is 45deg wide (tan 22.5deg ~ 5/12 gives clean integer boundary).
 
 typedef enum RootSlice {
-    RSLICE_RESTART,
-    RSLICE_SAVE,
-    RSLICE_LOAD,
-    RSLICE_LEVELS,
-    RSLICE_LOADOUT,
-    RSLICE_DISPLAY,
-    RSLICE_CAMERA,
-    RSLICE_CHEATS,
-    RSLICE_SD,
+    RSLICE_RESTART,   // N
+    RSLICE_DISPLAY,   // NE
+    RSLICE_SAVE,      // E
+    RSLICE_LOAD,      // SE
+    RSLICE_LEVELS,    // S
+    RSLICE_LOADOUT,   // SW
+    RSLICE_CHEATS,    // W
+    RSLICE_SD,        // NW
     RSLICE_MAX,
 } RootSlice;
 
 static const RadialEntry sRootEntries[RSLICE_MAX] = {
-    { "RESTART", "RESTART LEVEL",  132, 52,  7,  180, 60,  60  },
-    { "SAVE",    "SAVE POSITION",  214, 74,  4,  60,  140, 180 },
-    { "LOAD",    "LOAD POSITION",  214, 152, 4,  60,  180, 100 },
-    { "LEVELS",  "LEVEL SELECT",   136, 178, 6,  180, 140, 60  },
-    { "LOADOUT", "LOADOUT...",      68, 135, 10, 140, 60,  180 },
-    { "DISPLAY", "DISPLAY...",      68, 63,  10, 60,  160, 160 },
-    { "CAMERA",  "FREE CAMERA",    222, 108, 6,  60,  200, 200 },
-    { "CHEATS",  "CHEATS...",       68, 111, 10, 200, 80,  80  },
-    { "SD",      "SD CARD...",      68, 87,  7,  80,  200, 120 },
+    { "RESTART", "RESTART LEVEL",  134, 48,  7,  180, 60,  60  },  // N
+    { "DISPLAY", "DISPLAY...",     204, 58,  7,  60,  160, 160 },  // NE
+    { "SAVE",    "SAVE POSITION",  225, 108, 4,  60,  140, 180 },  // E
+    { "LOAD",    "LOAD POSITION",  225, 154, 4,  60,  180, 100 },  // SE
+    { "LEVELS",  "LEVEL SELECT",   140, 178, 6,  180, 140, 60  },  // S
+    { "LOADOUT", "LOADOUT...",      68, 154, 7,  140, 60,  180 },  // SW
+    { "CHEATS",  "CHEATS...",       64, 108, 6,  200, 80,  80  },  // W
+    { "SD CARD", "SD CARD...",      68, 58,  7,  80,  200, 120 },  // NW
 };
 
+// tan(22.5deg) ~ 5/12.  ax*12 < ay*5 -> near vertical.  ay*12 < ax*5 -> near horizontal.
 static s32 Root_GetSlice(s8 stickX, s8 stickY) {
     s32 x = stickX;
     s32 y = stickY;
-    s32 ax = (x < 0) ? -x : x;
-    s32 ay = (y < 0) ? -y : y;
+    s32 ax = x < 0 ? -x : x;
+    s32 ay = y < 0 ? -y : y;
 
-    if ((ax < RADIAL_DEAD_ZONE) && (ay < RADIAL_DEAD_ZONE)) {
+    if (ax < RADIAL_DEAD_ZONE && ay < RADIAL_DEAD_ZONE) {
         return SLICE_NONE;
     }
-    if ((ay * 100) > (ax * 173)) {
+    if (ax * 12 < ay * 5) {           // near vertical
         return y > 0 ? RSLICE_RESTART : RSLICE_LEVELS;
     }
+    if (ay * 12 < ax * 5) {           // near horizontal
+        return x > 0 ? RSLICE_SAVE : RSLICE_CHEATS;
+    }
+    // diagonal quadrants
     if (x > 0) {
-        if ((ay * 100) < (ax * 58)) {
-            return RSLICE_CAMERA;
-        }
-        return y > 0 ? RSLICE_SAVE : RSLICE_LOAD;
+        return y > 0 ? RSLICE_DISPLAY : RSLICE_LOAD;
     }
-    /* Left side: 4 zones split by y thresholds */
-    if (y > 35) {
-        return RSLICE_DISPLAY;
-    }
-    if (y > 5) {
-        return RSLICE_SD;
-    }
-    if (y > -30) {
-        return RSLICE_CHEATS;
-    }
-    return RSLICE_LOADOUT;
+    return y > 0 ? RSLICE_SD : RSLICE_LOADOUT;
 }
 
-// ── Display sub-radial ────────────────────────────────────────────────────────
+// -- Display sub-radial - 6 items
+// Left half split at y=0: upper-left=SKIP CUTS, lower-left=CAMERA.
+// Right half split at y=-10: upper=VISUALS, lower=CS METER.
+// Vertical: up=STATS, down=INPUTS.
+// CAMERA is shown dimmed and unselectable when the game is not frozen.
 
 typedef enum DisplaySlice {
-    DSLICE_SKIP_CUTS,   // left
-    DSLICE_INPUTS,      // down
-    DSLICE_STATS,       // up
-    DSLICE_VISUALS,     // right upper
-    DSLICE_CHARGE_METER,
+    DSLICE_SKIP_CUTS,    // W upper
+    DSLICE_CAMERA,       // W lower  (frozen only)
+    DSLICE_INPUTS,       // S
+    DSLICE_STATS,        // N
+    DSLICE_VISUALS,      // E upper
+    DSLICE_CHARGE_METER, // E lower
     DSLICE_MAX,
 } DisplaySlice;
 
 static const RadialEntry sDisplayEntries[DSLICE_MAX] = {
-    { "SKIP CUTS", "SKIP CUTSCENES",   50, 108, 9, 60, 160, 160 },
-    { "INPUTS",    "INPUT DISPLAY",   136, 175, 6, 60, 160, 160 },
-    { "STATS",     "STATS OVERLAY...", 140, 55, 5, 60, 160, 160 },
-    { "VISUALS",   "VISUALIZERS...",   212, 88, 7, 60, 160, 160 },
-    { "CS METER",  "CHARGE SHOT METER", 212, 168, 8, 0, 220, 100 },
+    { "SKIP CUTS", "SKIP CUTSCENES",    50, 95,  9,  60, 160, 160 },
+    { "CAMERA",    "FREE CAMERA",       50, 133, 6,  60, 200, 200 },
+    { "INPUTS",    "INPUT DISPLAY",    136, 175, 6,  60, 160, 160 },
+    { "STATS",     "STATS OVERLAY...", 138, 52,  5,  60, 160, 160 },
+    { "VISUALS",   "VISUALIZERS...",   212, 82,  7,  60, 160, 160 },
+    { "CS METER",  "CHARGE SHOT METER", 202, 148, 8, 0,  220, 100 },
 };
 
 static s32 Display_GetSlice(s8 stickX, s8 stickY) {
     s32 x = stickX;
     s32 y = stickY;
-    s32 ax = (x < 0) ? -x : x;
-    s32 ay = (y < 0) ? -y : y;
+    s32 ax = x < 0 ? -x : x;
+    s32 ay = y < 0 ? -y : y;
 
-    if ((ax < RADIAL_DEAD_ZONE) && (ay < RADIAL_DEAD_ZONE)) {
+    if (ax < RADIAL_DEAD_ZONE && ay < RADIAL_DEAD_ZONE) {
         return SLICE_NONE;
     }
-    if (ax > ay) {
+    if (ax > ay) {                         // horizontal dominant
         if (x > 0) {
-            if (y < -10) {
-                return DSLICE_CHARGE_METER;
-            }
-            return DSLICE_VISUALS;
+            return y < -10 ? DSLICE_CHARGE_METER : DSLICE_VISUALS;
         }
-        return DSLICE_SKIP_CUTS;
+        return y < 0 ? DSLICE_CAMERA : DSLICE_SKIP_CUTS;
     }
     return y > 0 ? DSLICE_STATS : DSLICE_INPUTS;
 }
 
-// ── Cheats sub-radial ─────────────────────────────────────────────────────────
+// -- Cheats sub-radial
 
 typedef enum CheatSlice {
     CSLICE_AUTO_SHOT,
@@ -135,37 +130,33 @@ typedef enum CheatSlice {
     CSLICE_MAX,
 } CheatSlice;
 
-/* Stick sectors match Display radial; panel hues identify each cheat. */
 static const RadialEntry sCheatsEntries[CSLICE_MAX] = {
-    { "AUTO CHARGE SHOT", "AUTO CHARGE SHOT", 89, 182, 17, 30, 200, 90 },
-    { "INF HP", "INF HEALTH", 140, 55, 6, 240, 210, 50 },
-    { "INF BOMB", "INF BOMBS", 50, 108, 8, 210, 55, 55 },
-    { "INF LIFE", "INF LIVES", 212, 88, 8, 140, 140, 150 },
-    { "INF BST", "INF BOOST", 238, 168, 7, 110, 210, 250 },
+    { "AUTO CS",  "AUTO CHARGE SHOT",  89, 182, 7,  30,  200, 90  },
+    { "INF HP",   "INF HEALTH",       140, 55,  6,  240, 210, 50  },
+    { "INF BOMB", "INF BOMBS",         50, 108, 8,  210, 55,  55  },
+    { "INF LIFE", "INF LIVES",        212, 88,  8,  140, 140, 150 },
+    { "INF BST",  "INF BOOST",        238, 168, 7,  110, 210, 250 },
 };
 
 static s32 Cheats_GetSlice(s8 stickX, s8 stickY) {
     s32 x = stickX;
     s32 y = stickY;
-    s32 ax = (x < 0) ? -x : x;
-    s32 ay = (y < 0) ? -y : y;
+    s32 ax = x < 0 ? -x : x;
+    s32 ay = y < 0 ? -y : y;
 
-    if ((ax < RADIAL_DEAD_ZONE) && (ay < RADIAL_DEAD_ZONE)) {
+    if (ax < RADIAL_DEAD_ZONE && ay < RADIAL_DEAD_ZONE) {
         return SLICE_NONE;
     }
     if (ax > ay) {
         if (x > 0) {
-            if (y < -10) {
-                return CSLICE_INF_BOOST;
-            }
-            return CSLICE_INF_LIVES;
+            return y < -10 ? CSLICE_INF_BOOST : CSLICE_INF_LIVES;
         }
         return CSLICE_INF_BOMBS;
     }
     return y > 0 ? CSLICE_INF_HP : CSLICE_AUTO_SHOT;
 }
 
-// ── SD sub-radial ─────────────────────────────────────────────────────────────
+// -- SD sub-radial
 
 typedef enum SdSlice {
     SSLICE_SAVE,
@@ -195,7 +186,7 @@ typedef enum PracticeRadialSub1 {
 
 static PracticeRadialSub1 sRadialSub1 = PRADIALSUB_DISPLAY;
 
-// ── Menu stack ────────────────────────────────────────────────────────────────
+// -- Menu stack
 
 static s32 sMenuDepth = 0;
 static s32 sHovered[RADIAL_STACK_MAX];
@@ -281,8 +272,8 @@ void Practice_Menu_Update(void) {
         sStartHoldTimer = 0;
     }
 
-    /* Z = SD save/load shortcuts when radial is open at depth 0 */
-    /* Must come before B_BUTTON check so Z+B is caught here, not by the close-menu path */
+    /* Z = SD save/load shortcuts when radial is open at depth 0.
+     * Must come before B_BUTTON check so Z+B is caught here, not by the close-menu path. */
     if (sMenuDepth == 0 && (press->button & Z_TRIG)) {
         if (press->button & B_BUTTON) {
             Practice_Sd_StartLoad();
@@ -346,11 +337,6 @@ void Practice_Menu_Update(void) {
                     sMenuDepth = 1;
                     sHovered[1] = SLICE_NONE;
                     break;
-                case RSLICE_CAMERA:
-                    if (gPracticeMenuState == PMENU_OPEN_FROZEN) {
-                        Practice_FreeCam_Enter();
-                    }
-                    break;
                 default:
                     break;
             }
@@ -387,9 +373,15 @@ void Practice_Menu_Update(void) {
                         break;
                 }
             } else {
+                /* Display sub-radial */
                 switch (sHovered[1]) {
                     case DSLICE_SKIP_CUTS:
                         gPracticeConfig.skipCutscenes ^= true;
+                        break;
+                    case DSLICE_CAMERA:
+                        if (gPracticeMenuState == PMENU_OPEN_FROZEN) {
+                            Practice_FreeCam_Enter();
+                        }
                         break;
                     case DSLICE_INPUTS:
                         gPracticeConfig.showInputDisplay ^= true;
@@ -420,36 +412,40 @@ static void RadialMenu_DrawLayer(const RadialMenuDef* def, s32 hoveredSlice, boo
 
     for (i = 0; i < def->count; i++) {
         const RadialEntry* e = &def->entries[i];
+        /* CAMERA is only reachable when frozen; grey it out otherwise. */
+        bool entryUnavail = (def == &sMenuDefs[1] && i == DSLICE_CAMERA &&
+                             gPracticeMenuState != PMENU_OPEN_FROZEN);
         panelW = e->labelLen * 8 + 6;
 
         pr = e->panelR;
         pg = e->panelG;
         pb = e->panelB;
 
-        if (!dimmed && def == &sMenuDefs[1]) {
-            if (i == DSLICE_SKIP_CUTS && gPracticeConfig.skipCutscenes) {
-                pr = 0; pg = 180; pb = 80;
-            } else if (i == DSLICE_INPUTS && gPracticeConfig.showInputDisplay) {
-                pr = 0; pg = 180; pb = 80;
-            } else if (i == DSLICE_CHARGE_METER && gPracticeConfig.showChargeShotMeter) {
-                pr = 0; pg = 180; pb = 80;
-            }
-        } else if (!dimmed && def == &sMenuDefs[2]) {
-            /* ON state: brighter tint in the same hue family. */
-            if (i == CSLICE_AUTO_SHOT && gPracticeConfig.autoFireChargeShot) {
-                pr = 80; pg = 255; pb = 130;
-            } else if (i == CSLICE_INF_HP && gPracticeConfig.infHealth) {
-                pr = 255; pg = 250; pb = 120;
-            } else if (i == CSLICE_INF_BOMBS && gPracticeConfig.infBombs) {
-                pr = 255; pg = 90; pb = 90;
-            } else if (i == CSLICE_INF_LIVES && gPracticeConfig.infLives) {
-                pr = 210; pg = 210; pb = 225;
-            } else if (i == CSLICE_INF_BOOST && gPracticeConfig.infBoost) {
-                pr = 160; pg = 235; pb = 255;
+        if (!dimmed && !entryUnavail) {
+            if (def == &sMenuDefs[1]) {
+                if (i == DSLICE_SKIP_CUTS && gPracticeConfig.skipCutscenes) {
+                    pr = 0; pg = 180; pb = 80;
+                } else if (i == DSLICE_INPUTS && gPracticeConfig.showInputDisplay) {
+                    pr = 0; pg = 180; pb = 80;
+                } else if (i == DSLICE_CHARGE_METER && gPracticeConfig.showChargeShotMeter) {
+                    pr = 0; pg = 180; pb = 80;
+                }
+            } else if (def == &sMenuDefs[2]) {
+                if (i == CSLICE_AUTO_SHOT && gPracticeConfig.autoFireChargeShot) {
+                    pr = 80; pg = 255; pb = 130;
+                } else if (i == CSLICE_INF_HP && gPracticeConfig.infHealth) {
+                    pr = 255; pg = 250; pb = 120;
+                } else if (i == CSLICE_INF_BOMBS && gPracticeConfig.infBombs) {
+                    pr = 255; pg = 90; pb = 90;
+                } else if (i == CSLICE_INF_LIVES && gPracticeConfig.infLives) {
+                    pr = 210; pg = 210; pb = 225;
+                } else if (i == CSLICE_INF_BOOST && gPracticeConfig.infBoost) {
+                    pr = 160; pg = 235; pb = 255;
+                }
             }
         }
 
-        if (dimmed) {
+        if (dimmed || entryUnavail) {
             panelAlpha = 20;
         } else if (i == hoveredSlice) {
             panelAlpha = 160;
@@ -464,7 +460,10 @@ static void RadialMenu_DrawLayer(const RadialMenuDef* def, s32 hoveredSlice, boo
 
     for (i = 0; i < def->count; i++) {
         const RadialEntry* e = &def->entries[i];
-        if (dimmed) {
+        bool entryUnavail = (def == &sMenuDefs[1] && i == DSLICE_CAMERA &&
+                             gPracticeMenuState != PMENU_OPEN_FROZEN);
+
+        if (dimmed || entryUnavail) {
             Practice_DrawTextColor(e->x, e->y, e->label, 55, 55, 55);
         } else if (i == hoveredSlice) {
             Practice_DrawTextOutline(e->x, e->y, e->label, 255, 255, 0);
@@ -480,15 +479,23 @@ void Practice_Menu_Draw(void) {
     const RadialMenuDef* def = Menu_ActiveDef();
     s32 hoveredSlice = sHovered[sMenuDepth];
     bool hasSelection = (hoveredSlice != SLICE_NONE);
+    bool isCameraUnavail;
 
     Practice_DrawBox(40, 35, 240, 175, 0, 0, 0, 210);
 
     RadialMenu_DrawLayer(def, hoveredSlice, false);
 
     if (hasSelection) {
-        if (sMenuDepth == 1 && sRadialSub1 == PRADIALSUB_DISPLAY &&
-            (hoveredSlice == DSLICE_SKIP_CUTS || hoveredSlice == DSLICE_INPUTS ||
-             hoveredSlice == DSLICE_CHARGE_METER)) {
+        isCameraUnavail = (sMenuDepth == 1 && sRadialSub1 == PRADIALSUB_DISPLAY &&
+                           hoveredSlice == DSLICE_CAMERA &&
+                           gPracticeMenuState != PMENU_OPEN_FROZEN);
+
+        if (isCameraUnavail) {
+            Practice_DrawTextColor(RADIAL_CENTER_X - 44, RADIAL_CENTER_Y - 5,
+                "FREEZE GAME FIRST", 160, 160, 160);
+        } else if (sMenuDepth == 1 && sRadialSub1 == PRADIALSUB_DISPLAY &&
+                   (hoveredSlice == DSLICE_SKIP_CUTS || hoveredSlice == DSLICE_INPUTS ||
+                    hoveredSlice == DSLICE_CHARGE_METER)) {
             bool state;
             const char* name;
 
@@ -571,8 +578,6 @@ void Practice_Menu_Draw(void) {
                 s32             y          = baseY + 14 + row * 11;
 
                 if (isActive) {
-                    /* Filled chevron to the left of the row -- '>' is not in
-                     * the small-text glyph set, so we render a box. */
                     Practice_DrawBox(leftX, y + 1, 4, 6, 255, 220, 80, 220);
                 }
                 Practice_DrawNumber(leftX + 10, y, row);
@@ -596,9 +601,9 @@ void Practice_Menu_Draw(void) {
     }
 
     if (sMenuDepth > 0) {
-        Practice_DrawTextColor(56, 198, "STICK:SELECT  A:GO  B:BACK", 150, 150, 150);
+        Practice_DrawTextColor(56, 198, "STICK:SELECT A:GO B:BACK", 150, 150, 150);
     } else {
-        Practice_DrawTextColor(40, 198, "L:R B:CLOSE Z:SD SAVE ZB:SD LOAD", 150, 150, 150);
+        Practice_DrawTextColor(40, 198, "L-R:SLOT B:CLOSE Z:SAVE ZB:LOAD", 150, 150, 150);
     }
 
     if (Practice_StateMenuIsOpen()) {
