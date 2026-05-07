@@ -1,0 +1,38 @@
+tests/symbols.lua
+  s_0149af9b0908d4::t_0a47db7429386a 106
+tools/patch_linker_script.py
+  s_0149af9b0908d4::t_1d5c72768580cc 210-215,250-253
+  s_0149af9b0908d4::t_32e2e500127c1c 248
+  s_0149af9b0908d4::t_630028d7fcf7ba 445-450,454-455
+src/practice/practice_state.c
+  s_0149af9b0908d4::t_e2ee6afc0dbc7d 454-464
+src/engine/fox_game.c
+  s_0149af9b0908d4::t_057a75cca76508 539-544,546-552
+tools/practice_invariants.py
+  s_0149af9b0908d4::t_d8092f2afcc06c 1614-1615,1620,1628
+  s_0149af9b0908d4::t_846aaabcf4efe7 1621-1627,1629-1631
+  s_0149af9b0908d4::t_8acf9805690432 1651-1663,1674-1686
+src/practice/practice_macro.c
+  s_0149af9b0908d4::t_80c70ddc40105e 123-127
+  s_0149af9b0908d4::t_ced59a6ee6ca02 167-172
+  s_0149af9b0908d4::t_b99d6f97949abb 66-74
+tests/test_macro_boot.lua
+  s_0149af9b0908d4::t_c3b9c4bfede9bc 62
+  s_0149af9b0908d4::t_1b82df5a313dc0 16-19,36-37,40
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.1",
+  "base_commit_sha": "e15ba97fcb87c5dc5f77b425277c825d3e9f1e84",
+  "prompts": {},
+  "sessions": {
+    "s_0149af9b0908d4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "941deb4f-ce43-4102-9332-7af99f434ef6",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "qwoodmansee <github@qwoodmansee.xyz>"
+    }
+  }
+}
