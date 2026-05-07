@@ -68,9 +68,6 @@ void Practice_Init(void) {
         osSyncPrintf("[iodev] cart=%d sd_init=%d\n", (int)cart, (int)sd);
     }
 
-    osSyncPrintf("[init] Practice_SlotTest_Run enter\n");
-    Practice_SlotTest_Run();
-    osSyncPrintf("[init] Practice_SlotTest_Run exit\n");
     osSyncPrintf("[init] Practice_Save_Init enter\n");
     Practice_Save_Init();
     osSyncPrintf("[init] Practice_Save_Init exit\n");
@@ -80,9 +77,6 @@ void Practice_Init(void) {
     osSyncPrintf("[init] practice_overlay_prime_build_ids enter\n");
     practice_overlay_prime_build_ids();
     osSyncPrintf("[init] practice_overlay_prime_build_ids exit\n");
-    osSyncPrintf("[init] Practice_HeapAudit_Boot enter\n");
-    Practice_HeapAudit_Boot();
-    osSyncPrintf("[init] Practice_HeapAudit_Boot exit\n");
 
 #ifdef IODEV_DIAG_FATFS
     /* Phase 2 hardware verification probe. Build with IODEV_DIAG_FATFS=1
@@ -106,7 +100,6 @@ void Practice_Update(void) {
         Practice_Sd_Update();
         return;
     }
-    Practice_HeapAudit_PerFrame();
     Practice_Save_Tick();
 
     switch (gPracticeScreen) {

@@ -668,41 +668,6 @@ def check_max_state_size_budget():
 SYS_MEMORY = os.path.join("src", "sys", "sys_memory.c")
 
 
-def check_phase4_engine_hooks():
-    """slot-backed save initializes after Wave 3 slot regression test."""
-    pm = PRACTICE_MAIN_INIT
-    if not os.path.isfile(pm):
-        return
-
-    txt = read(pm)
-    seq = txt.find("Practice_SlotTest_Run();")
-    if seq < 0:
-        error(f"{pm}: Practice_SlotTest_Run missing (check_phase4_engine_hooks)")
-        return
-
-    ai = txt.find("Practice_Save_Init();")
-    if ai < seq:
-        error(
-            "Practice_Save_Init() must appear after Practice_SlotTest_Run() "
-            f"in {pm} (check_phase4_engine_hooks)"
-        )
-
-    hb = txt.find("Practice_HeapAudit_Boot();")
-    if hb < 0:
-        error(f"{pm}: Practice_HeapAudit_Boot() missing (check_phase4_engine_hooks)")
-    elif hb < ai:
-        error(
-            "Practice_HeapAudit_Boot() must appear after Practice_Save_Init() "
-            f"in {pm} (check_phase4_engine_hooks)"
-        )
-
-    if "Practice_HeapAudit_PerFrame();" not in txt:
-        error(
-            f"{pm}: Practice_HeapAudit_PerFrame() must be called from Practice_Update "
-            "(check_phase4_engine_hooks)"
-        )
-
-
 def check_radial_menu_save_allowed():
     """Radial-menu save runs while PMENU_OPEN_FROZEN, so CanSaveHere must not reject menus."""
     src = read(PRACTICE_SAVE_C)
@@ -1713,7 +1678,6 @@ def main():
     check_serializer_parity()
     check_state_version_defined_once()
     check_max_state_size_budget()
-    check_phase4_engine_hooks()
     check_radial_menu_save_allowed()
     check_sys_memory_practice_bump_getter()
     check_snapshot_gplayers_use_cam_count()

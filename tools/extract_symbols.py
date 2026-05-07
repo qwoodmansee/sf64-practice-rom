@@ -42,11 +42,6 @@ SYMBOLS = [
     "gSavedPathProgress",
     "gPracticeCheckpointProgress",
     "gIodevActive",
-    "gPracticeSlotTestStatus",
-    "gPracticeSlotTestFirstLoadedValue",
-    "gPracticeSlotTestSecondLoadedValue",
-    "gPracticeSlotTestLoadCalls",
-    "gPracticeSlotTestSlotCount",
     # Phase 4 — slot-manager-backed save state diagnostics. Defined in
     # the Wave 1 skeleton block in practice_save.c (Wave 2.2 takes ownership).
     "gPracticeActiveSlot",

@@ -27,7 +27,6 @@ PRACTICE_OBJS = [
     "practice_menu",
     "practice_save",
     "practice_save_slotpool",  # Pak-only BSS; must follow practice_save for patch anchors
-    "practice_heap_audit",  # Phase 4 Wave 2.3: IS-Viewer heap audit
     "practice_overlay",     # Phase 4: LevelId -> ovl_iN region map (Wave 1: stubs)
     "practice_input_display",
     "practice_hud",
@@ -38,7 +37,6 @@ PRACTICE_OBJS = [
     "practice_freecam",
     "practice_logo_tex",
     "practice_owl_tex",
-    "practice_slot_test",  # Phase 3: in-ROM slot_manager fake-state smoke test
     "practice_test_fatfs",  # Phase 2: gated by IODEV_DIAG_FATFS, otherwise empty .o
     "practice_sd",          # Phase 6: OSK + file browser rendering and glue
     "practice_frame_advance",  # Frame advance / pause feature
