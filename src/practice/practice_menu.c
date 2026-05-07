@@ -76,29 +76,31 @@ static s32 Root_GetSlice(s8 stickX, s8 stickY) {
     return y > 0 ? RSLICE_SD : RSLICE_LOADOUT;
 }
 
-// -- Display sub-radial - 6 items
-// Left half split at y=0: upper-left=SKIP CUTS, lower-left=CAMERA.
+// -- Display sub-radial - 7 items
+// Left third split at y=10/-10: upper=MACRO, center=SKIP CUTS, lower=CAMERA.
 // Right half split at y=-10: upper=VISUALS, lower=CS METER.
 // Vertical: up=STATS, down=INPUTS.
 // CAMERA is shown dimmed and unselectable when the game is not frozen.
 
 typedef enum DisplaySlice {
-    DSLICE_SKIP_CUTS,    // W upper
-    DSLICE_CAMERA,       // W lower  (frozen only)
+    DSLICE_SKIP_CUTS,    // W center
+    DSLICE_CAMERA,       // W lower (frozen only)
     DSLICE_INPUTS,       // S
     DSLICE_STATS,        // N
     DSLICE_VISUALS,      // E upper
     DSLICE_CHARGE_METER, // E lower
+    DSLICE_MACRO,        // W upper
     DSLICE_MAX,
 } DisplaySlice;
 
 static const RadialEntry sDisplayEntries[DSLICE_MAX] = {
-    { "SKIP CUTS", "SKIP CUTSCENES",    50, 95,  9,  60, 160, 160 },
+    { "SKIP CUTS", "SKIP CUTSCENES",    50,  95, 9,  60, 160, 160 },
     { "CAMERA",    "FREE CAMERA",       50, 133, 6,  60, 200, 200 },
     { "INPUTS",    "INPUT DISPLAY",    136, 175, 6,  60, 160, 160 },
-    { "STATS",     "STATS OVERLAY...", 138, 52,  5,  60, 160, 160 },
-    { "VISUALS",   "VISUALIZERS...",   212, 82,  7,  60, 160, 160 },
-    { "CS METER",  "CHARGE SHOT METER", 202, 148, 8, 0,  220, 100 },
+    { "STATS",     "STATS OVERLAY...", 138,  52, 5,  60, 160, 160 },
+    { "VISUALS",   "VISUALIZERS...",   212,  82, 7,  60, 160, 160 },
+    { "CS METER",  "CHARGE SHOT METER", 202, 148, 8,  0, 220, 100 },
+    { "MACRO",     "MACRO...",          28,  62, 5,  80,  80, 200 },
 };
 
 static s32 Display_GetSlice(s8 stickX, s8 stickY) {
@@ -114,7 +116,13 @@ static s32 Display_GetSlice(s8 stickX, s8 stickY) {
         if (x > 0) {
             return y < -10 ? DSLICE_CHARGE_METER : DSLICE_VISUALS;
         }
-        return y < 0 ? DSLICE_CAMERA : DSLICE_SKIP_CUTS;
+        if (y > 10) {
+            return DSLICE_MACRO;
+        }
+        if (y < -10) {
+            return DSLICE_CAMERA;
+        }
+        return DSLICE_SKIP_CUTS;
     }
     return y > 0 ? DSLICE_STATS : DSLICE_INPUTS;
 }
@@ -394,6 +402,9 @@ void Practice_Menu_Update(void) {
                         break;
                     case DSLICE_CHARGE_METER:
                         gPracticeConfig.showChargeShotMeter ^= true;
+                        break;
+                    case DSLICE_MACRO:
+                        Practice_StateMenu_Open(PSUBMENU_MACRO);
                         break;
                     default:
                         break;

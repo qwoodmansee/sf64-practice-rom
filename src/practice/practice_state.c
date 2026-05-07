@@ -25,9 +25,22 @@ typedef enum DisplayOption {
     DOPT_MINIMAP,
     DOPT_STATS_MENU,
     DOPT_VIS_MENU,
+    DOPT_MACRO_MENU,
     DOPT_BACK,
     DOPT_MAX,
 } DisplayOption;
+
+typedef enum MacroOption {
+    MOPT_RECORD,
+    MOPT_PLAY,
+    MOPT_REWIND,
+    MOPT_TRIM,
+    MOPT_FRAMES,
+    MOPT_BIND_STATE,
+    MOPT_LOOP,
+    MOPT_BACK,
+    MOPT_MAX,
+} MacroOption;
 
 typedef enum StatsOption {
     SOPT_HUD_OVERLAY,
@@ -58,6 +71,7 @@ typedef enum VisualizerOption {
 static s32 sSelectedOption = 0;
 static bool sStateMenuOpen = false;
 static PracticeSubMenu sActiveSubMenu;
+static bool sConfirmOverwrite = false;
 
 static const char* sLaserNames[] = { "SINGLE", "TWIN", "HYPER" };
 static const char* sWingNames[] = { "NONE", "BROKEN", "INTACT" };
@@ -91,6 +105,7 @@ static s32 StateMenu_GetOptionCount(void) {
         case PSUBMENU_STATS:        return SOPT_MAX;
         case PSUBMENU_VISUALIZERS:  return VOPT_MAX;
         case PSUBMENU_PREV_PLANETS: return PREV_PLANETS_COUNT + 1;
+        case PSUBMENU_MACRO:        return MOPT_MAX;
         default:                    return 0;
     }
 }
@@ -327,6 +342,53 @@ static void StateMenu_UpdateVisualizers(u16 buttons) {
     }
 }
 
+static void StateMenu_UpdateMacro(u16 buttons) {
+    /* Confirm-overwrite dialog: A confirms, B cancels (B handled before this). */
+    if (sConfirmOverwrite) {
+        if (buttons & A_BUTTON) {
+            Practice_Macro_StartRecord();
+            sConfirmOverwrite = false;
+        }
+        return;
+    }
+
+    if ((buttons & A_BUTTON) || (buttons & R_JPAD) || (buttons & L_JPAD)) {
+        switch (sSelectedOption) {
+            case MOPT_RECORD:
+                if (Practice_Macro_IsArmed() || Practice_Macro_IsRecording()) {
+                    Practice_Macro_StopRecord();
+                } else if (Practice_Macro_HasData() &&
+                           Practice_Macro_GetHead() < Practice_Macro_GetLen()) {
+                    /* Head is before end: would clobber existing data. */
+                    sConfirmOverwrite = true;
+                } else {
+                    /* Fresh (no data) or at trim point (head==len): start/append. */
+                    Practice_Macro_StartRecord();
+                }
+                break;
+            case MOPT_PLAY:
+                if (Practice_Macro_IsPlaying()) {
+                    Practice_Macro_StopPlay();
+                } else {
+                    Practice_Macro_StartPlay();
+                }
+                break;
+            case MOPT_REWIND:
+                Practice_Macro_Rewind();
+                break;
+            case MOPT_TRIM:
+                Practice_Macro_Trim();
+                break;
+            case MOPT_BIND_STATE:
+                gPracticeConfig.macroBindState = !gPracticeConfig.macroBindState;
+                break;
+            case MOPT_LOOP:
+                gPracticeConfig.macroLoop = !gPracticeConfig.macroLoop;
+                break;
+        }
+    }
+}
+
 static void StateMenu_UpdatePrevPlanets(u16 buttons) {
     if ((buttons & A_BUTTON) || (buttons & R_JPAD) || (buttons & L_JPAD)) {
         if (sSelectedOption < PREV_PLANETS_COUNT) {
@@ -341,6 +403,12 @@ void Practice_StateMenu_Update(void) {
     s32 optCount = StateMenu_GetOptionCount();
 
     if (press->button & B_BUTTON) {
+        /* If confirm-overwrite dialog is showing, B cancels it instead of
+         * closing the whole menu. */
+        if (sConfirmOverwrite) {
+            sConfirmOverwrite = false;
+            return;
+        }
         Practice_StateMenu_Close();
         return;
     }
@@ -377,6 +445,24 @@ void Practice_StateMenu_Update(void) {
             sSelectedOption = 0;
             return;
         }
+        if (sActiveSubMenu == PSUBMENU_DISPLAY && sSelectedOption == DOPT_MACRO_MENU) {
+            sActiveSubMenu = PSUBMENU_MACRO;
+            sSelectedOption = 0;
+            return;
+        }
+        if (sActiveSubMenu == PSUBMENU_MACRO && sSelectedOption == MOPT_BACK) {
+            /* While the overwrite-confirm dialog is up, the cursor can have
+             * moved to BACK via D-pad navigation. A on BACK must NOT close
+             * the menu -- StateMenu_UpdateMacro owns the A press as the
+             * confirmation. Defer to the submenu dispatch below. */
+            if (sConfirmOverwrite) {
+                /* Fall through to switch (sActiveSubMenu) so the macro
+                 * submenu can consume the A as a confirmation. */
+            } else {
+                Practice_StateMenu_Close();
+                return;
+            }
+        }
         if (sActiveSubMenu == PSUBMENU_STATS && sSelectedOption == SOPT_BACK) {
             Practice_StateMenu_Close();
             return;
@@ -411,6 +497,9 @@ void Practice_StateMenu_Update(void) {
             break;
         case PSUBMENU_PREV_PLANETS:
             StateMenu_UpdatePrevPlanets(press->button);
+            break;
+        case PSUBMENU_MACRO:
+            StateMenu_UpdateMacro(press->button);
             break;
     }
 }
@@ -517,6 +606,9 @@ static void StateMenu_DrawDisplay(void) {
                 break;
             case DOPT_VIS_MENU:
                 Practice_DrawTextColor(54, y, "VISUALIZERS...", 200, 200, 255);
+                break;
+            case DOPT_MACRO_MENU:
+                Practice_DrawTextColor(54, y, "MACRO...", 200, 200, 255);
                 break;
             case DOPT_BACK:
                 Practice_DrawTextColor(54, y, "BACK", 150, 150, 150);
@@ -665,6 +757,96 @@ static void StateMenu_DrawPrevPlanets(void) {
     }
 }
 
+static void StateMenu_DrawMacro(void) {
+    s32 y;
+    s32 i;
+    s32 len;
+    s32 secs;
+    s32 remFrames;
+
+    /* Confirm-overwrite dialog replaces the normal menu rows. */
+    if (sConfirmOverwrite) {
+        Practice_DrawTextColor(54, 70, "OVERWRITE MACRO.", 255, 200, 60);
+        Practice_DrawTextColor(54, 90, "A - YES", 100, 255, 100);
+        Practice_DrawTextColor(54, 104, "B - NO",  255, 100, 100);
+        return;
+    }
+
+    for (i = 0; i < MOPT_MAX; i++) {
+        y = 60 + (i * 14);
+
+        if (i == sSelectedOption) {
+            Practice_DrawBox(42, y - 1, 230, 12, 255, 255, 255, 60);
+        }
+
+        switch (i) {
+            case MOPT_RECORD:
+                Practice_DrawText(54, y, "RECORD:");
+                if (Practice_Macro_IsArmed()) {
+                    Practice_DrawTextColor(130, y, "ARMED", 255, 140, 0);
+                } else if (Practice_Macro_IsRecording()) {
+                    Practice_DrawTextColor(130, y, "STOP", 255, 60, 60);
+                } else {
+                    Practice_DrawTextColor(130, y, "START", 100, 220, 100);
+                }
+                break;
+            case MOPT_PLAY:
+                Practice_DrawText(54, y, "PLAY:");
+                if (Practice_Macro_IsPlaying()) {
+                    Practice_DrawTextColor(130, y, "STOP", 255, 100, 100);
+                } else if (Practice_Macro_HasData()) {
+                    Practice_DrawTextColor(130, y, "START", 100, 220, 100);
+                } else {
+                    Practice_DrawTextColor(130, y, "---", 60, 60, 60);
+                }
+                break;
+            case MOPT_REWIND:
+                Practice_DrawTextColor(54, y, "REWIND", 200, 200, 255);
+                break;
+            case MOPT_TRIM:
+                if (Practice_Macro_GetHead() < Practice_Macro_GetLen()) {
+                    Practice_DrawTextColor(54, y, "TRIM:", 200, 200, 255);
+                    Practice_DrawNumber(98, y, Practice_Macro_GetHead());
+                } else {
+                    Practice_DrawTextColor(54, y, "TRIM", 60, 60, 60);
+                }
+                break;
+            case MOPT_BIND_STATE:
+                Practice_DrawText(54, y, "SAVE START:");
+                Practice_DrawTextColor(142, y,
+                    gPracticeConfig.macroBindState ? "ON" : "OFF",
+                    gPracticeConfig.macroBindState ? 60  : 100,
+                    gPracticeConfig.macroBindState ? 220 : 100,
+                    gPracticeConfig.macroBindState ? 60  : 60);
+                break;
+            case MOPT_LOOP:
+                Practice_DrawText(54, y, "LOOP:");
+                Practice_DrawTextColor(130, y,
+                    gPracticeConfig.macroLoop ? "ON" : "OFF",
+                    gPracticeConfig.macroLoop ? 60  : 100,
+                    gPracticeConfig.macroLoop ? 220 : 100,
+                    gPracticeConfig.macroLoop ? 60  : 60);
+                break;
+            case MOPT_FRAMES:
+                /* Show length in frames and seconds (60 fps). */
+                len = Practice_Macro_GetLen();
+                secs = len / 60;
+                remFrames = len % 60;
+                Practice_DrawText(54, y, "LEN:");
+                Practice_DrawNumber(90, y, len);
+                Practice_DrawText(122, y, "F");
+                Practice_DrawNumber(134, y, secs);
+                Practice_DrawText(154, y, "S");
+                Practice_DrawNumber(166, y, remFrames);
+                Practice_DrawText(186, y, "F");
+                break;
+            case MOPT_BACK:
+                Practice_DrawTextColor(54, y, "BACK", 150, 150, 150);
+                break;
+        }
+    }
+}
+
 void Practice_StateMenu_Draw(void) {
     const char* title;
     s32 boxHeight;
@@ -678,8 +860,8 @@ void Practice_StateMenu_Draw(void) {
             break;
         case PSUBMENU_DISPLAY:
             title = "DISPLAY";
-            boxHeight = 110;
-            helpY = 142;
+            boxHeight = 124;
+            helpY = 156;
             break;
         case PSUBMENU_STATS:
             title = "STATS";
@@ -695,6 +877,11 @@ void Practice_StateMenu_Draw(void) {
             title = "PREV PLANETS";
             boxHeight = 196;
             helpY = 226;
+            break;
+        case PSUBMENU_MACRO:
+            title = "MACRO";
+            boxHeight = 142;
+            helpY = 174;
             break;
         default:
             return;
@@ -723,6 +910,10 @@ void Practice_StateMenu_Draw(void) {
         case PSUBMENU_PREV_PLANETS:
             StateMenu_DrawPrevPlanets();
             Practice_DrawTextColor(50, helpY, "A:TOGGLE  B:BACK", 150, 150, 150);
+            break;
+        case PSUBMENU_MACRO:
+            StateMenu_DrawMacro();
+            Practice_DrawTextColor(50, helpY, "A:SELECT  B:BACK", 150, 150, 150);
             break;
     }
 }

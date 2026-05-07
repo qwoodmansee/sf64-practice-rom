@@ -56,6 +56,8 @@ typedef struct PracticeConfig {
     bool infLives;
     bool infBoost;
     u32 prevPlanetsMask;
+    bool macroBindState;
+    bool macroLoop;
 } PracticeConfig;
 
 typedef enum PracticeSubMenu {
@@ -64,6 +66,7 @@ typedef enum PracticeSubMenu {
     PSUBMENU_STATS,
     PSUBMENU_VISUALIZERS,
     PSUBMENU_PREV_PLANETS,
+    PSUBMENU_MACRO,
 } PracticeSubMenu;
 
 typedef enum PracticeAction {
@@ -72,6 +75,13 @@ typedef enum PracticeAction {
     PACTION_RESTORE_POS,
     PACTION_MAX,
 } PracticeAction;
+
+/* One recorded game frame — 4 bytes. */
+typedef struct MacroFrame {
+    u16 button;
+    s8  stick_x;
+    s8  stick_y;
+} MacroFrame;
 
 typedef enum PracticeFreeCamObject {
     PFREECAM_OBJECT_NONE,
@@ -301,6 +311,32 @@ void Practice_HeapAudit_PerFrame(void);
 
 uintptr_t Practice_Save_SlotPoolBase(void);
 void* Practice_Save_ScratchBase(void);
+
+/* practice_macro_buf.c — expansion pak frame buffer */
+MacroFrame* Practice_Macro_BufBase(void);
+s32         Practice_Macro_BufCapacity(void);
+
+/* practice_macro.c */
+void Practice_Macro_Init(void);
+void Practice_Macro_PrePlay(void);
+void Practice_Macro_Update(void);
+void Practice_Macro_Draw(void);
+void Practice_Macro_StartRecord(void);
+void Practice_Macro_StopRecord(void);
+void Practice_Macro_StartPlay(void);
+void Practice_Macro_StopPlay(void);
+void Practice_Macro_Rewind(void);
+bool Practice_Macro_IsArmed(void);
+bool Practice_Macro_IsRecording(void);
+bool Practice_Macro_IsPlaying(void);
+u8*  Practice_Macro_SnapBase(void);
+void Practice_Save_MacroSnap(void);
+void Practice_Save_MacroApply(void);
+bool Practice_Macro_HasData(void);
+void Practice_Macro_Trim(void);
+s32  Practice_Macro_GetHead(void);
+s32  Practice_Macro_GetLen(void);
+s32  Practice_Macro_GetSnapLevel(void);
 
 #endif
 #endif
