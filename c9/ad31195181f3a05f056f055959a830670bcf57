@@ -1,0 +1,19 @@
+src/practice/practice_save.c
+  s_53eb017d580032::t_2a3154924196fe 1647-1655,1657-1658,1660-1667,1669-1673,1675-1676,1678-1679,1682-1689,1693-1696,1698
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.1",
+  "base_commit_sha": "c9ad31195181f3a05f056f055959a830670bcf57",
+  "prompts": {},
+  "sessions": {
+    "s_53eb017d580032": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d1bbbd43-580c-41b4-8cf0-44616bff7bb6",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "qwoodmansee <github@qwoodmansee.xyz>"
+    }
+  }
+}
