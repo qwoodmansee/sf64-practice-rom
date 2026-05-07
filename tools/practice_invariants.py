@@ -1611,10 +1611,24 @@ def check_macro_hook():
         return
 
     block = gstate_play_match.group(1)
-    if "Practice_Macro_PrePlay" not in block:
+    preplay_idx = block.find("Practice_Macro_PrePlay")
+    if preplay_idx < 0:
         error(
             "Practice_Macro_PrePlay() must be called in the GSTATE_PLAY block of "
             "Game_Update before Play_Main() (check_macro_hook)"
+        )
+        return
+    # The block may contain multiple Play_Main() calls (e.g. one for PMENU_OPEN
+    # that does not need PrePlay, plus one inside the PMENU_CLOSED branch that
+    # does). The contract that matters: there must be at least one Play_Main()
+    # textually AFTER the PrePlay call so the injected inputs are visible to
+    # the gameplay tick. A Play_Main() before PrePlay alone is not sufficient.
+    play_main_after = block.find("Play_Main(", preplay_idx)
+    if play_main_after < 0:
+        error(
+            "Practice_Macro_PrePlay() must be called before a Play_Main() in the "
+            "GSTATE_PLAY block of Game_Update so injected inputs are visible the "
+            "same frame (check_macro_hook)"
         )
 
 
@@ -1634,13 +1648,19 @@ def check_macro_buf_section():
         r"\.practice_macro_pak\s+0x[0-9a-fA-F]+.*?\{(.*?)\}",
         ld, re.DOTALL,
     )
-    if macro_section_match:
-        section_body = macro_section_match.group(1)
-        if "practice_macro_buf.o(.bss)" not in section_body:
-            error(
-                ".practice_macro_pak section exists but practice_macro_buf.o(.bss) "
-                "is not inside it (check_macro_buf_section)"
-            )
+    if not macro_section_match:
+        error(
+            ".practice_macro_pak section exists in linker script but the "
+            "section body could not be parsed (malformed?) "
+            "(check_macro_buf_section)"
+        )
+        return
+    section_body = macro_section_match.group(1)
+    if "practice_macro_buf.o(.bss)" not in section_body:
+        error(
+            ".practice_macro_pak section exists but practice_macro_buf.o(.bss) "
+            "is not inside it (check_macro_buf_section)"
+        )
     if ".practice_macro_snap_pak" not in ld:
         error(
             ".practice_macro_snap_pak section missing from linker script -- run "
@@ -1651,13 +1671,19 @@ def check_macro_buf_section():
         r"\.practice_macro_snap_pak\s+0x[0-9a-fA-F]+.*?\{(.*?)\}",
         ld, re.DOTALL,
     )
-    if snap_section_match:
-        section_body = snap_section_match.group(1)
-        if "practice_macro_snap.o(.bss)" not in section_body:
-            error(
-                ".practice_macro_snap_pak section exists but practice_macro_snap.o(.bss) "
-                "is not inside it (check_macro_buf_section)"
-            )
+    if not snap_section_match:
+        error(
+            ".practice_macro_snap_pak section exists in linker script but the "
+            "section body could not be parsed (malformed?) "
+            "(check_macro_buf_section)"
+        )
+        return
+    section_body = snap_section_match.group(1)
+    if "practice_macro_snap.o(.bss)" not in section_body:
+        error(
+            ".practice_macro_snap_pak section exists but practice_macro_snap.o(.bss) "
+            "is not inside it (check_macro_buf_section)"
+        )
     # Verify the two new wrappers exist in practice_save.c.
     save_src = read("src/practice/practice_save.c")
     for fn in ("Practice_Save_MacroSnap", "Practice_Save_MacroApply"):

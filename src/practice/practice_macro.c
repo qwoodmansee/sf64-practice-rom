@@ -63,6 +63,15 @@ void Practice_Macro_PrePlay(void) {
     if (sMacroState == MACRO_ARMED) {
         hold = &gControllerHold[gMainController];
         if (hold->button != 0 || hold->stick_x != 0 || hold->stick_y != 0) {
+            if (sMacroHead >= cap) {
+                /* Append-from-full: nothing to write. Drop back to IDLE and
+                 * surface the FULL indicator so the user knows why nothing
+                 * recorded. Without this guard we would write past the end
+                 * of the macro frame buffer. */
+                sMacroState   = MACRO_IDLE;
+                sMacroBufFull = true;
+                return;
+            }
             if (sMacroHead == 0) {
                 /* Fresh record: optionally snap state at this start point. */
                 if (gPracticeConfig.macroBindState &&
@@ -111,10 +120,11 @@ void Practice_Macro_PrePlay(void) {
             sMacroBufFull = true;
         }
     } else if (sMacroState == MACRO_PLAYING) {
-        /* Only inject and advance when the game is actually going to process
-         * the frame. This makes macro playback compatible with frame-advance:
-         * the head stays put while frozen and advances one step per unfreeze. */
-        if (sMacroHead < sMacroLen && !Practice_FrameAdvance_IsFrozen()) {
+        /* The caller (fox_game.c GSTATE_PLAY) only invokes PrePlay when the
+         * frame is actually going to advance, so we don't re-check
+         * Practice_FrameAdvance_IsFrozen() here -- doing so would consume an
+         * additional queued frame-step and starve Play_Main on the same tick. */
+        if (sMacroHead < sMacroLen) {
             f = buf[sMacroHead];
             hold  = &gControllerHold[gMainController];
             press = &gControllerPress[gMainController];
@@ -154,6 +164,12 @@ void Practice_Macro_Update(void) {
     OSContPad* hold;
     OSContPad* press;
 
+    if (!Macro_HasPak()) {
+        /* No Expansion Pak: macro buffers are unmapped. Skip the hotkey
+         * handler entirely so we never swallow Start, toggle macroLoop,
+         * etc. on stock 4 MB systems. */
+        return;
+    }
     if (gGameState != GSTATE_PLAY) {
         return;
     }

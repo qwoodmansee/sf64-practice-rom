@@ -103,6 +103,7 @@ S.config.infLives = 0x84
 S.config.infBoost = 0x88
 S.config.prevPlanetsMask = 0x8C
 S.config.macroBindState = 0x90
+S.config.macroLoop = 0x94
 
 -- Player struct field offsets
 S.player = {}

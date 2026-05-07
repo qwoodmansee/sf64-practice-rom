@@ -207,6 +207,12 @@ def patch():
 
     if not has_practice:
         # Fully unpatched: inject practice + lib/iodev + lib-top + lib/fatfs + lib/ui after fox_save.o.
+        # Fall through to the per-entry / Pak-section logic below so the
+        # newly-injected practice_macro_buf.o(.bss) and practice_macro_snap.o(.bss)
+        # entries get moved into .practice_macro_pak / .practice_macro_snap_pak
+        # instead of staying in stock .main_bss. Without this, a fresh
+        # `make extract` followed by patch leaves macro buffers in main RAM
+        # and overflows the stock 4 MB layout.
         for section in [".text", ".data", ".rodata", ".bss"]:
             anchor_line = f"{ANCHOR}({section});"
             practice_block = "\n".join(
@@ -238,14 +244,13 @@ def patch():
                 blocks.append(ui_block)
             injection = "\n".join(blocks)
             content = _replace_after_anchor(content, anchor_line, injection)
-        with open(LINKER_SCRIPT, "w") as f:
-            f.write(content)
-        print(f"Patched {LINKER_SCRIPT}: practice + lib/iodev + lib-top + lib/fatfs + lib/ui (full).")
-        return
 
-    # Practice already patched. Walk PRACTICE_OBJS first, then LIB_IODEV_OBJS,
-    # then LIB_TOP_OBJS, then LIB_FATFS_OBJS, injecting any missing entries.
-    # Each entry anchors on its predecessor in injection order.
+    fresh_full_patch = not has_practice
+
+    # Walk PRACTICE_OBJS first, then LIB_IODEV_OBJS, then LIB_TOP_OBJS, then
+    # LIB_FATFS_OBJS, injecting any missing entries. After a fresh full patch
+    # all per-entry checks below no-op; the Pak-section injections that follow
+    # are the load-bearing work.
     inject_count = 0
 
     # Pass 0: missing practice objs anchor on the previous PRACTICE_OBJS entry
@@ -437,11 +442,17 @@ def patch():
     with open(LINKER_SCRIPT, "w") as f:
         f.write(content)
 
-    suffix = ""
-    if inject_count:
+    if fresh_full_patch:
+        suffix = (
+            " practice + lib/iodev + lib-top + lib/fatfs + lib/ui (full) + "
+            f"{inject_count} Pak section entries."
+        )
+    elif inject_count:
         suffix = f" injected {inject_count} lib/script entries."
     elif content != initial_content:
         suffix = " (migration)."
+    else:
+        suffix = ""
     print(f"Patched {LINKER_SCRIPT}{suffix}")
 
 if __name__ == "__main__":

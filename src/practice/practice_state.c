@@ -451,8 +451,17 @@ void Practice_StateMenu_Update(void) {
             return;
         }
         if (sActiveSubMenu == PSUBMENU_MACRO && sSelectedOption == MOPT_BACK) {
-            Practice_StateMenu_Close();
-            return;
+            /* While the overwrite-confirm dialog is up, the cursor can have
+             * moved to BACK via D-pad navigation. A on BACK must NOT close
+             * the menu -- StateMenu_UpdateMacro owns the A press as the
+             * confirmation. Defer to the submenu dispatch below. */
+            if (sConfirmOverwrite) {
+                /* Fall through to switch (sActiveSubMenu) so the macro
+                 * submenu can consume the A as a confirmation. */
+            } else {
+                Practice_StateMenu_Close();
+                return;
+            }
         }
         if (sActiveSubMenu == PSUBMENU_STATS && sSelectedOption == SOPT_BACK) {
             Practice_StateMenu_Close();
