@@ -1,0 +1,28 @@
+Makefile
+  s_53eb017d580032::t_00f2ab180b371e 369-370,383
+  s_53eb017d580032::t_cf11b6cd1d72ff 363-368,371-382
+src/practice/practice_state.c
+  s_53eb017d580032::t_7197d5e3550c9b 424,426-428
+  s_53eb017d580032::t_b219b7f84498ce 418-423,425
+  s_53eb017d580032::t_67e8fcb7c7112c 486
+  s_53eb017d580032::t_e784276ece7303 517,521
+  s_53eb017d580032::t_2f5809a39a7941 593,597,601,605,609,613,617,621,625
+  s_53eb017d580032::t_a0e8691798c2fd 629
+  s_53eb017d580032::t_dab6601022f72f 550,554,558,562,566,570
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.1",
+  "base_commit_sha": "fa945d8f9894cf84848175dfa6466053eea13afc",
+  "prompts": {},
+  "sessions": {
+    "s_53eb017d580032": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "d1bbbd43-580c-41b4-8cf0-44616bff7bb6",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "qwoodmansee <github@qwoodmansee.xyz>"
+    }
+  }
+}
