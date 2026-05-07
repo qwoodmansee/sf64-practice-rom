@@ -96,7 +96,11 @@ void Practice_Init(void) {
 void Practice_Update(void) {
     Practice_Cheats_Apply();
     Practice_FrameAdvance_Update();
-    Practice_Macro_Update();
+    /* Pak-gated at call site for visibility. The function also guards
+     * internally; this call-site check makes the dependency obvious here. */
+    if (osMemSize >= 0x00800000U) {
+        Practice_Macro_Update();
+    }
 
     if (Practice_Sd_IsActive()) {
         Practice_Sd_Update();
