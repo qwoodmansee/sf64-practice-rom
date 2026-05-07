@@ -360,6 +360,27 @@ build/src/libultra/host/%.o:	OPTFLAGS := -O1 -g0
 build/src/audio/%.o: OPTFLAGS := -O2 -g0
 build/srceu/audio/%.o: OPTFLAGS := -O2 -g0 # temporary
 
+# Practice ROM size optimization: IDO directly (bypass asm-processor) supports
+# -O3 like libultra/gu/*.o, which buys ROM-end headroom against the 0xFD000
+# IPL boot-copy ceiling (see check_boot_main_rom_budget). asm-processor's
+# wrapper rejects -O3, so use IDO directly. Skip lib/fatfs/* — those .c
+# files include <string.h> / <stdarg.h> / <math.h> which the direct-IDO
+# include path doesn't resolve; they stay on the asm-processor / -O2 path.
+build/src/practice/%.o: OPTFLAGS := -O3 -g0
+build/src/practice/%.o: CC := $(IDO)
+build/lib/iodev/%.o: OPTFLAGS := -O3 -g0
+build/lib/iodev/%.o: CC := $(IDO)
+build/lib/ui/%.o: OPTFLAGS := -O3 -g0
+build/lib/ui/%.o: CC := $(IDO)
+build/lib/crc32.o: OPTFLAGS := -O3 -g0
+build/lib/crc32.o: CC := $(IDO)
+build/lib/sd_crc.o: OPTFLAGS := -O3 -g0
+build/lib/sd_crc.o: CC := $(IDO)
+build/lib/serial.o: OPTFLAGS := -O3 -g0
+build/lib/serial.o: CC := $(IDO)
+build/lib/slot_manager.o: OPTFLAGS := -O3 -g0
+build/lib/slot_manager.o: CC := $(IDO)
+
 # per-file flags
 build/src/audio/audio_effects.o: CFLAGS += -use_readwrite_const
 build/src/audio/audio_heap.o: CFLAGS += -use_readwrite_const

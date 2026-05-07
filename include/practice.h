@@ -98,11 +98,6 @@ extern s32 gPracticeIndirectCount;
 extern s32 gPracticeIndirectBonus;
 extern s32 gPracticeDespawns;
 extern f32 gPracticeCheckpointProgress;
-extern s32 gPracticeSlotTestStatus;
-extern s32 gPracticeSlotTestFirstLoadedValue;
-extern s32 gPracticeSlotTestSecondLoadedValue;
-extern s32 gPracticeSlotTestLoadCalls;
-extern s32 gPracticeSlotTestSlotCount;
 
 /* Phase 4 — slot-manager-backed save state diagnostics. Defined in
  * practice_save.c (Wave 2.2 owns the real definitions; Wave 1 ships
@@ -121,19 +116,11 @@ extern s32 gPracticeLastLoadResult;
 extern s32 gPracticeRamSlotCount;
 extern s32 gPracticeSaveDisabled;
 
-/* practice_heap_audit.c — Phase 4 §7 (IS-Viewer heap / memory pressure). */
-extern s32 gPracticeMaxMemAllocHWM;
-extern s32 gPracticeFreeRamLow;
-extern s32 gPracticeOverlaySizes[6];
-
 /* practice_main.c */
 void Practice_Init(void);
 void Practice_Update(void);
 void Practice_Draw(void);
 void Practice_ApplyStartConditions(void);
-
-/* practice_slot_test.c -- Phase 3 in-ROM fake-state slot_manager smoke test. */
-void Practice_SlotTest_Run(void);
 
 /* practice_test_fatfs.c -- Phase 2 hardware verification probe.
  * Only built/called when IODEV_DIAG_FATFS=1. Writes SF64TEST.TXT to the
@@ -304,10 +291,6 @@ void Practice_FrameAdvance_Init(void);
 void Practice_FrameAdvance_Update(void);
 bool Practice_FrameAdvance_IsFrozen(void);
 bool Practice_FrameAdvance_IsPaused(void);
-
-/* practice_heap_audit.c */
-void Practice_HeapAudit_Boot(void);
-void Practice_HeapAudit_PerFrame(void);
 
 uintptr_t Practice_Save_SlotPoolBase(void);
 void* Practice_Save_ScratchBase(void);

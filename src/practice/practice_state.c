@@ -504,6 +504,17 @@ void Practice_StateMenu_Update(void) {
     }
 }
 
+/* Common pattern: draw "ON" or "OFF" at (x, y), green when on, orange when off.
+ * Used 19 times across the submenu draw routines. Pulled out of inline ternary
+ * spam to shrink .text. */
+static void DrawToggleValue(s32 x, s32 y, s32 value) {
+    if (value) {
+        Practice_DrawTextColor(x, y, "ON", 0, 255, 0);
+    } else {
+        Practice_DrawTextColor(x, y, "OFF", 255, 100, 0);
+    }
+}
+
 static void StateMenu_DrawLoadout(void) {
     s32 y;
     s32 i;
@@ -561,8 +572,7 @@ static void StateMenu_DrawLoadout(void) {
                 break;
             case LOPT_EXPERT:
                 Practice_DrawText(54, y, "EXPERT:");
-                Practice_DrawTextColor(120, y, gPracticeConfig.expertMode ? "ON" : "OFF",
-                    gPracticeConfig.expertMode ? 0 : 255, gPracticeConfig.expertMode ? 255 : 100, 0);
+                DrawToggleValue(120, y, gPracticeConfig.expertMode);
                 break;
             case LOPT_PREV_PLANETS:
                 Practice_DrawTextColor(54, y, "PLANETS...", 200, 200, 255);
@@ -593,13 +603,11 @@ static void StateMenu_DrawDisplay(void) {
                 break;
             case DOPT_INPUT_DISPLAY:
                 Practice_DrawText(54, y, "INPUT:");
-                Practice_DrawTextColor(120, y, gPracticeConfig.showInputDisplay ? "ON" : "OFF",
-                    gPracticeConfig.showInputDisplay ? 0 : 255, gPracticeConfig.showInputDisplay ? 255 : 100, 0);
+                DrawToggleValue(120, y, gPracticeConfig.showInputDisplay);
                 break;
             case DOPT_MINIMAP:
                 Practice_DrawText(54, y, "MINIMAP:");
-                Practice_DrawTextColor(120, y, gPracticeConfig.showPauseMinimap ? "ON" : "OFF",
-                    gPracticeConfig.showPauseMinimap ? 0 : 255, gPracticeConfig.showPauseMinimap ? 255 : 100, 0);
+                DrawToggleValue(120, y, gPracticeConfig.showPauseMinimap);
                 break;
             case DOPT_STATS_MENU:
                 Practice_DrawTextColor(54, y, "STATS...", 200, 200, 255);
@@ -631,33 +639,27 @@ static void StateMenu_DrawStats(void) {
         switch (i) {
             case SOPT_HUD_OVERLAY:
                 Practice_DrawText(54, y, "HUD:");
-                Practice_DrawTextColor(120, y, gPracticeConfig.showHudOverlay ? "ON" : "OFF",
-                    gPracticeConfig.showHudOverlay ? 0 : 255, gPracticeConfig.showHudOverlay ? 255 : 100, 0);
+                DrawToggleValue(120, y, gPracticeConfig.showHudOverlay);
                 break;
             case SOPT_LAG_FRAMES:
                 Practice_DrawText(54, y, "  LAG:");
-                Practice_DrawTextColor(120, y, gPracticeConfig.showLagFrames ? "ON" : "OFF",
-                    gPracticeConfig.showLagFrames ? 0 : 255, gPracticeConfig.showLagFrames ? 255 : 100, 0);
+                DrawToggleValue(120, y, gPracticeConfig.showLagFrames);
                 break;
             case SOPT_SPEED:
                 Practice_DrawText(54, y, "  SPEED:");
-                Practice_DrawTextColor(120, y, gPracticeConfig.showSpeed ? "ON" : "OFF",
-                    gPracticeConfig.showSpeed ? 0 : 255, gPracticeConfig.showSpeed ? 255 : 100, 0);
+                DrawToggleValue(120, y, gPracticeConfig.showSpeed);
                 break;
             case SOPT_CHARGE_TIMING:
                 Practice_DrawText(54, y, "  CHARGE:");
-                Practice_DrawTextColor(120, y, gPracticeConfig.showChargeTiming ? "ON" : "OFF",
-                    gPracticeConfig.showChargeTiming ? 0 : 255, gPracticeConfig.showChargeTiming ? 255 : 100, 0);
+                DrawToggleValue(120, y, gPracticeConfig.showChargeTiming);
                 break;
             case SOPT_MISSED_INPUTS:
                 Practice_DrawText(54, y, "  MISSED:");
-                Practice_DrawTextColor(120, y, gPracticeConfig.showMissedInputs ? "ON" : "OFF",
-                    gPracticeConfig.showMissedInputs ? 0 : 255, gPracticeConfig.showMissedInputs ? 255 : 100, 0);
+                DrawToggleValue(120, y, gPracticeConfig.showMissedInputs);
                 break;
             case SOPT_HIT_TRACKING:
                 Practice_DrawText(54, y, "  HITS:");
-                Practice_DrawTextColor(120, y, gPracticeConfig.showHitTracking ? "ON" : "OFF",
-                    gPracticeConfig.showHitTracking ? 0 : 255, gPracticeConfig.showHitTracking ? 255 : 100, 0);
+                DrawToggleValue(120, y, gPracticeConfig.showHitTracking);
                 break;
             case SOPT_BACK:
                 Practice_DrawTextColor(54, y, "BACK", 150, 150, 150);
@@ -680,53 +682,43 @@ static void StateMenu_DrawVisualizers(void) {
         switch (i) {
             case VOPT_HITBOXES:
                 Practice_DrawText(54, y, "HITBOXES:");
-                Practice_DrawTextColor(150, y, gPracticeConfig.showHitboxes ? "ON" : "OFF",
-                    gPracticeConfig.showHitboxes ? 0 : 255, gPracticeConfig.showHitboxes ? 255 : 100, 0);
+                DrawToggleValue(150, y, gPracticeConfig.showHitboxes);
                 break;
             case VOPT_ACTORS:
                 Practice_DrawText(54, y, "  ACTORS:");
-                Practice_DrawTextColor(150, y, gPracticeConfig.showHitboxActors ? "ON" : "OFF",
-                    gPracticeConfig.showHitboxActors ? 0 : 255, gPracticeConfig.showHitboxActors ? 255 : 100, 0);
+                DrawToggleValue(150, y, gPracticeConfig.showHitboxActors);
                 break;
             case VOPT_SCENERY:
                 Practice_DrawText(54, y, "  SCENERY:");
-                Practice_DrawTextColor(150, y, gPracticeConfig.showHitboxScenery ? "ON" : "OFF",
-                    gPracticeConfig.showHitboxScenery ? 0 : 255, gPracticeConfig.showHitboxScenery ? 255 : 100, 0);
+                DrawToggleValue(150, y, gPracticeConfig.showHitboxScenery);
                 break;
             case VOPT_ITEMS:
                 Practice_DrawText(54, y, "  ITEMS:");
-                Practice_DrawTextColor(150, y, gPracticeConfig.showHitboxItems ? "ON" : "OFF",
-                    gPracticeConfig.showHitboxItems ? 0 : 255, gPracticeConfig.showHitboxItems ? 255 : 100, 0);
+                DrawToggleValue(150, y, gPracticeConfig.showHitboxItems);
                 break;
             case VOPT_PLAYER:
                 Practice_DrawText(54, y, "  PLAYER:");
-                Practice_DrawTextColor(150, y, gPracticeConfig.showHitboxPlayer ? "ON" : "OFF",
-                    gPracticeConfig.showHitboxPlayer ? 0 : 255, gPracticeConfig.showHitboxPlayer ? 255 : 100, 0);
+                DrawToggleValue(150, y, gPracticeConfig.showHitboxPlayer);
                 break;
             case VOPT_FLASH:
                 Practice_DrawText(54, y, "  FLASH:");
-                Practice_DrawTextColor(150, y, gPracticeConfig.showHitboxFlash ? "ON" : "OFF",
-                    gPracticeConfig.showHitboxFlash ? 0 : 255, gPracticeConfig.showHitboxFlash ? 255 : 100, 0);
+                DrawToggleValue(150, y, gPracticeConfig.showHitboxFlash);
                 break;
             case VOPT_SPAWN_ZONES:
                 Practice_DrawText(54, y, "SPAWN ZONES:");
-                Practice_DrawTextColor(150, y, gPracticeConfig.showSpawnZones ? "ON" : "OFF",
-                    gPracticeConfig.showSpawnZones ? 0 : 255, gPracticeConfig.showSpawnZones ? 255 : 100, 0);
+                DrawToggleValue(150, y, gPracticeConfig.showSpawnZones);
                 break;
             case VOPT_SPAWN_ACTORS:
                 Practice_DrawTextColor(54, y, "  ENEMIES:", 255, 80, 80);
-                Practice_DrawTextColor(150, y, gPracticeConfig.showSpawnActors ? "ON" : "OFF",
-                    gPracticeConfig.showSpawnActors ? 0 : 255, gPracticeConfig.showSpawnActors ? 255 : 100, 0);
+                DrawToggleValue(150, y, gPracticeConfig.showSpawnActors);
                 break;
             case VOPT_SPAWN_ITEMS:
                 Practice_DrawTextColor(54, y, "  ITEMS:", 80, 255, 80);
-                Practice_DrawTextColor(150, y, gPracticeConfig.showSpawnItems ? "ON" : "OFF",
-                    gPracticeConfig.showSpawnItems ? 0 : 255, gPracticeConfig.showSpawnItems ? 255 : 100, 0);
+                DrawToggleValue(150, y, gPracticeConfig.showSpawnItems);
                 break;
             case VOPT_SPAWN_SCENERY:
                 Practice_DrawTextColor(54, y, "  SCENERY:", 80, 130, 255);
-                Practice_DrawTextColor(150, y, gPracticeConfig.showSpawnScenery ? "ON" : "OFF",
-                    gPracticeConfig.showSpawnScenery ? 0 : 255, gPracticeConfig.showSpawnScenery ? 255 : 100, 0);
+                DrawToggleValue(150, y, gPracticeConfig.showSpawnScenery);
                 break;
             case VOPT_BACK:
                 Practice_DrawTextColor(54, y, "BACK", 150, 150, 150);
