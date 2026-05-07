@@ -1,0 +1,19 @@
+src/practice/practice_main.c
+  s_0149af9b0908d4::t_0fd6c56b106bef 99-103
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.1",
+  "base_commit_sha": "10232c1b525cd8ff54d045539e7c3feed2e6453a",
+  "prompts": {},
+  "sessions": {
+    "s_0149af9b0908d4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "941deb4f-ce43-4102-9332-7af99f434ef6",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "qwoodmansee <github@qwoodmansee.xyz>"
+    }
+  }
+}
