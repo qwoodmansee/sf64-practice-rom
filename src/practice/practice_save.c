@@ -1644,63 +1644,58 @@ void Practice_Save_Tick(void) {
         }
     }
 
-    if (gPracticeCrossLoadState != XLOAD_AWAIT_SCENE_LOAD) {
-        return;
-    }
-
-    if (gPracticeSaveDisabled) {
-        gPracticeCrossLoadState = XLOAD_IDLE;
-        return;
-    }
-
-    /* Apply once the destination scene is fully running. Same gates as
-     * Practice_CanSaveHere: we want the engine in a state where the
-     * snapshot can clobber gPlayer/gActors/etc. without races. */
-    if ((gGameState == GSTATE_PLAY) &&
-        (gPlayState == PLAY_UPDATE) &&
-        (gPlayer != NULL) &&
-        (gPracticeSlotMeta[gPracticeCrossLoadSlot].valid) &&
-        ((LevelId)gCurrentLevel == gPracticeSlotMeta[gPracticeCrossLoadSlot].level)) {
+    /* RAM-slot cross-scene state machine. */
+    if (gPracticeCrossLoadState == XLOAD_AWAIT_SCENE_LOAD) {
+        if (gPracticeSaveDisabled) {
+            gPracticeCrossLoadState = XLOAD_IDLE;
+        } else if ((gGameState == GSTATE_PLAY) &&
+                   (gPlayState == PLAY_UPDATE) &&
+                   (gPlayer != NULL) &&
+                   (gPracticeSlotMeta[gPracticeCrossLoadSlot].valid) &&
+                   ((LevelId)gCurrentLevel == gPracticeSlotMeta[gPracticeCrossLoadSlot].level)) {
 #if PRACTICE_SAVE_TRACE
-        osSyncPrintf("[save_tr] xscene apply slot=%d level=%d\n",
-                     gPracticeCrossLoadSlot, (s32)gCurrentLevel);
+            osSyncPrintf("[save_tr] xscene apply slot=%d level=%d\n",
+                         gPracticeCrossLoadSlot, (s32)gCurrentLevel);
 #endif
-        rr = slot_manager_load_ram(gPracticeCrossLoadSlot);
-        gPracticeLastLoadResult = rr;
-        gPracticeCrossLoadState = XLOAD_IDLE;
-        if (rr == SLOT_MANAGER_OK) {
-            Practice_Hud_ShowStatus("XSCENE OK", 80, 255, 120);
+            rr = slot_manager_load_ram(gPracticeCrossLoadSlot);
+            gPracticeLastLoadResult = rr;
+            gPracticeCrossLoadState = XLOAD_IDLE;
+            if (rr == SLOT_MANAGER_OK) {
+                Practice_Hud_ShowStatus("XSCENE OK", 80, 255, 120);
+            } else {
+                Practice_Hud_ShowStatus("XSCENE FAIL", 255, 120, 80);
+            }
         } else {
-            Practice_Hud_ShowStatus("XSCENE FAIL", 255, 120, 80);
-        }
-        return;
-    }
-
-    elapsed = gGameFrameCount - gPracticeCrossLoadStartFrame;
-    if (elapsed > PRACTICE_XLOAD_TIMEOUT_FRAMES) {
-        gPracticeLastLoadResult = SLOT_MANAGER_ERR_TIMEOUT;
-        gPracticeCrossLoadState = XLOAD_IDLE;
-        Practice_Hud_ShowStatus("LOAD T/O", 255, 120, 80);
+            elapsed = gGameFrameCount - gPracticeCrossLoadStartFrame;
+            if (elapsed > PRACTICE_XLOAD_TIMEOUT_FRAMES) {
+                gPracticeLastLoadResult = SLOT_MANAGER_ERR_TIMEOUT;
+                gPracticeCrossLoadState = XLOAD_IDLE;
+                Practice_Hud_ShowStatus("LOAD T/O", 255, 120, 80);
 #if PRACTICE_SAVE_TRACE
-        osSyncPrintf("[save_tr] xscene TIMEOUT slot=%d elapsed=%d\n",
-                     gPracticeCrossLoadSlot, elapsed);
+                osSyncPrintf("[save_tr] xscene TIMEOUT slot=%d elapsed=%d\n",
+                             gPracticeCrossLoadSlot, elapsed);
 #endif
+            }
+        }
     }
 
-    /* SD-path cross-scene: apply once the target scene is running. */
+    /* SD-path cross-scene state machine. Independent from the RAM xload
+     * state above: SD loads use sSdCrossPending and never touch
+     * gPracticeCrossLoadState. Previously this block was unreachable in
+     * the typical case because the function early-returned when
+     * gPracticeCrossLoadState != XLOAD_AWAIT_SCENE_LOAD, which is the
+     * default after boot. SD cross-scene loads would kick the engine
+     * transition (via practice_overlay_request_load) but the snapshot
+     * apply never fired in the destination scene. */
     if (sSdCrossPending) {
         if (gPracticeSaveDisabled) {
             sSdCrossPending = false;
-            return;
-        }
-        if ((gGameState == GSTATE_PLAY) &&
-            (gPlayState == PLAY_UPDATE) &&
-            (gPlayer != NULL) &&
-            ((LevelId)gCurrentLevel == sSdCrossLevel)) {
+        } else if ((gGameState == GSTATE_PLAY) &&
+                   (gPlayState == PLAY_UPDATE) &&
+                   (gPlayer != NULL) &&
+                   ((LevelId)gCurrentLevel == sSdCrossLevel)) {
             sd_cross_apply_now();
-            return;
-        }
-        if ((gGameFrameCount - sSdCrossStartFrame) > PRACTICE_XLOAD_TIMEOUT_FRAMES) {
+        } else if ((gGameFrameCount - sSdCrossStartFrame) > PRACTICE_XLOAD_TIMEOUT_FRAMES) {
             sSdCrossPending = false;
             Practice_Hud_ShowStatus("SD XLD T/O", 255, 120, 80);
         }
