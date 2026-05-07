@@ -14,6 +14,7 @@ typedef enum LoadoutOption {
     LOPT_SLIPPY,
     LOPT_PEPPY,
     LOPT_EXPERT,
+    LOPT_HIT_COUNT,
     LOPT_PREV_PLANETS,
     LOPT_BACK,
     LOPT_MAX,
@@ -64,9 +65,20 @@ typedef enum VisualizerOption {
     VOPT_SPAWN_ACTORS,
     VOPT_SPAWN_ITEMS,
     VOPT_SPAWN_SCENERY,
+    VOPT_ENEMY_HEALTH,
     VOPT_BACK,
     VOPT_MAX,
 } VisualizerOption;
+
+typedef enum EnemyHealthOption {
+    EHOPT_SHOW,
+    EHOPT_SORT,
+    EHOPT_MIN_HP,
+    EHOPT_BOSS_ONLY,
+    EHOPT_HIDE_MODELS,
+    EHOPT_BACK,
+    EHOPT_MAX,
+} EnemyHealthOption;
 
 static s32 sSelectedOption = 0;
 static bool sStateMenuOpen = false;
@@ -100,13 +112,14 @@ void Practice_StateMenu_Close(void) {
 
 static s32 StateMenu_GetOptionCount(void) {
     switch (sActiveSubMenu) {
-        case PSUBMENU_LOADOUT:      return LOPT_MAX;
-        case PSUBMENU_DISPLAY:      return DOPT_MAX;
-        case PSUBMENU_STATS:        return SOPT_MAX;
-        case PSUBMENU_VISUALIZERS:  return VOPT_MAX;
-        case PSUBMENU_PREV_PLANETS: return PREV_PLANETS_COUNT + 1;
-        case PSUBMENU_MACRO:        return MOPT_MAX;
-        default:                    return 0;
+        case PSUBMENU_LOADOUT:       return LOPT_MAX;
+        case PSUBMENU_DISPLAY:       return DOPT_MAX;
+        case PSUBMENU_STATS:         return SOPT_MAX;
+        case PSUBMENU_VISUALIZERS:   return VOPT_MAX;
+        case PSUBMENU_PREV_PLANETS:  return PREV_PLANETS_COUNT + 1;
+        case PSUBMENU_MACRO:         return MOPT_MAX;
+        case PSUBMENU_ENEMY_HEALTH:  return EHOPT_MAX;
+        default:                     return 0;
     }
 }
 
@@ -198,6 +211,12 @@ static void StateMenu_UpdateLoadout(u16 buttons) {
             case LOPT_EXPERT:
                 gPracticeConfig.expertMode ^= true;
                 break;
+            case LOPT_HIT_COUNT:
+                gPracticeConfig.hitCount++;
+                if (gPracticeConfig.hitCount > 999) {
+                    gPracticeConfig.hitCount = 0;
+                }
+                break;
         }
     }
 
@@ -257,6 +276,12 @@ static void StateMenu_UpdateLoadout(u16 buttons) {
                 break;
             case LOPT_EXPERT:
                 gPracticeConfig.expertMode ^= true;
+                break;
+            case LOPT_HIT_COUNT:
+                gPracticeConfig.hitCount--;
+                if (gPracticeConfig.hitCount < 0) {
+                    gPracticeConfig.hitCount = 999;
+                }
                 break;
         }
     }
@@ -338,6 +363,10 @@ static void StateMenu_UpdateVisualizers(u16 buttons) {
             case VOPT_SPAWN_SCENERY:
                 gPracticeConfig.showSpawnScenery ^= true;
                 break;
+            case VOPT_ENEMY_HEALTH:
+                sActiveSubMenu = PSUBMENU_ENEMY_HEALTH;
+                sSelectedOption = 0;
+                return;
         }
     }
 }
@@ -398,6 +427,48 @@ static void StateMenu_UpdatePrevPlanets(u16 buttons) {
     }
 }
 
+static const s32 sMinHpValues[] = { 0, 1, 5, 10, 25, 50 };
+#define MIN_HP_COUNT 6
+
+static void StateMenu_UpdateEnemyHealth(u16 buttons) {
+    s32 i;
+    if ((buttons & R_JPAD) || (buttons & A_BUTTON) || (buttons & L_JPAD)) {
+        switch (sSelectedOption) {
+            case EHOPT_SHOW:
+                gPracticeConfig.showEnemyHealth ^= true;
+                break;
+            case EHOPT_SORT:
+                gPracticeConfig.enemyHealthSort ^= 1;
+                break;
+            case EHOPT_MIN_HP:
+                if (buttons & L_JPAD) {
+                    /* cycle backward */
+                    for (i = 0; i < MIN_HP_COUNT; i++) {
+                        if (sMinHpValues[i] == gPracticeConfig.enemyHealthMinHp) {
+                            gPracticeConfig.enemyHealthMinHp = sMinHpValues[(i + MIN_HP_COUNT - 1) % MIN_HP_COUNT];
+                            break;
+                        }
+                    }
+                } else {
+                    /* cycle forward */
+                    for (i = 0; i < MIN_HP_COUNT; i++) {
+                        if (sMinHpValues[i] == gPracticeConfig.enemyHealthMinHp) {
+                            gPracticeConfig.enemyHealthMinHp = sMinHpValues[(i + 1) % MIN_HP_COUNT];
+                            break;
+                        }
+                    }
+                }
+                break;
+            case EHOPT_BOSS_ONLY:
+                gPracticeConfig.enemyHealthBossOnly ^= true;
+                break;
+            case EHOPT_HIDE_MODELS:
+                gPracticeConfig.enemyHealthHideModels ^= true;
+                break;
+        }
+    }
+}
+
 void Practice_StateMenu_Update(void) {
     OSContPad* press = &gControllerPress[gMainController];
     s32 optCount = StateMenu_GetOptionCount();
@@ -409,7 +480,12 @@ void Practice_StateMenu_Update(void) {
             sConfirmOverwrite = false;
             return;
         }
-        Practice_StateMenu_Close();
+        if (sActiveSubMenu == PSUBMENU_ENEMY_HEALTH) {
+            sActiveSubMenu = PSUBMENU_VISUALIZERS;
+            sSelectedOption = 0;
+        } else {
+            Practice_StateMenu_Close();
+        }
         return;
     }
 
@@ -480,6 +556,11 @@ void Practice_StateMenu_Update(void) {
             Practice_StateMenu_Close();
             return;
         }
+        if (sActiveSubMenu == PSUBMENU_ENEMY_HEALTH && sSelectedOption == EHOPT_BACK) {
+            sActiveSubMenu = PSUBMENU_VISUALIZERS;
+            sSelectedOption = 0;
+            return;
+        }
     }
 
     switch (sActiveSubMenu) {
@@ -500,6 +581,9 @@ void Practice_StateMenu_Update(void) {
             break;
         case PSUBMENU_MACRO:
             StateMenu_UpdateMacro(press->button);
+            break;
+        case PSUBMENU_ENEMY_HEALTH:
+            StateMenu_UpdateEnemyHealth(press->button);
             break;
     }
 }
@@ -573,6 +657,10 @@ static void StateMenu_DrawLoadout(void) {
             case LOPT_EXPERT:
                 Practice_DrawText(54, y, "EXPERT:");
                 DrawToggleValue(120, y, gPracticeConfig.expertMode);
+                break;
+            case LOPT_HIT_COUNT:
+                Practice_DrawText(54, y, "HITS:");
+                Practice_DrawNumber(120, y, gPracticeConfig.hitCount);
                 break;
             case LOPT_PREV_PLANETS:
                 Practice_DrawTextColor(54, y, "PLANETS...", 200, 200, 255);
@@ -720,6 +808,9 @@ static void StateMenu_DrawVisualizers(void) {
                 Practice_DrawTextColor(54, y, "  SCENERY:", 80, 130, 255);
                 DrawToggleValue(150, y, gPracticeConfig.showSpawnScenery);
                 break;
+            case VOPT_ENEMY_HEALTH:
+                Practice_DrawTextColor(54, y, "ENEMY HP...", 200, 200, 255);
+                break;
             case VOPT_BACK:
                 Practice_DrawTextColor(54, y, "BACK", 150, 150, 150);
                 break;
@@ -839,6 +930,55 @@ static void StateMenu_DrawMacro(void) {
     }
 }
 
+static void StateMenu_DrawEnemyHealth(void) {
+    s32 y;
+    s32 i;
+
+    for (i = 0; i < EHOPT_MAX; i++) {
+        y = 60 + (i * 14);
+
+        if (i == sSelectedOption) {
+            Practice_DrawBox(42, y - 1, 230, 12, 255, 255, 255, 60);
+        }
+
+        switch (i) {
+            case EHOPT_SHOW:
+                Practice_DrawText(54, y, "SHOW:");
+                Practice_DrawTextColor(130, y, gPracticeConfig.showEnemyHealth ? "ON" : "OFF",
+                    gPracticeConfig.showEnemyHealth ? 0 : 255,
+                    gPracticeConfig.showEnemyHealth ? 255 : 100, 0);
+                break;
+            case EHOPT_SORT:
+                Practice_DrawText(54, y, "SORT:");
+                Practice_DrawTextColor(130, y, gPracticeConfig.enemyHealthSort == 1 ? "HIGH HP" : "NEAREST",
+                    255, 255, 0);
+                break;
+            case EHOPT_MIN_HP:
+                Practice_DrawText(54, y, "MIN HP:");
+                if (gPracticeConfig.enemyHealthMinHp == 0) {
+                    Practice_DrawTextColor(130, y, "OFF", 255, 255, 0);
+                } else {
+                    Practice_DrawNumber(130, y, gPracticeConfig.enemyHealthMinHp);
+                }
+                break;
+            case EHOPT_BOSS_ONLY:
+                Practice_DrawText(54, y, "FILTER:");
+                Practice_DrawTextColor(130, y, gPracticeConfig.enemyHealthBossOnly ? "BOSSES" : "ALL",
+                    255, 255, 0);
+                break;
+            case EHOPT_HIDE_MODELS:
+                Practice_DrawText(54, y, "MODELS:");
+                Practice_DrawTextColor(130, y, gPracticeConfig.enemyHealthHideModels ? "OFF" : "ON",
+                    gPracticeConfig.enemyHealthHideModels ? 255 : 0,
+                    gPracticeConfig.enemyHealthHideModels ? 100 : 255, 0);
+                break;
+            case EHOPT_BACK:
+                Practice_DrawTextColor(54, y, "BACK", 150, 150, 150);
+                break;
+        }
+    }
+}
+
 void Practice_StateMenu_Draw(void) {
     const char* title;
     s32 boxHeight;
@@ -875,6 +1015,11 @@ void Practice_StateMenu_Draw(void) {
             boxHeight = 142;
             helpY = 174;
             break;
+        case PSUBMENU_ENEMY_HEALTH:
+            title = "ENEMY HP";
+            boxHeight = 110;
+            helpY = 142;
+            break;
         default:
             return;
     }
@@ -905,6 +1050,10 @@ void Practice_StateMenu_Draw(void) {
             break;
         case PSUBMENU_MACRO:
             StateMenu_DrawMacro();
+            Practice_DrawTextColor(50, helpY, "A:SELECT  B:BACK", 150, 150, 150);
+            break;
+        case PSUBMENU_ENEMY_HEALTH:
+            StateMenu_DrawEnemyHealth();
             Practice_DrawTextColor(50, helpY, "A:SELECT  B:BACK", 150, 150, 150);
             break;
     }

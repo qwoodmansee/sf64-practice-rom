@@ -148,8 +148,14 @@ CONFIG_OFFSETS = {
     "infLives": 0x84,
     "infBoost": 0x88,
     "prevPlanetsMask": 0x8C,
-    "macroBindState":  0x90,
-    "macroLoop":       0x94,
+    "macroBindState":        0x90,
+    "macroLoop":             0x94,
+    "showEnemyHealth":       0x98,
+    "enemyHealthSort":       0x9C,
+    "enemyHealthMinHp":      0xA0,
+    "enemyHealthBossOnly":   0xA4,
+    "enemyHealthHideModels": 0xA8,
+    "hitCount":              0xAC,
 }
 
 # Player struct field offsets (include/sf64player.h Player)

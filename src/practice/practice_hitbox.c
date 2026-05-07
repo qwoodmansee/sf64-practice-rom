@@ -113,6 +113,16 @@ static void Hitbox_DrawObjectHitboxes(Object* obj, f32* hitboxData, u8 r, u8 g, 
             hasHitRot = true;
         } else if (*hitboxData >= HITBOX_SHADOW) {
             hitboxData++;
+            hitbox = (Hitbox*) hitboxData;
+            Hitbox_DrawBox(
+                obj->pos.x, obj->pos.y, obj->pos.z,
+                obj->rot.x, obj->rot.y, obj->rot.z,
+                0.0f, 0.0f, 0.0f, false,
+                hitbox->z.offset, hitbox->z.size,
+                hitbox->y.offset, hitbox->y.size,
+                hitbox->x.offset, hitbox->x.size,
+                150, 150, 150, 40
+            );
             continue;
         }
 

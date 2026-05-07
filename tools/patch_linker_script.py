@@ -44,6 +44,7 @@ PRACTICE_OBJS = [
     "practice_macro",       # Macro recording / playback logic
     "practice_macro_buf",   # Macro frame buffer -- Pak-only BSS in .practice_macro_pak
     "practice_macro_snap",  # Macro snapshot buffer -- Pak-only BSS in .practice_macro_snap_pak
+    "practice_enemy_health",  # Enemy/boss health HUD overlay
 ]
 
 # Order matters: each entry's predecessor must precede it in the list,
