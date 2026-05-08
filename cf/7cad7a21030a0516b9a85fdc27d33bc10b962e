@@ -1,0 +1,83 @@
+src/practice/practice_main.c
+  s_8675bfa6f628f1::t_eed5e03867edb5 56
+  s_8675bfa6f628f1::t_c6ac139f8ea3d7 57-59
+  s_8675bfa6f628f1::t_e9465420c632ec 60
+  s_8675bfa6f628f1::t_949aeeab5572a1 61
+  s_8675bfa6f628f1::t_f84a3a9167cd11 148
+  s_8675bfa6f628f1::t_82b07370f1af10 202
+tests/test_config_defaults.lua
+  s_8675bfa6f628f1::t_49d84881a90236 60
+  s_8675bfa6f628f1::t_7bf34d261853f4 61-63
+  s_8675bfa6f628f1::t_4c4851bab23393 64
+  s_8675bfa6f628f1::t_330a844912361c 65
+tools/patch_linker_script.py
+  s_8675bfa6f628f1::t_f533c6780d0c89 47
+src/practice/practice_enemy_health.c
+  s_8675bfa6f628f1::t_7974c26f71add5 1-4,11-12,54,64-71,125-127,129,141-144
+  s_8675bfa6f628f1::t_c27421b76c9165 5
+  s_8675bfa6f628f1::t_9604377e20f12a 6-10,27-51,55-59,62,77-85,87-108,112-114,117-124,128,131-138
+  s_8675bfa6f628f1::t_6c503fac5f70e7 13-14,52-53,60-61,109-111,115-116,130
+  s_8675bfa6f628f1::t_13b617a35253ba 15-26
+  s_8675bfa6f628f1::t_855d4bd3a20f3c 63
+  s_8675bfa6f628f1::t_a0c31a780c1cf5 72-76
+  s_8675bfa6f628f1::t_d187d387cb4fb3 86
+  s_8675bfa6f628f1::t_e983368119a939 139-140
+src/practice/practice_hitbox.c
+  s_8675bfa6f628f1::t_16800c671f36d5 116-125
+include/practice.h
+  s_8675bfa6f628f1::t_8c4256b70bd349 61
+  s_8675bfa6f628f1::t_1ff378239f4cb6 62-63,76
+  s_8675bfa6f628f1::t_ee4ea0883d1414 64-66
+  s_8675bfa6f628f1::t_4582d2dc1e316b 230-232
+tools/practice_invariants.py
+  s_8675bfa6f628f1::t_2dd51f8480701f 1494,1500,1504-1505
+  s_8675bfa6f628f1::t_a582cb82bdb423 1495-1499,1501-1503
+  s_8675bfa6f628f1::t_f14c7cf4c4ba80 1506-1527
+  s_8675bfa6f628f1::t_2d7d52bf6946f8 1528,1530-1534,1537-1538,1540,1544-1545
+  s_8675bfa6f628f1::t_a09a0e937a5730 1529,1542-1543
+  s_8675bfa6f628f1::t_59d84867d460a7 1535-1536,1539,1541
+  s_8675bfa6f628f1::t_1338e7c1a74b2f 1764
+  s_8675bfa6f628f1::t_fe3a760e567a74 1765
+  s_8675bfa6f628f1::t_708247fb0f2b68 1766
+src/practice/practice_state.c
+  s_8675bfa6f628f1::t_4a1e1a483971c4 17
+  s_8675bfa6f628f1::t_347be951a6e096 68
+  s_8675bfa6f628f1::t_4bbb66999c1b44 73-77,79-82
+  s_8675bfa6f628f1::t_c729a11d21cf2e 78
+  s_8675bfa6f628f1::t_222cafbd12e221 115-119,121-122
+  s_8675bfa6f628f1::t_a9e9932fca8d76 214-219
+  s_8675bfa6f628f1::t_1d6e3e6065a4ba 280-285
+  s_8675bfa6f628f1::t_5237f0d23e6f5c 366
+  s_8675bfa6f628f1::t_a278993acf5a29 367-368
+  s_8675bfa6f628f1::t_af2f47fd538af8 369
+  s_8675bfa6f628f1::t_e833a6d33c8b92 430-464,468-471
+  s_8675bfa6f628f1::t_f4827676e516dc 465-467
+  s_8675bfa6f628f1::t_d59b4e4a6bfd32 483-485
+  s_8675bfa6f628f1::t_a3f6a256b7bc6f 486-488
+  s_8675bfa6f628f1::t_fbb03afb9c6a90 559,562-563
+  s_8675bfa6f628f1::t_dd38565d4167dd 560-561
+  s_8675bfa6f628f1::t_5189f3019b359f 585-587
+  s_8675bfa6f628f1::t_45384ae400a7ce 661-664
+  s_8675bfa6f628f1::t_473cc609bc480b 811,813
+  s_8675bfa6f628f1::t_ba9b2812ceb033 812
+  s_8675bfa6f628f1::t_e66c12e0949b2b 933-968,975-981
+  s_8675bfa6f628f1::t_ac70778a118249 969-974
+  s_8675bfa6f628f1::t_1d1d1cd94970b3 1018-1022
+  s_8675bfa6f628f1::t_7f8daf0fe81841 1055-1058
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.1",
+  "base_commit_sha": "cf7cad7a21030a0516b9a85fdc27d33bc10b962e",
+  "prompts": {},
+  "sessions": {
+    "s_8675bfa6f628f1": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2378ded8-f40b-414b-84f4-9bb3e0981a81",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "qwoodmansee <github@qwoodmansee.xyz>"
+    }
+  }
+}
