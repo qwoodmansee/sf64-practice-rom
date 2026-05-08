@@ -1491,6 +1491,58 @@ def check_cs_tap_slot_baseline():
         error(f"{cs}: gPlayerShots[14] poll missing from Practice_ChargeAssist_LockOnBegin")
 
 
+def check_enemy_health_hide_models():
+    """Ghost mode: enemyHealthHideModels must trigger a fullscreen blackout in practice_enemy_health.c."""
+    src_path = os.path.join(SRC_PRACTICE, "practice_enemy_health.c")
+    if not os.path.isfile(src_path):
+        return
+    src = read(src_path)
+    if "enemyHealthHideModels" not in src:
+        error(f"{src_path}: enemyHealthHideModels not referenced (ghost mode blackout missing)")
+    if "320" not in src or "240" not in src:
+        error(f"{src_path}: fullscreen blackout rect (320x240) missing for enemyHealthHideModels")
+
+
+def check_hitbox_shadow_drawn():
+    """SHADOW/WHOOSH hitboxes must be drawn (grey), not silently skipped."""
+    hitbox_path = os.path.join(SRC_PRACTICE, "practice_hitbox.c")
+    if not os.path.isfile(hitbox_path):
+        error(f"Hitbox source missing: {hitbox_path}")
+        return
+    src = read(hitbox_path)
+    fn = find_c_function(src, "Hitbox_DrawObjectHitboxes")
+    if fn is None:
+        error("practice_hitbox.c: Hitbox_DrawObjectHitboxes not found")
+        return
+    if "HITBOX_SHADOW" not in fn:
+        error("Hitbox_DrawObjectHitboxes: HITBOX_SHADOW branch missing")
+    # Must call DrawBox inside the SHADOW branch, not just continue
+    shadow_idx = fn.find("HITBOX_SHADOW")
+    if shadow_idx == -1:
+        return
+    branch = fn[shadow_idx:shadow_idx + 400]
+    if "Hitbox_DrawBox" not in branch:
+        error("Hitbox_DrawObjectHitboxes: SHADOW/WHOOSH hitboxes not drawn (grey box missing)")
+
+
+def check_enemy_health():
+    """Enemy health HUD: source exists, wired into Practice_Draw, config fields present."""
+    src_path = os.path.join(SRC_PRACTICE, "practice_enemy_health.c")
+    if not os.path.isfile(src_path):
+        error(f"Enemy health source missing: {src_path}")
+        return
+
+    main_src = read(PRACTICE_MAIN_INIT)
+    practice_h = read(INCLUDE_PRACTICE)
+
+    if "Practice_EnemyHealth_Draw" not in main_src:
+        error(f"{PRACTICE_MAIN_INIT}: Practice_EnemyHealth_Draw not called from Practice_Draw")
+    if "showEnemyHealth" not in practice_h:
+        error(f"{INCLUDE_PRACTICE}: showEnemyHealth not in PracticeConfig")
+    if "enemyHealthSort" not in practice_h:
+        error(f"{INCLUDE_PRACTICE}: enemyHealthSort not in PracticeConfig")
+
+
 def check_boss_test():
     """Boss-test feature: file exists, flag is wired, reset paths are present."""
     boss_test_path = os.path.join(SRC_PRACTICE, "practice_boss_test.c")
@@ -1709,6 +1761,9 @@ def main():
     check_minimap_boss()
     check_build_info()
     check_boss_test()
+    check_enemy_health()
+    check_hitbox_shadow_drawn()
+    check_enemy_health_hide_models()
 
     if errors:
         print("Practice ROM invariant check FAILED:")

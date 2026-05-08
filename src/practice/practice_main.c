@@ -53,6 +53,12 @@ void Practice_Init(void) {
     gPracticeConfig.prevPlanetsMask  = 0;
     gPracticeConfig.macroBindState   = false;
     gPracticeConfig.macroLoop        = false;
+    gPracticeConfig.showEnemyHealth = false;
+    gPracticeConfig.enemyHealthSort = 0;
+    gPracticeConfig.enemyHealthMinHp = 0;
+    gPracticeConfig.enemyHealthBossOnly = false;
+    gPracticeConfig.enemyHealthHideModels = false;
+    gPracticeConfig.hitCount = 0;
 
     /* Boss-test override flag: runtime-only, reset on every boot.
      * Per-launch resets happen in Practice_LevelSelect_Update's non-boss
@@ -139,6 +145,7 @@ void Practice_Draw(void) {
                 if (gPracticeConfig.showInputDisplay) {
                     Practice_InputDisplay_Draw();
                 }
+                Practice_EnemyHealth_Draw();
             }
             Practice_Macro_Draw();
             Practice_Minimap_Draw();
@@ -192,6 +199,7 @@ void Practice_ApplyStartConditions(void) {
     }
 
     gExpertMode = gPracticeConfig.expertMode;
+    gHitCount = gPracticeConfig.hitCount;
 
     if (gPracticeConfig.skipCutscenes) {
         osSyncPrintf("[bgm_dbg] ApplyStart lvl=%d gBgmSeqId=0x%04X\n",

@@ -58,6 +58,12 @@ typedef struct PracticeConfig {
     u32 prevPlanetsMask;
     bool macroBindState;
     bool macroLoop;
+    bool showEnemyHealth;
+    s32 enemyHealthSort;     /* 0 = nearest-first, 1 = highest-HP-first */
+    s32 enemyHealthMinHp;    /* minimum health to display: one of {0,1,5,10,25,50} */
+    bool enemyHealthBossOnly;   /* when true, skip actor section entirely */
+    bool enemyHealthHideModels; /* ghost mode: suppress actor/boss 3-D models */
+    s32 hitCount;               /* starting hit count applied on level launch */
 } PracticeConfig;
 
 typedef enum PracticeSubMenu {
@@ -67,6 +73,7 @@ typedef enum PracticeSubMenu {
     PSUBMENU_VISUALIZERS,
     PSUBMENU_PREV_PLANETS,
     PSUBMENU_MACRO,
+    PSUBMENU_ENEMY_HEALTH,
 } PracticeSubMenu;
 
 typedef enum PracticeAction {
@@ -219,6 +226,9 @@ void Practice_Minimap_Draw(void);
 
 /* practice_hitbox.c */
 void Practice_Hitbox_Draw(void);
+
+/* practice_enemy_health.c */
+void Practice_EnemyHealth_Draw(void);
 
 /* practice_freecam.c */
 bool Practice_FreeCam_IsActive(void);
