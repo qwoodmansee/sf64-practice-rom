@@ -1,0 +1,25 @@
+src/engine/fox_enmy.c
+  s_9514044ff6566e::t_05a0669bf0c615 111-179
+  s_9514044ff6566e::t_0755d1d1ee2aa2 2803-2804
+tests/symbols.lua
+  s_9514044ff6566e::t_961227ce0cce3b 7-58
+tools/practice_invariants.py
+  s_9514044ff6566e::t_0dcf75d49a79a3 192-193
+  s_9514044ff6566e::t_7bc7da7ae745a2 164-190
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "e7b51c537ceea3c128070e41b9dcccb45445eba1",
+  "prompts": {},
+  "sessions": {
+    "s_9514044ff6566e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e0fdf-bed1-73c1-aa92-5470e5c82262",
+        "model": "gpt-5.5"
+      },
+      "human_author": "qwoodmansee <github@qwoodmansee.xyz>"
+    }
+  }
+}
