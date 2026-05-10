@@ -2731,8 +2731,45 @@ void Actor_Move(Actor* this) {
          * frames (a "crash escape"). Anything else means the actor was alive
          * and got past us untouched (a clean escape). Both cases lose 2 of
          * the 2 potential points; we split them so the user can tell whether
-         * to slow down or shoot more. */
-        if (gPracticeConfig.showHitTracking && (this->info.bonus > 0)) {
+         * to slow down or shoot more.
+         *
+         * Skip actors the player physically could not damage:
+         *   1. EVID_EVENT_HANDLER actors are script drivers; player shots
+         *      pass through them (timer_0C2 = 10000, see fox_beam.c).
+         *   2. Anything parked in long-form invulnerability (e.g. the
+         *      EVID_SX_LASER post-hit state pins timer_0C2 = 10000).
+         *   3. Corneria's scripted Granga chase actors. The Slippy one can
+         *      cull after its group fields have been cleared/reset; the
+         *      remaining durable signature at cull time is a reserved team slot,
+         *      EVID_GRANGA_FIGHTER_2, TEAM_ID_MAX. Earlier chase Grangas
+         *      still keep their captain flag, so cover both forms. */
+        s32 i_chase;
+        bool isChaseCaptain = false;
+        bool isEventHandler =
+            (this->obj.id == OBJ_ACTOR_EVENT) && (this->eventType == EVID_EVENT_HANDLER);
+        bool isLongInvuln = this->timer_0C2 >= 1000;
+        bool isGrangaChaseActor =
+            (this->obj.id == OBJ_ACTOR_EVENT) && (this->eventType == EVID_GRANGA_FIGHTER_2) &&
+            (this->iwork[EVA_TEAM_ID] == TEAM_ID_MAX);
+        bool isCorneriaGrangaChaseCaptain =
+            (gCurrentLevel == LEVEL_CORNERIA) && (this->obj.id == OBJ_ACTOR_EVENT) &&
+            (((this->iwork[EVA_GROUP_FLAG] != 0) &&
+              ((this->eventType == EVID_GRANGA_FIGHTER_1) || (this->eventType == EVID_GRANGA_FIGHTER_2))) ||
+             isGrangaChaseActor);
+
+        if ((this->obj.id == OBJ_ACTOR_EVENT) && (this->iwork[EVA_GROUP_FLAG] != 0)) {
+            for (i_chase = 0; i_chase < ARRAY_COUNT(gActors); i_chase++) {
+                Actor* sibling = &gActors[i_chase];
+                if ((sibling != this) && (sibling->obj.status >= OBJ_ACTIVE) &&
+                    (sibling->iwork[EVA_GROUP_ID] == this->iwork[EVA_GROUP_ID]) &&
+                    (sibling->iwork[EVA_TEAM_ID] != 0)) {
+                    isChaseCaptain = true;
+                    break;
+                }
+            }
+        }
+        if (gPracticeConfig.showHitTracking && (this->info.bonus > 0) && !isEventHandler && !isLongInvuln &&
+            !isChaseCaptain && !isCorneriaGrangaChaseCaptain && !isGrangaChaseActor) {
             if (this->obj.status == OBJ_DYING) {
                 gPracticeStats.crashes++;
             } else {

@@ -176,9 +176,26 @@ PLAYER_OFFSETS = {
 }
 
 # Actor fields (first gActors[], include/sf64object.h Actor)
+# iwork[N] lives at 0x050 + N*4; per include/sf64event.h:
+#   EVA_TEAM_ID    = iwork[12] -> 0x080
+#   EVA_GROUP_ID   = iwork[15] -> 0x08C
+#   EVA_GROUP_FLAG = iwork[16] -> 0x090
 ACTOR_OFFSETS = {
-    "state": 0x0B8,
+    "obj_status":      0x000,  # u8 (Object.status)
+    "obj_id":          0x002,  # u16 (Object.id)
+    "obj_pos_x":       0x004,  # f32
+    "obj_pos_y":       0x008,  # f32
+    "obj_pos_z":       0x00C,  # f32
+    "info_bonus":      0x03C,  # u8 (ObjectInfo.bonus, 0x1C + 0x20)
+    "index":           0x040,  # s32
+    "iwork_team_id":   0x080,  # s32 (iwork[EVA_TEAM_ID = 12])
+    "iwork_group_id":  0x08C,  # s32 (iwork[EVA_GROUP_ID = 15])
+    "iwork_group_flag":0x090,  # s32 (iwork[EVA_GROUP_FLAG = 16])
+    "eventType":       0x0B4,  # s16
+    "state":           0x0B8,  # s16
+    "timer_0C2":       0x0C2,  # u16
 }
+ACTOR_SIZEOF = 0x2F4
 
 # Boss struct offsets (include/sf64object.h Boss).
 # Boss.obj is at offset 0; Object.id is u16 at offset 0x02.
@@ -218,6 +235,15 @@ CONSTANTS = {
     "LEVEL_AREA_6":             3,
     "LEVEL_VENOM_1":            6,
     "LEVEL_VENOM_ANDROSS":      9,
+    "OBJ_FREE":                 0,
+    "OBJ_INIT":                 1,
+    "OBJ_ACTIVE":               2,
+    "OBJ_DYING":                3,
+    "OBJ_ACTOR_EVENT":          200,
+    "EVID_GRANGA_FIGHTER_1":    4,
+    "EVID_GRANGA_FIGHTER_2":    5,
+    "EVID_EVENT_HANDLER":       40,
+    "TEAM_ID_MAX":              6,
 }
 
 def kseg0_to_rdram(addr):
@@ -271,6 +297,7 @@ def main():
     print("S.actor = {}")
     for field, off in sorted(ACTOR_OFFSETS.items(), key=lambda x: x[1]):
         print(f"S.actor.{field} = 0x{off:03X}")
+    print(f"S.actor.sizeof = 0x{ACTOR_SIZEOF:03X}")
     print("")
 
     print("-- Boss struct field offsets (include/sf64object.h Boss)")
