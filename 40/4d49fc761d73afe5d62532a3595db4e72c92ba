@@ -1,0 +1,9 @@
+tools/practice_invariants.py
+  ai_agent 195-204
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "404d49fc761d73afe5d62532a3595db4e72c92ba",
+  "prompts": {}
+}
