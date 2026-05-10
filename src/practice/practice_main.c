@@ -1,5 +1,6 @@
 #include "practice.h"
 #include "iodev/iodev.h"
+#include "practice_late.h"
 #include "practice_overlay.h"
 
 #ifdef PRACTICE_ROM
@@ -9,6 +10,8 @@ PracticeConfig gPracticeConfig;
 PracticeMenuState gPracticeMenuState;
 
 void Practice_Init(void) {
+    Practice_Late_Init();
+
     gPracticeScreen = PSCREEN_LEVEL_SELECT;
     Practice_LevelSelect_OnEnter();
     gPracticeMenuState = PMENU_CLOSED;
