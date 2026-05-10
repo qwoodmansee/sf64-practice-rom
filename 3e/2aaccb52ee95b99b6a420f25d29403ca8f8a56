@@ -1,0 +1,42 @@
+Makefile
+  s_0658daf0174915::t_bfd5aad3468f20 176-184
+  s_49a816d98b2602::t_67c18e44e8cad6 382-383
+src/practice/late/loader.c
+  s_0658daf0174915::t_95cc6286a6522d 1-28,34-37
+  s_0658daf0174915::t_61e54e02e2d9b2 29-33
+src/practice/practice_main.c
+  s_0658daf0174915::t_6421133825a655 3,13-14
+tools/patch_linker_script.py
+  s_0658daf0174915::t_5012576706be43 48
+include/practice_late.h
+  s_0658daf0174915::t_662210e7a10bc8 1-14
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "3e2aaccb52ee95b99b6a420f25d29403ca8f8a56",
+  "prompts": {},
+  "humans": {
+    "h_a88c22cb6d1409": {
+      "author": "qwoodmansee <github@qwoodmansee.xyz>"
+    }
+  },
+  "sessions": {
+    "s_0658daf0174915": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b4c9b912-018f-4b2b-affd-9b8d68345438",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "qwoodmansee <github@qwoodmansee.xyz>"
+    },
+    "s_49a816d98b2602": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "850902a9-a0e8-45c5-9eb1-752b3ebc1bc3",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "qwoodmansee <github@qwoodmansee.xyz>"
+    }
+  }
+}
