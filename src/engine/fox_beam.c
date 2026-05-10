@@ -4,6 +4,10 @@
 #include "assets/ast_great_fox.h"
 #include "assets/ast_versus.h"
 
+#ifdef PRACTICE_ROM
+#include "practice.h"
+#endif
+
 Vec3f sShotViewPos;
 
 void PlayerShot_TorpedoTrail_Setup(EffectTorpedoTrail* effect, f32 xPos, f32 yPos, f32 zPos) {
@@ -694,6 +698,20 @@ void PlayerShot_ApplyDamageToActor(PlayerShot* shot, Actor* actor, s32 hitIndex)
             actor->damage = 30;
             actor->lockOnTimers[shot->sourceId] = 0;
         }
+#ifdef PRACTICE_ROM
+        /* CS lock-on direct hit. The secondary explosion hitbox at scale
+         * > 1.5 skips actors that aren't OBJ_ACTIVE, so an enemy that dies
+         * on this 30-damage direct hit contributes nothing to shot->bonus.
+         * That is the "lone lock-on = 1 point" case the score-running
+         * gospel calls out, so we count it as a "direct" loss. High-HP
+         * enemies that survive the direct still pick up the +1 from the
+         * explosion sweep; we over-count them here, which the user
+         * acknowledged as a special case. */
+        if (gPracticeConfig.showHitTracking &&
+            (shot->sourceId == AI360_FOX) && (actor->info.bonus != 0)) {
+            gPracticeStats.directHits++;
+        }
+#endif
     }
     actor->dmgSource = shot->sourceId + 1;
     actor->hitPos.x = shot->obj.pos.x;
@@ -2304,6 +2322,11 @@ void PlayerShot_UpdateShot(PlayerShot* shot, s32 index) {
                         }
                         BonusText_Display(shot->obj.pos.x, shot->obj.pos.y, shot->obj.pos.z, bonus);
                         gHitCount += shot->bonus;
+#ifdef PRACTICE_ROM
+                        if (gPracticeConfig.showHitTracking && (shot->sourceId == AI360_FOX)) {
+                            gPracticeStats.csBonus += shot->bonus;
+                        }
+#endif
                     }
                     if ((shot->bonus >= 7) && !gBossActive && (gLevelMode == LEVELMODE_ON_RAILS) &&
                         ((gTeamShields[TEAM_ID_FALCO] > 0) || (gTeamShields[TEAM_ID_SLIPPY] > 0) ||

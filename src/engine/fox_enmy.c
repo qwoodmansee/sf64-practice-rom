@@ -108,6 +108,75 @@ u32 gWarpRingSfx[] = {
     NA_SE_WARP_RING_6, NA_SE_WARP_RING_7, NA_SE_WARP_RING_7, NA_SE_WARP_RING_7,
 };
 
+#ifdef PRACTICE_ROM
+static bool Actor_PracticeHasShotDamagePath(Actor* actor) {
+    if (actor->timer_0C2 >= 1000) {
+        return false;
+    }
+
+    switch (actor->obj.id) {
+        case OBJ_ACTOR_ME_MOLAR_ROCK:
+            return true;
+
+        case OBJ_ACTOR_EVENT:
+            if ((actor->eventType == EVID_EVENT_HANDLER) || (actor->scale < 0.5f)) {
+                return false;
+            }
+            if (actor->eventType == EVID_SY_SHIP_2) {
+                return true;
+            }
+            return (actor->info.hitbox != NULL) && ((s32) actor->info.hitbox[0] != 0);
+
+        default:
+            return (actor->info.hitbox != NULL) && ((s32) actor->info.hitbox[0] != 0);
+    }
+}
+
+static bool Actor_PracticeIsScriptedChaseEscape(Actor* actor) {
+    s32 i;
+    bool isGrangaChaseActor;
+
+    if (actor->obj.id != OBJ_ACTOR_EVENT) {
+        return false;
+    }
+
+    isGrangaChaseActor =
+        (actor->eventType == EVID_GRANGA_FIGHTER_2) && (actor->iwork[EVA_TEAM_ID] == TEAM_ID_MAX);
+    if ((gCurrentLevel == LEVEL_CORNERIA) &&
+        ((((actor->iwork[EVA_GROUP_FLAG] != 0) &&
+           ((actor->eventType == EVID_GRANGA_FIGHTER_1) || (actor->eventType == EVID_GRANGA_FIGHTER_2)))) ||
+         isGrangaChaseActor)) {
+        return true;
+    }
+
+    if (actor->iwork[EVA_GROUP_FLAG] == 0) {
+        return false;
+    }
+
+    for (i = 0; i < ARRAY_COUNT(gActors); i++) {
+        Actor* sibling = &gActors[i];
+        if ((sibling != actor) && (sibling->obj.status >= OBJ_ACTIVE) &&
+            (sibling->iwork[EVA_GROUP_ID] == actor->iwork[EVA_GROUP_ID]) && (sibling->iwork[EVA_TEAM_ID] != 0)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool Actor_PracticeShouldCountCullEscape(Actor* actor) {
+    if (!gPracticeConfig.showHitTracking || (actor->info.bonus <= 0)) {
+        return false;
+    }
+    if (!Actor_PracticeHasShotDamagePath(actor)) {
+        return false;
+    }
+    if (Actor_PracticeIsScriptedChaseEscape(actor)) {
+        return false;
+    }
+    return true;
+}
+#endif
+
 void Object_PlayerSfx(f32* pos, u32 sfxId, s32 playerNum) {
     PRINTF("CHIME SET \n");
     PRINTF("BOMB SET 1\n");
@@ -1763,11 +1832,12 @@ void Actor_Despawn(Actor* this) {
             D_ctx_80177850 = 15;
 #ifdef PRACTICE_ROM
             if (gPracticeConfig.showHitTracking) {
+                gPracticeStats.kills++;
+                /* Laser kill = always a "direct" hit in the score-running sense:
+                 * a laser earns no CS bonus, so the +1 indirect-bonus
+                 * opportunity for this enemy is gone. */
                 if (this->dmgType == DMG_BEAM) {
-                    gPracticeDirectHits += this->info.bonus;
-                } else {
-                    gPracticeIndirectCount++;
-                    gPracticeIndirectBonus += this->info.bonus;
+                    gPracticeStats.directHits++;
                 }
             }
 #endif
@@ -1797,6 +1867,14 @@ void Actor_Despawn(Actor* this) {
                 }
             }
         }
+#ifdef PRACTICE_ROM
+        else if (gPracticeConfig.showHitTracking && (this->info.bonus != 0) &&
+                 (this->dmgSource >= AI360_FALCO + 1) && (this->dmgSource <= AI360_PEPPY + 1)) {
+            /* Teammate (Falco/Slippy/Peppy) got the killing hit. Fox loses
+             * the full 2-point potential: no base point, no CS bonus chance. */
+            gPracticeStats.teamKills++;
+        }
+#endif
 
         if (this->itemDrop) {
             if (sItemDropRates[this->itemDrop] < 0.0f) {
@@ -2715,12 +2793,23 @@ void Actor_Move(Actor* this) {
         ((this->obj.pos.z + gPathProgress) < -15000.0f) || (this->obj.pos.y < (gPlayer[0].yPath - var_fv0)) ||
         ((gPlayer[0].yPath + var_fv0) < this->obj.pos.y) || ((gPlayer[0].xPath + var_fv0) < this->obj.pos.x) ||
         (this->obj.pos.x < (gPlayer[0].xPath - var_fv0))) {
-        Object_Kill(&this->obj, this->sfxSource);
 #ifdef PRACTICE_ROM
-        if (gPracticeConfig.showHitTracking && (this->info.bonus > 0)) {
-            gPracticeDespawns++;
+        /* Sample status BEFORE Object_Kill clobbers it. OBJ_DYING means the
+         * actor was mid-slow-crash when culling caught up to it, so the
+         * scoring point would have been awarded if it had survived a few more
+         * frames (a "crash escape"). Anything else means the actor was alive
+         * and got past us untouched (a clean escape). Both cases lose 2 of
+         * the 2 potential points; we split them so the user can tell whether
+         * to slow down or shoot more. */
+        if (Actor_PracticeShouldCountCullEscape(this)) {
+            if (this->obj.status == OBJ_DYING) {
+                gPracticeStats.crashes++;
+            } else {
+                gPracticeStats.escapes++;
+            }
         }
 #endif
+        Object_Kill(&this->obj, this->sfxSource);
 
         switch (this->obj.id) {
             case OBJ_ACTOR_ZO_DODORA:

@@ -129,6 +129,82 @@ def check_engine_hooks():
         if symbol not in src:
             error(msg)
 
+def check_score_stats_hooks():
+    """The PracticeStats counters depend on four engine hooks. If any of
+    them silently disappear during a refactor, the HUD shows zeros forever
+    and score-runners think they got a perfect run when they didn't.
+
+    1. fox_enmy.c Actor_Despawn:  kills + directHits (laser) + teamKills
+    2. fox_enmy.c Actor_Move:     escapes vs crashes (split by OBJ_DYING)
+    3. fox_beam.c PlayerShot_UpdateShot: csBonus (sum of shot->bonus)
+    4. fox_beam.c PlayerShot_ApplyDamageToActor: directHits (CS lock-on)
+    """
+    enmy = read("src/engine/fox_enmy.c")
+    beam = read("src/engine/fox_beam.c")
+
+    despawn_fn = find_c_function(enmy, "Actor_Despawn")
+    if despawn_fn is None:
+        error("Could not locate Actor_Despawn() in fox_enmy.c for stats hook check")
+    else:
+        if "gPracticeStats.kills" not in despawn_fn:
+            error("fox_enmy.c Actor_Despawn must increment gPracticeStats.kills on Fox kills")
+        if "gPracticeStats.directHits" not in despawn_fn or "DMG_BEAM" not in despawn_fn:
+            error("fox_enmy.c Actor_Despawn must increment gPracticeStats.directHits on DMG_BEAM kills")
+        if "gPracticeStats.teamKills" not in despawn_fn:
+            error("fox_enmy.c Actor_Despawn must increment gPracticeStats.teamKills on teammate kills")
+
+    move_fn = find_c_function(enmy, "Actor_Move")
+    if move_fn is None:
+        error("Could not locate Actor_Move() in fox_enmy.c for despawn-stats hook check")
+    else:
+        if "gPracticeStats.escapes" not in move_fn or "gPracticeStats.crashes" not in move_fn:
+            error("fox_enmy.c Actor_Move despawn must split escapes vs crashes via gPracticeStats")
+        if "OBJ_DYING" not in move_fn:
+            error("fox_enmy.c Actor_Move despawn must check OBJ_DYING to split crash vs escape")
+        # Cull-time escape accounting must delegate shootability and chase-window
+        # filtering to practice helpers. Keeping those rules out of Actor_Move prevents
+        # the cull hook from growing a brittle pile of per-actor exceptions.
+        if "Actor_PracticeShouldCountCullEscape(this)" not in move_fn:
+            error("fox_enmy.c Actor_Move escape counter must use Actor_PracticeShouldCountCullEscape")
+
+    shot_path_fn = find_c_function(enmy, "Actor_PracticeHasShotDamagePath")
+    if shot_path_fn is None:
+        error("fox_enmy.c must define Actor_PracticeHasShotDamagePath")
+    else:
+        if "timer_0C2 >= 1000" not in shot_path_fn:
+            error("Actor_PracticeHasShotDamagePath must exclude long timer_0C2 invuln")
+        if "EVID_EVENT_HANDLER" not in shot_path_fn:
+            error("Actor_PracticeHasShotDamagePath must exclude EVID_EVENT_HANDLER actors")
+        if "scale < 0.5f" not in shot_path_fn:
+            error("Actor_PracticeHasShotDamagePath must exclude event actors below the damage scale gate")
+        if "OBJ_ACTOR_ME_MOLAR_ROCK" not in shot_path_fn:
+            error("Actor_PracticeHasShotDamagePath must preserve ME_MOLAR_ROCK's poly-collision shot path")
+        if "info.hitbox[0]" not in shot_path_fn:
+            error("Actor_PracticeHasShotDamagePath must require a real hitbox for generic actors")
+
+    chase_fn = find_c_function(enmy, "Actor_PracticeIsScriptedChaseEscape")
+    if chase_fn is None:
+        error("fox_enmy.c must define Actor_PracticeIsScriptedChaseEscape")
+    else:
+        if "EVA_GROUP_FLAG" not in chase_fn or "EVA_TEAM_ID" not in chase_fn:
+            error("Actor_PracticeIsScriptedChaseEscape must exclude chase captains "
+                  "(actors with EVA_GROUP_FLAG set whose group has a teammate sibling)")
+        if "LEVEL_CORNERIA" not in chase_fn or "EVID_GRANGA_FIGHTER_2" not in chase_fn:
+            error("Actor_PracticeIsScriptedChaseEscape must exclude Corneria Granga chase captains")
+
+    update_shot_fn = find_c_function(beam, "PlayerShot_UpdateShot")
+    if update_shot_fn is None:
+        error("Could not locate PlayerShot_UpdateShot() in fox_beam.c for csBonus hook check")
+    elif "gPracticeStats.csBonus" not in update_shot_fn:
+        error("fox_beam.c PlayerShot_UpdateShot must accumulate gPracticeStats.csBonus when a Fox CS explodes")
+
+    apply_damage_fn = find_c_function(beam, "PlayerShot_ApplyDamageToActor")
+    if apply_damage_fn is None:
+        error("Could not locate PlayerShot_ApplyDamageToActor() in fox_beam.c for directHits hook check")
+    elif "gPracticeStats.directHits" not in apply_damage_fn:
+        error("fox_beam.c PlayerShot_ApplyDamageToActor must increment gPracticeStats.directHits on CS lock-on direct hits")
+
+
 def check_cutscene_skip_hook():
     """gCsWasNotSkipped must be set to false in Game_SetGameState's GSTATE_PLAY case.
 
@@ -1715,6 +1791,7 @@ def main():
     check_function_definitions()
     check_source_in_build()
     check_engine_hooks()
+    check_score_stats_hooks()
     check_cutscene_skip_hook()
     check_isviewer_sc64()
     check_iodev_sc64()
