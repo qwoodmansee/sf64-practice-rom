@@ -108,6 +108,75 @@ u32 gWarpRingSfx[] = {
     NA_SE_WARP_RING_6, NA_SE_WARP_RING_7, NA_SE_WARP_RING_7, NA_SE_WARP_RING_7,
 };
 
+#ifdef PRACTICE_ROM
+static bool Actor_PracticeHasShotDamagePath(Actor* actor) {
+    if (actor->timer_0C2 >= 1000) {
+        return false;
+    }
+
+    switch (actor->obj.id) {
+        case OBJ_ACTOR_ME_MOLAR_ROCK:
+            return true;
+
+        case OBJ_ACTOR_EVENT:
+            if ((actor->eventType == EVID_EVENT_HANDLER) || (actor->scale < 0.5f)) {
+                return false;
+            }
+            if (actor->eventType == EVID_SY_SHIP_2) {
+                return true;
+            }
+            return (actor->info.hitbox != NULL) && ((s32) actor->info.hitbox[0] != 0);
+
+        default:
+            return (actor->info.hitbox != NULL) && ((s32) actor->info.hitbox[0] != 0);
+    }
+}
+
+static bool Actor_PracticeIsScriptedChaseEscape(Actor* actor) {
+    s32 i;
+    bool isGrangaChaseActor;
+
+    if (actor->obj.id != OBJ_ACTOR_EVENT) {
+        return false;
+    }
+
+    isGrangaChaseActor =
+        (actor->eventType == EVID_GRANGA_FIGHTER_2) && (actor->iwork[EVA_TEAM_ID] == TEAM_ID_MAX);
+    if ((gCurrentLevel == LEVEL_CORNERIA) &&
+        ((((actor->iwork[EVA_GROUP_FLAG] != 0) &&
+           ((actor->eventType == EVID_GRANGA_FIGHTER_1) || (actor->eventType == EVID_GRANGA_FIGHTER_2)))) ||
+         isGrangaChaseActor)) {
+        return true;
+    }
+
+    if (actor->iwork[EVA_GROUP_FLAG] == 0) {
+        return false;
+    }
+
+    for (i = 0; i < ARRAY_COUNT(gActors); i++) {
+        Actor* sibling = &gActors[i];
+        if ((sibling != actor) && (sibling->obj.status >= OBJ_ACTIVE) &&
+            (sibling->iwork[EVA_GROUP_ID] == actor->iwork[EVA_GROUP_ID]) && (sibling->iwork[EVA_TEAM_ID] != 0)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool Actor_PracticeShouldCountCullEscape(Actor* actor) {
+    if (!gPracticeConfig.showHitTracking || (actor->info.bonus <= 0)) {
+        return false;
+    }
+    if (!Actor_PracticeHasShotDamagePath(actor)) {
+        return false;
+    }
+    if (Actor_PracticeIsScriptedChaseEscape(actor)) {
+        return false;
+    }
+    return true;
+}
+#endif
+
 void Object_PlayerSfx(f32* pos, u32 sfxId, s32 playerNum) {
     PRINTF("CHIME SET \n");
     PRINTF("BOMB SET 1\n");
@@ -2731,63 +2800,8 @@ void Actor_Move(Actor* this) {
          * frames (a "crash escape"). Anything else means the actor was alive
          * and got past us untouched (a clean escape). Both cases lose 2 of
          * the 2 potential points; we split them so the user can tell whether
-         * to slow down or shoot more.
-         *
-         * Skip actors the player physically could not damage:
-         *   1. EVID_EVENT_HANDLER actors are script drivers; player shots
-         *      pass through them (timer_0C2 = 10000, see fox_beam.c).
-         *   2. Anything parked in long-form invulnerability (e.g. the
-         *      EVID_SX_LASER post-hit state pins timer_0C2 = 10000).
-         *   3. Event actors whose scale is below the damage gate used by
-         *      ActorEvent_Update. Beam hits on these actors are reflected or
-         *      ignored, and ActorEvent_ApplyDamage is not called. Meteo's
-         *      dark gray meteor rocks use this path.
-         *   4. Regular no-hitbox actor classes with bonus set in ObjectInfo
-         *      but no player-shot collision path. ME_MOLAR_ROCK is not listed:
-         *      fox_beam.c gives it an explicit poly-collision path, so it is
-         *      shootable and should still count.
-         *   5. Corneria's scripted Granga chase actors. The Slippy one can
-         *      cull after its group fields have been cleared/reset; the
-         *      remaining durable signature at cull time is a reserved team slot,
-         *      EVID_GRANGA_FIGHTER_2, TEAM_ID_MAX. Earlier chase Grangas
-         *      still keep their captain flag, so cover both forms. */
-        s32 i_chase;
-        bool isChaseCaptain = false;
-        bool isEventHandler =
-            (this->obj.id == OBJ_ACTOR_EVENT) && (this->eventType == EVID_EVENT_HANDLER);
-        bool isLongInvuln = this->timer_0C2 >= 1000;
-        bool isSmallScaleEventActor = (this->obj.id == OBJ_ACTOR_EVENT) && (this->scale < 0.5f);
-        bool isUnshootableNoHitboxActor =
-            (this->obj.id == OBJ_ACTOR_ME_METEOR_SHOWER_1) ||
-            (this->obj.id == OBJ_ACTOR_ME_METEOR_SHOWER_2) ||
-            (this->obj.id == OBJ_ACTOR_ME_METEOR_SHOWER_3) ||
-            (this->obj.id == OBJ_ACTOR_TI_GREAT_FOX) ||
-            (this->obj.id == OBJ_ACTOR_UNK_237) ||
-            (this->obj.id == OBJ_ACTOR_SO_WAVE) ||
-            (this->obj.id == OBJ_ACTOR_SO_PROMINENCE);
-        bool isGrangaChaseActor =
-            (this->obj.id == OBJ_ACTOR_EVENT) && (this->eventType == EVID_GRANGA_FIGHTER_2) &&
-            (this->iwork[EVA_TEAM_ID] == TEAM_ID_MAX);
-        bool isCorneriaGrangaChaseCaptain =
-            (gCurrentLevel == LEVEL_CORNERIA) && (this->obj.id == OBJ_ACTOR_EVENT) &&
-            (((this->iwork[EVA_GROUP_FLAG] != 0) &&
-              ((this->eventType == EVID_GRANGA_FIGHTER_1) || (this->eventType == EVID_GRANGA_FIGHTER_2))) ||
-             isGrangaChaseActor);
-
-        if ((this->obj.id == OBJ_ACTOR_EVENT) && (this->iwork[EVA_GROUP_FLAG] != 0)) {
-            for (i_chase = 0; i_chase < ARRAY_COUNT(gActors); i_chase++) {
-                Actor* sibling = &gActors[i_chase];
-                if ((sibling != this) && (sibling->obj.status >= OBJ_ACTIVE) &&
-                    (sibling->iwork[EVA_GROUP_ID] == this->iwork[EVA_GROUP_ID]) &&
-                    (sibling->iwork[EVA_TEAM_ID] != 0)) {
-                    isChaseCaptain = true;
-                    break;
-                }
-            }
-        }
-        if (gPracticeConfig.showHitTracking && (this->info.bonus > 0) && !isEventHandler && !isLongInvuln &&
-            !isSmallScaleEventActor && !isUnshootableNoHitboxActor && !isChaseCaptain &&
-            !isCorneriaGrangaChaseCaptain && !isGrangaChaseActor) {
+         * to slow down or shoot more. */
+        if (Actor_PracticeShouldCountCullEscape(this)) {
             if (this->obj.status == OBJ_DYING) {
                 gPracticeStats.crashes++;
             } else {

@@ -161,25 +161,36 @@ def check_score_stats_hooks():
             error("fox_enmy.c Actor_Move despawn must split escapes vs crashes via gPracticeStats")
         if "OBJ_DYING" not in move_fn:
             error("fox_enmy.c Actor_Move despawn must check OBJ_DYING to split crash vs escape")
-        # Unkillable-actor filter: EVID_EVENT_HANDLER actors (script drivers, like the
-        # Corneria Slippy-chase Granga after re-init), anything pinned in long-form
-        # invulnerability via timer_0C2, event actors below the scale damage gate,
-        # regular no-hitbox actor classes with no player-shot collision path, and
-        # Corneria scripted Granga chase captains must NOT count as escapes - the
-        # player could not have realistically damaged them during the chase window.
-        if "EVID_EVENT_HANDLER" not in move_fn:
-            error("fox_enmy.c Actor_Move escape counter must exclude EVID_EVENT_HANDLER actors")
-        if "timer_0C2" not in move_fn:
-            error("fox_enmy.c Actor_Move escape counter must exclude actors with long timer_0C2 invuln")
-        if "scale < 0.5f" not in move_fn:
-            error("fox_enmy.c Actor_Move escape counter must exclude event actors below the damage scale gate")
-        if "OBJ_ACTOR_ME_METEOR_SHOWER_1" not in move_fn or "OBJ_ACTOR_SO_PROMINENCE" not in move_fn:
-            error("fox_enmy.c Actor_Move escape counter must exclude unshootable no-hitbox actor classes")
-        if "EVA_GROUP_FLAG" not in move_fn or "EVA_TEAM_ID" not in move_fn:
-            error("fox_enmy.c Actor_Move escape counter must exclude chase captains "
+        # Cull-time escape accounting must delegate shootability and chase-window
+        # filtering to practice helpers. Keeping those rules out of Actor_Move prevents
+        # the cull hook from growing a brittle pile of per-actor exceptions.
+        if "Actor_PracticeShouldCountCullEscape(this)" not in move_fn:
+            error("fox_enmy.c Actor_Move escape counter must use Actor_PracticeShouldCountCullEscape")
+
+    shot_path_fn = find_c_function(enmy, "Actor_PracticeHasShotDamagePath")
+    if shot_path_fn is None:
+        error("fox_enmy.c must define Actor_PracticeHasShotDamagePath")
+    else:
+        if "timer_0C2 >= 1000" not in shot_path_fn:
+            error("Actor_PracticeHasShotDamagePath must exclude long timer_0C2 invuln")
+        if "EVID_EVENT_HANDLER" not in shot_path_fn:
+            error("Actor_PracticeHasShotDamagePath must exclude EVID_EVENT_HANDLER actors")
+        if "scale < 0.5f" not in shot_path_fn:
+            error("Actor_PracticeHasShotDamagePath must exclude event actors below the damage scale gate")
+        if "OBJ_ACTOR_ME_MOLAR_ROCK" not in shot_path_fn:
+            error("Actor_PracticeHasShotDamagePath must preserve ME_MOLAR_ROCK's poly-collision shot path")
+        if "info.hitbox[0]" not in shot_path_fn:
+            error("Actor_PracticeHasShotDamagePath must require a real hitbox for generic actors")
+
+    chase_fn = find_c_function(enmy, "Actor_PracticeIsScriptedChaseEscape")
+    if chase_fn is None:
+        error("fox_enmy.c must define Actor_PracticeIsScriptedChaseEscape")
+    else:
+        if "EVA_GROUP_FLAG" not in chase_fn or "EVA_TEAM_ID" not in chase_fn:
+            error("Actor_PracticeIsScriptedChaseEscape must exclude chase captains "
                   "(actors with EVA_GROUP_FLAG set whose group has a teammate sibling)")
-        if "isCorneriaGrangaChaseCaptain" not in move_fn or "EVID_GRANGA_FIGHTER_2" not in move_fn:
-            error("fox_enmy.c Actor_Move escape counter must exclude Corneria Granga chase captains")
+        if "LEVEL_CORNERIA" not in chase_fn or "EVID_GRANGA_FIGHTER_2" not in chase_fn:
+            error("Actor_PracticeIsScriptedChaseEscape must exclude Corneria Granga chase captains")
 
     if "gPracticeStats.csBonus" not in beam:
         error("fox_beam.c must accumulate gPracticeStats.csBonus when a Fox CS explodes")

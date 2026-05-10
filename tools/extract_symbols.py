@@ -242,7 +242,6 @@ CONSTANTS = {
     "OBJ_DYING":                3,
     "OBJ_ACTOR_EVENT":          200,
     "OBJ_ACTOR_ME_METEOR_SHOWER_1": 183,
-    "OBJ_ACTOR_SO_PROMINENCE":  279,
     "EVID_GRANGA_FIGHTER_1":    4,
     "EVID_GRANGA_FIGHTER_2":    5,
     "EVID_EVENT_HANDLER":       40,
