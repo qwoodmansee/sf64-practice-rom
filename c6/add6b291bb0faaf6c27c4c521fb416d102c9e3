@@ -1,0 +1,26 @@
+.claude/skills/reclaim-rom-headroom/SKILL.md
+  s_49a816d98b2602::t_97ab922a2e2507 1-254
+docs/superpowers/specs/2026-05-09-practice-rom-memory-architecture-design.md
+  s_49a816d98b2602::t_e90bce405617d8 1-688
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "c6add6b291bb0faaf6c27c4c521fb416d102c9e3",
+  "prompts": {},
+  "humans": {
+    "h_a88c22cb6d1409": {
+      "author": "qwoodmansee <github@qwoodmansee.xyz>"
+    }
+  },
+  "sessions": {
+    "s_49a816d98b2602": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "850902a9-a0e8-45c5-9eb1-752b3ebc1bc3",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "qwoodmansee <github@qwoodmansee.xyz>"
+    }
+  }
+}
