@@ -1,0 +1,32 @@
+src/engine/fox_enmy.c
+  s_9514044ff6566e::t_f5f2819598489e 2745-2749,2760-2767,2789-2790
+  s_9514044ff6566e::t_fbe221760aca25 2741-2744,2759
+tools/practice_invariants.py
+  s_9514044ff6566e::t_5802f603ba02c0 166-169,176-177
+  s_9514044ff6566e::t_046f90f02e75a2 174-175
+tests/test_unkillable_no_escape.lua
+  s_9514044ff6566e::t_6302ab125f5d84 2-5,96-108
+  s_9514044ff6566e::t_28763fda36b97f 192-211,276,310
+  s_9514044ff6566e::t_febc6dbed22bba 1,83,172-191
+tools/extract_symbols.py
+  s_9514044ff6566e::t_9659324206eecf 244-245
+  s_9514044ff6566e::t_388278a9f8ac92 197,249
+tests/symbols.lua
+  s_9514044ff6566e::t_22d4be0457665d 7-58,139,152,170-171
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "58e28ac3ccd22b804c4eff4b90d23f03fe70030b",
+  "prompts": {},
+  "sessions": {
+    "s_9514044ff6566e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e0fdf-bed1-73c1-aa92-5470e5c82262",
+        "model": "gpt-5.5"
+      },
+      "human_author": "qwoodmansee <github@qwoodmansee.xyz>"
+    }
+  }
+}
