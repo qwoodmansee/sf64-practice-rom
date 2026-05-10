@@ -1,0 +1,29 @@
+docs/superpowers/plans/2026-05-09-phase1-practice-late-core.md
+  s_49a816d98b2602::t_fc8ba84d255730 30
+  s_49a816d98b2602::t_9485f96bfd0f05 432-434
+  s_49a816d98b2602::t_05bd2622f631f8 468
+  s_49a816d98b2602::t_914711e6a764b7 63,65,70-72
+  s_49a816d98b2602::t_506d855ef25497 569-571,574-584,586,590-611,613-619,621-630,633,635-638,640-650,653-657
+  s_49a816d98b2602::t_b7b24a0d8943d1 662-666
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "d93fc229819172cf34a0fdf74b42ac1dd87e684c",
+  "prompts": {},
+  "humans": {
+    "h_a88c22cb6d1409": {
+      "author": "qwoodmansee <github@qwoodmansee.xyz>"
+    }
+  },
+  "sessions": {
+    "s_49a816d98b2602": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "850902a9-a0e8-45c5-9eb1-752b3ebc1bc3",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "qwoodmansee <github@qwoodmansee.xyz>"
+    }
+  }
+}
