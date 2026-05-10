@@ -192,9 +192,16 @@ def check_score_stats_hooks():
         if "LEVEL_CORNERIA" not in chase_fn or "EVID_GRANGA_FIGHTER_2" not in chase_fn:
             error("Actor_PracticeIsScriptedChaseEscape must exclude Corneria Granga chase captains")
 
-    if "gPracticeStats.csBonus" not in beam:
-        error("fox_beam.c must accumulate gPracticeStats.csBonus when a Fox CS explodes")
-    if "gPracticeStats.directHits" not in beam:
+    update_shot_fn = find_c_function(beam, "PlayerShot_UpdateShot")
+    if update_shot_fn is None:
+        error("Could not locate PlayerShot_UpdateShot() in fox_beam.c for csBonus hook check")
+    elif "gPracticeStats.csBonus" not in update_shot_fn:
+        error("fox_beam.c PlayerShot_UpdateShot must accumulate gPracticeStats.csBonus when a Fox CS explodes")
+
+    apply_damage_fn = find_c_function(beam, "PlayerShot_ApplyDamageToActor")
+    if apply_damage_fn is None:
+        error("Could not locate PlayerShot_ApplyDamageToActor() in fox_beam.c for directHits hook check")
+    elif "gPracticeStats.directHits" not in apply_damage_fn:
         error("fox_beam.c PlayerShot_ApplyDamageToActor must increment gPracticeStats.directHits on CS lock-on direct hits")
 
 
