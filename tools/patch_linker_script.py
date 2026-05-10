@@ -83,6 +83,13 @@ LIB_UI_OBJS = [
     "file_browser", # Phase 6: SD file picker state machine
 ]
 
+# Files that live in the .practice_late_core LOAD segment (RAM 0x801F4000).
+# Loaded at boot by Practice_Late_Init via Lib_DmaRead. See spec at
+# docs/superpowers/specs/2026-05-09-practice-rom-memory-architecture-design.md
+# Each entry is a relative path under build/ (e.g. "lib/iodev/iodev").
+# Empty in Wave 2; Wave 4 of the Phase 1 plan populates this list.
+PRACTICE_LATE_CORE_OBJS = []
+
 ANCHOR = "build/src/engine/fox_save.o"
 
 # Phase 3: Expansion Pak slot pool at 0x80400000 (above 4 MB stock limit).
@@ -129,6 +136,65 @@ PRACTICE_MACRO_SNAP_SECTION = """\
         practice_macro_snap_pak_BSS_END = .;
     }
 """
+
+
+def emit_practice_late_core_segment(objs):
+    """Emit the .practice_late_core (LOAD) + .practice_late_core_bss (NOLOAD)
+    block as a single linker-script snippet.
+
+    Returns a multiline string ready for injection into the .ld file. The
+    DECLARE_SEGMENT macro chain in include/sf64dma.h consumes the boundary
+    symbols (VRAM/ROM/TEXT/DATA/RODATA/BSS START/END) emitted here.
+
+    objs: list of build/-relative paths without .o extension or section
+    suffix, e.g. ["lib/iodev/iodev", "lib/crc32"].
+
+    Wave 2 of the Phase 1 plan calls this with an empty list to scaffold the
+    segment; Wave 4 populates the list with the eleven migration targets.
+    """
+    lines = []
+    lines.append("    /* practice_late_core: stock-RAM safe persistent overlay")
+    lines.append("     * Loaded at boot by Practice_Late_Init via Lib_DmaRead. See")
+    lines.append("     * docs/superpowers/specs/2026-05-09-practice-rom-memory-architecture-design.md.")
+    lines.append("     */")
+    lines.append("    practice_late_core_ROM_START = __romPos;")
+    lines.append("    practice_late_core_VRAM = 0x801F4000;")
+    lines.append("    .practice_late_core 0x801F4000 : AT(practice_late_core_ROM_START) SUBALIGN(16)")
+    lines.append("    {")
+    lines.append("        FILL(0x00000000);")
+    lines.append("        practice_late_core_VRAM_START = .;")
+    lines.append("        practice_late_core_TEXT_START = .;")
+    for obj in objs:
+        lines.append(f"        build/{obj}.o(.text);")
+    lines.append("        . = ALIGN(., 16);")
+    lines.append("        practice_late_core_TEXT_END = .;")
+    lines.append("        practice_late_core_DATA_START = .;")
+    for obj in objs:
+        lines.append(f"        build/{obj}.o(.data);")
+    lines.append("        practice_late_core_DATA_END = .;")
+    lines.append("        practice_late_core_RODATA_START = .;")
+    for obj in objs:
+        lines.append(f"        build/{obj}.o(.rodata);")
+    lines.append("        . = ALIGN(., 16);")
+    lines.append("        practice_late_core_RODATA_END = .;")
+    lines.append("    }")
+    lines.append("    practice_late_core_bss_VRAM = ADDR(.practice_late_core_bss);")
+    lines.append("    .practice_late_core_bss (NOLOAD) : SUBALIGN(16)")
+    lines.append("    {")
+    lines.append("        FILL(0x00000000);")
+    lines.append("        practice_late_core_BSS_START = .;")
+    for obj in objs:
+        lines.append(f"        build/{obj}.o(.bss);")
+    lines.append("        . = ALIGN(., 16);")
+    lines.append("        practice_late_core_BSS_END = .;")
+    lines.append("        practice_late_core_BSS_SIZE = ABSOLUTE(practice_late_core_BSS_END - practice_late_core_BSS_START);")
+    lines.append("    }")
+    lines.append("    __romPos += SIZEOF(.practice_late_core);")
+    lines.append("    __romPos = ALIGN(__romPos, 16);")
+    lines.append("    . = ALIGN(., 16);")
+    lines.append("    practice_late_core_ROM_END = __romPos;")
+    lines.append("    practice_late_core_VRAM_END = .;")
+    return "\n".join(lines) + "\n"
 
 
 def migrate_legacy_practice_pool_pak(content):
@@ -430,6 +496,27 @@ def patch():
         )
         if snap_bss in new_content:
             new_content = new_content.replace(snap_bss, snap_comment, 1)
+        content = new_content
+        inject_count += 1
+
+    # Inject .practice_late_core (LOAD) + .practice_late_core_bss (NOLOAD)
+    # immediately after dma_table_VRAM_END = .;. Runs LAST among the
+    # post-dma_table injections so the textual order ends up:
+    #   .dma_table -> .practice_late_core -> .practice_pool_pak ->
+    #   .practice_macro_pak -> .practice_macro_snap_pak -> .buffers
+    # which keeps the location counter (`.`) moving monotonically through the
+    # LOAD segment before the NOLOAD Pak segments jump it to 0x80400000+.
+    if ".practice_late_core" not in content:
+        anchor_line = "    dma_table_VRAM_END = .;"
+        needle = anchor_line + "\n"
+        segment_text = emit_practice_late_core_segment(PRACTICE_LATE_CORE_OBJS)
+        replacement = anchor_line + "\n\n" + segment_text
+        new_content = content.replace(needle, replacement, 1)
+        if new_content == content:
+            raise RuntimeError(
+                "Linker patcher: dma_table_VRAM_END anchor not found for "
+                ".practice_late_core injection."
+            )
         content = new_content
         inject_count += 1
 
