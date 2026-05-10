@@ -1,0 +1,105 @@
+docs/superpowers/plans/2026-05-09-phase1-practice-late-core.md
+  s_49a816d98b2602::t_1c877628ec9e85 659-667
+  s_49a816d98b2602::t_fdff3bad655a08 705,707,709
+  s_49a816d98b2602::t_48c800a1f3ad66 752-754,756,759,762,764-765,768-769,772-778,780
+tools/practice_invariants.py
+  s_49a816d98b2602::t_67c18e44e8cad6 241-331,333-338,340-341,354,371-374,376-379,381-386,498-500,1903-1904
+lib/iodev/iodev_internal.h
+  s_49a816d98b2602::t_67c18e44e8cad6 21-23
+lib/slot_manager.c
+  s_49a816d98b2602::t_67c18e44e8cad6 270-295,309-310,334-342,349,353-364
+lib/test/Makefile
+  s_49a816d98b2602::t_67c18e44e8cad6 20,27-32,94
+lib/test/test_sd_host.c
+  s_dfe6f1ab600e00::t_6a2c367b54af61 378
+  s_dfe6f1ab600e00::t_28c8c06f500f61 486-488,491,493
+  s_dfe6f1ab600e00::t_6edf6b95a1cb67 718-731
+  s_dfe6f1ab600e00::t_52e6550d123686 821
+  s_dfe6f1ab600e00::t_3589c0c84f111c 546-717,732-785
+  s_dfe6f1ab600e00::t_b4101a0d162540 1-377,379-485,489-490,492,494-545,786-820,822-831
+lib/sd_host/sd_host.c
+  s_dfe6f1ab600e00::t_d0079c129b7d0c 205,208-212,214-499
+  s_dfe6f1ab600e00::t_4b810b9bacf17e 3-4,11,17-20,23-24,27-28,32,47-50,61-62,77-79,94-95,110,125,133,166,178,186-187,204,206,530,546,552,561,587,592-600
+  s_dfe6f1ab600e00::t_bbb74b2adf747b 142-165
+  s_dfe6f1ab600e00::t_842f937075a5f0 1-2,5-10,12-16,21-22,25-26,29-31,33-46,51-60,63-76,80-93,96-109,111-124,126-132,134-141,167-177,179-185,188-203,207,213,500-529,531-545,547-551,553-560,562-586,588-591,601-610,612-613,632-643,646-649,687-692,695-698,733
+  s_dfe6f1ab600e00::t_8dca871f9b7e9c 611,614-631,644-645,650-686,693-694,699-732
+tools/patch_linker_script.py
+  s_0658daf0174915::t_d0dafcd908fbae 51-66
+  s_0658daf0174915::t_1182852fc18d9b 465-473,478,487-493,507-515,529-538
+  s_0658daf0174915::t_d373f78e815705 160,168-171,173-176,179-187,199,203,206,215,228-295
+  s_0658daf0174915::t_491574cbf981e9 647-651
+  s_0658daf0174915::t_36173ee9042b3f 87-110
+lib/iodev/iodev_ed64.c
+  s_49a816d98b2602::t_67c18e44e8cad6 1,3-11,13-17,19-21,24,27-107,110,112-115,117-121,123-125,127,129-131,134-136,139-141,144-147,150,153-166,170-174,177-182,185-191,193-198,200-211,214-221,225-239,241-256,258,261-263,265-267,270-286,289-316,318-329,331-362,365-376,378-382,384-406,409-417,420-428,430-434,436,439-441,443-444,449,453,457-523,526-527,531-532
+  s_7a2b11fc53e78d::t_69136ddb8af505 142,212,264
+  s_dfe6f1ab600e00::t_d9d2f8f7e6bf51 524
+lib/iodev/iodev.c
+  s_49a816d98b2602::t_67c18e44e8cad6 27-30,36,43-47,50-51
+lib/sd_host/sd_proto.h
+  s_dfe6f1ab600e00::t_7e73ef1a402d8a 68-81
+  s_dfe6f1ab600e00::t_991c61f20a44b0 1-19,21-67,82-108
+  s_dfe6f1ab600e00::t_a6c75c2178b2b8 20
+lib/iodev/iodev.h
+  s_49a816d98b2602::t_67c18e44e8cad6 37-41,61-65
+  s_7a2b11fc53e78d::t_b9a96201dbbb88 66
+lib/iodev/iodev_ed64_v1.c
+  s_dfe6f1ab600e00::t_a84916fffba910 1-230,233,247-445
+  s_dfe6f1ab600e00::t_422c96a3ab72dd 231-232,234-246
+src/practice/practice_sd.c
+  s_49a816d98b2602::t_67c18e44e8cad6 26,166-184,211,221
+lib/iodev/iodev_ed64_v2.c
+  h_a88c22cb6d1409 348
+  s_dfe6f1ab600e00::t_9a22292a9f76fd 1-347,349-618
+lib/sd_host/sd_host.h
+  s_dfe6f1ab600e00::t_1a7c9a494d6d09 100-116
+  s_dfe6f1ab600e00::t_64042d35477762 118-123
+  s_dfe6f1ab600e00::t_690562f145d361 8-9,11-17,154,163,170,175
+  s_dfe6f1ab600e00::t_a72e6cb58e5375 133-151
+  s_dfe6f1ab600e00::t_2fc5739b25fd5e 65,69
+  s_dfe6f1ab600e00::t_11dbc82531ad79 1-7,10,18-64,66-68,70-99,117,124-132,152-153,155-162,164-169,171-174,176-179
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "129883dcc995a9a90408ab148477dbd9444e60ab",
+  "prompts": {},
+  "humans": {
+    "h_a88c22cb6d1409": {
+      "author": "qwoodmansee <github@qwoodmansee.xyz>"
+    }
+  },
+  "sessions": {
+    "s_0658daf0174915": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b4c9b912-018f-4b2b-affd-9b8d68345438",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "qwoodmansee <github@qwoodmansee.xyz>"
+    },
+    "s_49a816d98b2602": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "850902a9-a0e8-45c5-9eb1-752b3ebc1bc3",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "qwoodmansee <github@qwoodmansee.xyz>"
+    },
+    "s_7a2b11fc53e78d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "78adae1d-43a7-4ebb-b815-7e3ec7ab9388",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "qwoodmansee <github@qwoodmansee.xyz>"
+    },
+    "s_dfe6f1ab600e00": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "05eee7e0-2417-47cb-9d07-12d683e38629",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "qwoodmansee <github@qwoodmansee.xyz>"
+    }
+  }
+}
