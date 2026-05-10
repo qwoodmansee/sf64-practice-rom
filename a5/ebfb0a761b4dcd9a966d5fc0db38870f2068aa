@@ -1,0 +1,44 @@
+tests/test_score_stats.lua
+  s_98bcc88fe69dfa::t_438bf9ce54875f 1-75
+tools/practice_invariants.py
+  s_98bcc88fe69dfa::t_a0daadcf505913 132-170
+  s_98bcc88fe69dfa::t_cc0a97a03fdedb 1757
+src/engine/fox_beam.c
+  s_98bcc88fe69dfa::t_14abd22d26771a 702-709
+  s_98bcc88fe69dfa::t_16f9fd99bbe999 7-10
+  s_98bcc88fe69dfa::t_2e03df7907c53e 701,710-714
+  s_98bcc88fe69dfa::t_f11c97b3067e16 2325-2329
+src/practice/practice_hud.c
+  s_98bcc88fe69dfa::t_6413f57c711933 31,46-51
+  s_98bcc88fe69dfa::t_91603a15bd0240 158
+  s_98bcc88fe69dfa::t_a2ba7a0c193ad7 246-253,255,258-259,262-263,266-267
+tests/symbols.lua
+  s_98bcc88fe69dfa::t_6ca3fb0aa4780a 7-58,101-115
+include/practice.h
+  s_98bcc88fe69dfa::t_e4322852a0f1ef 103-117
+tools/extract_symbols.py
+  s_98bcc88fe69dfa::t_a97ad72d24ed6b 258-263
+  s_98bcc88fe69dfa::t_38da57962cd45b 160-169
+  s_98bcc88fe69dfa::t_a21e172f3a883e 33
+src/engine/fox_enmy.c
+  s_98bcc88fe69dfa::t_3b35f7a86441fd 1766-1769,1771
+  s_98bcc88fe69dfa::t_e262596616e259 2728-2734,2736-2740,2743
+  s_98bcc88fe69dfa::t_af7fa43438b4b5 1801-1803,1806-1808
+  s_98bcc88fe69dfa::t_1eca530a4fc38c 1804-1805
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "a5ebfb0a761b4dcd9a966d5fc0db38870f2068aa",
+  "prompts": {},
+  "sessions": {
+    "s_98bcc88fe69dfa": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "470719c8-374c-4302-9f86-8069ca2d1d71",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "qwoodmansee <github@qwoodmansee.xyz>"
+    }
+  }
+}
