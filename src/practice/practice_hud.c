@@ -28,10 +28,7 @@ static s32 sStatusTimer = 0;
 static u8 sStatusR = 255;
 static u8 sStatusG = 255;
 static u8 sStatusB = 255;
-s32 gPracticeDirectHits = 0;
-s32 gPracticeIndirectCount = 0;
-s32 gPracticeIndirectBonus = 0;
-s32 gPracticeDespawns = 0;
+PracticeStats gPracticeStats;
 
 void Practice_Hud_Reset(void) {
     Practice_ChargeAssist_Reset();
@@ -46,10 +43,12 @@ void Practice_Hud_Reset(void) {
     sCSImpactFrame = -1;
     sLastCSTimingOffset = 0;
     sCSTimingValid = false;
-    gPracticeDirectHits = 0;
-    gPracticeIndirectCount = 0;
-    gPracticeIndirectBonus = 0;
-    gPracticeDespawns = 0;
+    gPracticeStats.kills = 0;
+    gPracticeStats.csBonus = 0;
+    gPracticeStats.directHits = 0;
+    gPracticeStats.escapes = 0;
+    gPracticeStats.crashes = 0;
+    gPracticeStats.teamKills = 0;
 }
 
 void Practice_Hud_ShowStatus(const char* text, u8 r, u8 g, u8 b) {
@@ -156,7 +155,7 @@ void Practice_Hud_Draw(void) {
     if (gPracticeConfig.showChargeTiming) { lineCount += 3; }
     if (gPracticeConfig.showChargeShotMeter) { lineCount++; }
     if (gPracticeConfig.showMissedInputs) { lineCount++; }
-    if (gPracticeConfig.showHitTracking) { lineCount += 4; }
+    if (gPracticeConfig.showHitTracking) { lineCount += 6; }
 
     if (lineCount == 0) {
         return;
@@ -244,20 +243,28 @@ void Practice_Hud_Draw(void) {
     }
 
     if (gPracticeConfig.showHitTracking) {
+        Practice_DrawTextColor(labelX, y, "KILLS:", 180, 180, 180);
+        Practice_DrawNumber(valueX, y, gPracticeStats.kills);
+        y += HUD_LINE_H;
+
+        Practice_DrawTextColor(labelX, y, "BONUS:", 180, 180, 180);
+        Practice_DrawNumber(valueX, y, gPracticeStats.csBonus);
+        y += HUD_LINE_H;
+
         Practice_DrawTextColor(labelX, y, "DIRECT:", 180, 180, 180);
-        Practice_DrawNumber(valueX, y, gPracticeDirectHits);
+        Practice_DrawNumber(valueX, y, gPracticeStats.directHits);
         y += HUD_LINE_H;
 
-        Practice_DrawTextColor(labelX, y, "INDRCT:", 180, 180, 180);
-        Practice_DrawNumber(valueX, y, gPracticeIndirectCount);
+        Practice_DrawTextColor(labelX, y, "ESCAPE:", 180, 180, 180);
+        Practice_DrawNumber(valueX, y, gPracticeStats.escapes);
         y += HUD_LINE_H;
 
-        Practice_DrawTextColor(labelX, y, " BONUS:", 180, 180, 180);
-        Practice_DrawNumber(valueX, y, gPracticeIndirectBonus);
+        Practice_DrawTextColor(labelX, y, "CRASH:", 180, 180, 180);
+        Practice_DrawNumber(valueX, y, gPracticeStats.crashes);
         y += HUD_LINE_H;
 
-        Practice_DrawTextColor(labelX, y, "DESPWN:", 180, 180, 180);
-        Practice_DrawNumber(valueX, y, gPracticeDespawns);
+        Practice_DrawTextColor(labelX, y, "TEAM:", 180, 180, 180);
+        Practice_DrawNumber(valueX, y, gPracticeStats.teamKills);
         y += HUD_LINE_H;
     }
 

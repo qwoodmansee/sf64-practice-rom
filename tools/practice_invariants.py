@@ -129,6 +129,45 @@ def check_engine_hooks():
         if symbol not in src:
             error(msg)
 
+def check_score_stats_hooks():
+    """The PracticeStats counters depend on four engine hooks. If any of
+    them silently disappear during a refactor, the HUD shows zeros forever
+    and score-runners think they got a perfect run when they didn't.
+
+    1. fox_enmy.c Actor_Despawn:  kills + directHits (laser) + teamKills
+    2. fox_enmy.c Actor_Move:     escapes vs crashes (split by OBJ_DYING)
+    3. fox_beam.c PlayerShot_UpdateShot: csBonus (sum of shot->bonus)
+    4. fox_beam.c PlayerShot_ApplyDamageToActor: directHits (CS lock-on)
+    """
+    enmy = read("src/engine/fox_enmy.c")
+    beam = read("src/engine/fox_beam.c")
+
+    despawn_fn = find_c_function(enmy, "Actor_Despawn")
+    if despawn_fn is None:
+        error("Could not locate Actor_Despawn() in fox_enmy.c for stats hook check")
+    else:
+        if "gPracticeStats.kills" not in despawn_fn:
+            error("fox_enmy.c Actor_Despawn must increment gPracticeStats.kills on Fox kills")
+        if "gPracticeStats.directHits" not in despawn_fn or "DMG_BEAM" not in despawn_fn:
+            error("fox_enmy.c Actor_Despawn must increment gPracticeStats.directHits on DMG_BEAM kills")
+        if "gPracticeStats.teamKills" not in despawn_fn:
+            error("fox_enmy.c Actor_Despawn must increment gPracticeStats.teamKills on teammate kills")
+
+    move_fn = find_c_function(enmy, "Actor_Move")
+    if move_fn is None:
+        error("Could not locate Actor_Move() in fox_enmy.c for despawn-stats hook check")
+    else:
+        if "gPracticeStats.escapes" not in move_fn or "gPracticeStats.crashes" not in move_fn:
+            error("fox_enmy.c Actor_Move despawn must split escapes vs crashes via gPracticeStats")
+        if "OBJ_DYING" not in move_fn:
+            error("fox_enmy.c Actor_Move despawn must check OBJ_DYING to split crash vs escape")
+
+    if "gPracticeStats.csBonus" not in beam:
+        error("fox_beam.c must accumulate gPracticeStats.csBonus when a Fox CS explodes")
+    if "gPracticeStats.directHits" not in beam:
+        error("fox_beam.c PlayerShot_ApplyDamageToActor must increment gPracticeStats.directHits on CS lock-on direct hits")
+
+
 def check_cutscene_skip_hook():
     """gCsWasNotSkipped must be set to false in Game_SetGameState's GSTATE_PLAY case.
 
@@ -1715,6 +1754,7 @@ def main():
     check_function_definitions()
     check_source_in_build()
     check_engine_hooks()
+    check_score_stats_hooks()
     check_cutscene_skip_hook()
     check_isviewer_sc64()
     check_iodev_sc64()

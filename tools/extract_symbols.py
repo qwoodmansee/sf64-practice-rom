@@ -30,8 +30,7 @@ SYMBOLS = [
     "gPracticeConfig",
     "gPracticeMenuState",
     "gHitCount",
-    "gPracticeDirectHits",
-    "gPracticeDespawns",
+    "gPracticeStats",
     "gActors",
     "gBosses",
     "gScenery",
@@ -158,6 +157,16 @@ CONFIG_OFFSETS = {
     "hitCount":              0xAC,
 }
 
+# PracticeStats field offsets (include/practice.h, all s32).
+PRACTICE_STATS_OFFSETS = {
+    "kills":      0x00,
+    "csBonus":    0x04,
+    "directHits": 0x08,
+    "escapes":    0x0C,
+    "crashes":    0x10,
+    "teamKills":  0x14,
+}
+
 # Player struct field offsets (include/sf64player.h Player)
 PLAYER_OFFSETS = {
     "pos_x":   0x074,
@@ -244,6 +253,12 @@ def main():
     print("S.config = {}")
     for field, off in sorted(CONFIG_OFFSETS.items(), key=lambda x: x[1]):
         print(f"S.config.{field} = 0x{off:02X}")
+    print("")
+
+    print("-- PracticeStats struct field offsets")
+    print("S.stats = {}")
+    for field, off in sorted(PRACTICE_STATS_OFFSETS.items(), key=lambda x: x[1]):
+        print(f"S.stats.{field} = 0x{off:02X}")
     print("")
 
     print("-- Player struct field offsets")

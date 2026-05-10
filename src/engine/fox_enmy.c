@@ -1763,11 +1763,12 @@ void Actor_Despawn(Actor* this) {
             D_ctx_80177850 = 15;
 #ifdef PRACTICE_ROM
             if (gPracticeConfig.showHitTracking) {
+                gPracticeStats.kills++;
+                /* Laser kill = always a "direct" hit in the score-running sense:
+                 * a laser earns no CS bonus, so the +1 indirect-bonus
+                 * opportunity for this enemy is gone. */
                 if (this->dmgType == DMG_BEAM) {
-                    gPracticeDirectHits += this->info.bonus;
-                } else {
-                    gPracticeIndirectCount++;
-                    gPracticeIndirectBonus += this->info.bonus;
+                    gPracticeStats.directHits++;
                 }
             }
 #endif
@@ -1797,6 +1798,14 @@ void Actor_Despawn(Actor* this) {
                 }
             }
         }
+#ifdef PRACTICE_ROM
+        else if (gPracticeConfig.showHitTracking && (this->info.bonus != 0) &&
+                 (this->dmgSource >= AI360_FALCO + 1) && (this->dmgSource <= AI360_PEPPY + 1)) {
+            /* Teammate (Falco/Slippy/Peppy) got the killing hit. Fox loses
+             * the full 2-point potential: no base point, no CS bonus chance. */
+            gPracticeStats.teamKills++;
+        }
+#endif
 
         if (this->itemDrop) {
             if (sItemDropRates[this->itemDrop] < 0.0f) {
@@ -2715,12 +2724,23 @@ void Actor_Move(Actor* this) {
         ((this->obj.pos.z + gPathProgress) < -15000.0f) || (this->obj.pos.y < (gPlayer[0].yPath - var_fv0)) ||
         ((gPlayer[0].yPath + var_fv0) < this->obj.pos.y) || ((gPlayer[0].xPath + var_fv0) < this->obj.pos.x) ||
         (this->obj.pos.x < (gPlayer[0].xPath - var_fv0))) {
-        Object_Kill(&this->obj, this->sfxSource);
 #ifdef PRACTICE_ROM
+        /* Sample status BEFORE Object_Kill clobbers it. OBJ_DYING means the
+         * actor was mid-slow-crash when culling caught up to it, so the
+         * scoring point would have been awarded if it had survived a few more
+         * frames (a "crash escape"). Anything else means the actor was alive
+         * and got past us untouched (a clean escape). Both cases lose 2 of
+         * the 2 potential points; we split them so the user can tell whether
+         * to slow down or shoot more. */
         if (gPracticeConfig.showHitTracking && (this->info.bonus > 0)) {
-            gPracticeDespawns++;
+            if (this->obj.status == OBJ_DYING) {
+                gPracticeStats.crashes++;
+            } else {
+                gPracticeStats.escapes++;
+            }
         }
 #endif
+        Object_Kill(&this->obj, this->sfxSource);
 
         switch (this->obj.id) {
             case OBJ_ACTOR_ZO_DODORA:

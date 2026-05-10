@@ -100,10 +100,21 @@ typedef enum PracticeFreeCamObject {
 extern PracticeScreen gPracticeScreen;
 extern PracticeConfig gPracticeConfig;
 extern PracticeMenuState gPracticeMenuState;
-extern s32 gPracticeDirectHits;
-extern s32 gPracticeIndirectCount;
-extern s32 gPracticeIndirectBonus;
-extern s32 gPracticeDespawns;
+
+/* Score-running diagnostic counters. The mental model is "each enemy is
+ * potentially worth 2 points" (1 base hit + 1 charge-shot indirect bonus).
+ * Counters track both points earned and the categories where points were
+ * lost. Reset on level reload via Practice_Hud_Reset. */
+typedef struct PracticeStats {
+    s32 kills;       /* Fox-credited kills of bonus-eligible enemies. */
+    s32 csBonus;     /* Sum of shot->bonus from Fox-fired CS explosions. */
+    s32 directHits;  /* Laser kills + CS lock-on direct hits (lost +1 each). */
+    s32 escapes;     /* Bonus-eligible enemies despawned while alive. */
+    s32 crashes;     /* Bonus-eligible enemies despawned mid-die. */
+    s32 teamKills;   /* Bonus-eligible enemies credited to teammates. */
+} PracticeStats;
+extern PracticeStats gPracticeStats;
+
 extern f32 gPracticeCheckpointProgress;
 
 /* Phase 4 — slot-manager-backed save state diagnostics. Defined in
