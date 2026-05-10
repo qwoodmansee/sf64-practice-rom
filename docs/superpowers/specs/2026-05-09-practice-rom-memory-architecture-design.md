@@ -147,7 +147,11 @@ Pak-only RAM (`0x80400000`–`0x80800000`):
 - RAM target: `0x801F4000` (16-byte aligned, above
   `ovl_menu_BSS_END = 0x801F31E0` so no overlay swap can clobber it).
 - ROM target: just after `dma_table_ROM_END`.
-- Budget: 512 KB (`practice_late_core_ROM_SIZE < 0x80000`).
+- Budget — ROM (TEXT+DATA+RODATA): `practice_late_core_ROM_SIZE < 0x80000`
+  (512 KB).
+- Budget — RAM (TEXT+DATA+RODATA+BSS): `practice_late_core_BSS_END <
+  0x80274000` (caps the entire VRAM extent at the same 512 KB; preserves
+  the 52 KB cushion before `.buffers` at `0x80281000`).
 - Loaded by every build, every cart, every player.
 - Contents: every `.c` whose call graph is fully post-`Practice_Late_Init`
   AND that runs correctly on stock 4 MB carts (no Pak-only memory deps).
@@ -155,14 +159,46 @@ Pak-only RAM (`0x80400000`–`0x80800000`):
 **`.practice_late_pak`** — Pak-only persistent overlay.
 - RAM target: `0x80500000` (above existing `practice_pool_pak`).
 - ROM target: just after `practice_late_core_ROM_END`.
-- Budget: 1.5 MB (`practice_late_pak_ROM_SIZE < 0x180000`).
+- Budget — ROM: `practice_late_pak_ROM_SIZE < 0x180000` (1.5 MB).
+- Budget — RAM: `practice_late_pak_BSS_END < 0x80680000` (no overlap with
+  `practice_macro_pak` at `0x80680000`).
 - Loaded only when `osMemSize >= 0x800000` (Expansion Pak detected).
 - Contents: heavy code (FatFs ~30 KB, OSK + file_browser, large practice
-  features) AND code that depends on Pak-only memory regions.
+  features) AND code that depends on Pak-only memory regions, but **not**
+  objects whose `.bss` is intercepted by `practice_pool_pak`,
+  `practice_macro_pak`, or `practice_macro_snap_pak` (see "Pinned-BSS
+  objects" below).
+
+Both budgets are dual: a ROM-size check alone is insufficient because
+NOLOAD BSS doesn't appear in ROM. A file with a 256 KB BSS array would
+pass a ROM-only invariant yet punch through the RAM cap into `.buffers`,
+re-creating the Aquas-class corruption that motivated parking
+`practice_save_slotpool` BSS in `.practice_pool_pak` originally.
 
 The two segments are mutually exclusive in content. Nothing in `_pak`
 may be called when Pak is absent; the dispatch struct (next section) is
 the only legal entry path.
+
+### Pinned-BSS objects (special bucket)
+
+Three existing objects have their `.bss` intercepted by Pak-only segments
+defined before this work and must be preserved:
+
+| Object | `.bss` lives at | Reason |
+|---|---|---|
+| `practice_save_slotpool.o` | `practice_pool_pak` (`0x80400000`, 2.5 MB) | 4 × 256 KB save snapshots |
+| `practice_macro_buf.o` | `practice_macro_pak` (`0x80680000`) | macro recording buffer |
+| `practice_macro_snap.o` | `practice_macro_snap_pak` (`0x80691940`) | macro snapshot pool |
+
+These objects' `.text/.data/.rodata` are tiny (the BSS is the whole
+weight) and stay in `PRACTICE_MAIN_OBJS`. The existing pinned-pak
+segments in the linker script intercept their `.bss` placement directly,
+unchanged by this architecture. **They do not move into
+`PRACTICE_LATE_PAK_OBJS`** — putting them there would route their BSS
+into `.practice_late_pak_bss` at `0x80500000+`, breaking the address
+contracts that `Practice_Save_ScratchBase()` and the macro pools depend
+on. Reintroducing the Aquas crash class is the failure mode if this
+boundary is missed.
 
 ## Boot Sequence and Late-Load Module
 
@@ -228,6 +264,15 @@ static bool LoadPakSegment(void) {
 four pairs of segment-boundary symbols are all in `main`. The loader has
 zero late-segment dependencies and is fully IPL-staged.
 
+The explicit `bzero` of each segment's BSS is **required**, not optional.
+The linker emits the late segments' BSS as `(NOLOAD)`, and `FILL(0)` in
+the corresponding loaded section header does not zero a NOLOAD region —
+NOLOAD bytes never appear in the ROM image and are never staged. Any
+static initializer in late code that depends on zero-init will read
+garbage if `bzero` is omitted. Vanilla `main_bss` zero-fill happens
+earlier in boot via libultra and only covers main's BSS region, not the
+late segments.
+
 ### Three dispatch tables
 
 ```c
@@ -260,6 +305,49 @@ const LateOps *SelectLateOps(u32 memSize, bool pakLoaded) {
 
 Pure logic, no N64 dependencies, host-testable. The "is this available"
 decision lives in exactly one place.
+
+`memSize` is technically redundant given the orchestrator already gates
+`pakLoaded` on `memSize >= EXP_PAK_MEM_THRESHOLD`, so a future `pakLoaded`-only
+signature would also be correct. Keeping both is defense in depth: if a
+future test or fault-injection harness ever sets `pakLoaded = true` without
+real Pak RAM, the table selection still refuses `sLateOpsFull` rather than
+trusting the caller. The double-check costs one branch.
+
+### LateOps struct shape
+
+The struct is intentionally small — one entry per *operation class* the
+late code exposes, not one per individual function. Initial shape:
+
+```c
+typedef struct LateOps {
+    /* SD primitives — resolve to .practice_late_core in stock-cart builds. */
+    iodev_result_t (*sd_init)(void);
+    iodev_result_t (*sd_read_sectors)(uint32_t lba, uint32_t cnt, void *buf);
+    iodev_result_t (*sd_write_sectors)(uint32_t lba, uint32_t cnt, const void *buf);
+
+    /* FatFs — resolve to .practice_late_pak when Pak present, stubs otherwise. */
+    int (*fs_mount)(void);
+    int (*fs_open)(const char *path, int flags);
+    int (*fs_close)(int fd);
+    int (*fs_read)(int fd, void *buf, size_t n);
+    int (*fs_write)(int fd, const void *buf, size_t n);
+
+    /* UI — Pak-only. */
+    int (*osk_open)(char *out_buf, size_t out_cap);
+    int (*file_browser_open)(const char *root, char *out_path, size_t cap);
+
+    /* Capability flags. Bool checks are cheaper than null-pointer compares
+     * and let menus render correct labels without invoking a stub first. */
+    bool sd_available;
+    bool fs_available;
+    bool ui_available;
+} LateOps;
+```
+
+Roughly ~10 function pointers in v1. The struct grows as more
+`_pak`-resident features are migrated. Each new entry is a one-line
+addition to all three static tables (`sLateOpsStub` / `sLateOpsCoreOnly`
+/ `sLateOpsFull`) — that's the "structural indirection" cost.
 
 ### Callers read straight through
 
@@ -309,13 +397,27 @@ For any candidate file `practice_<x>.c`:
 2. For each symbol, grep for callers outside `src/practice/`, `lib/`,
    `lib/test/`. Any hit in `src/sys/`, `src/libultra/`, vanilla
    `src/engine/` boot paths → bucket = `MAIN`.
-3. If clean: check Pak-only memory references. Hit on `practice_pool_pak`
-   / `practice_macro_pak` / `practice_macro_snap_pak` → `_pak`.
-4. If still clean: assess transitive include weight. Heavy deps (FatFs,
+3. If clean: check pinned-BSS membership. Does the file currently appear
+   in `practice_pool_pak`, `practice_macro_pak`, or
+   `practice_macro_snap_pak` in the linker script? → bucket = `MAIN`
+   (with .bss intercepted; see Pinned-BSS objects).
+4. If clean: check Pak-only memory references in the .c (does the code
+   read or write through `practice_pool_pak`-pinned globals owned by a
+   Pinned-BSS object). Hit → `_pak`.
+5. If still clean: assess transitive include weight. Heavy deps (FatFs,
    OSK textures, large rodata) → `_pak`. Otherwise → `_core`.
 
-The same procedure is encoded in the `reclaim-rom-headroom` skill at
-`.claude/skills/reclaim-rom-headroom/SKILL.md`.
+`practice_overlay.c` is a worked example: it reads `gDmaTable` to map
+overlay VRAM ranges. Step 2 finds callers from save-subsystem code that
+runs as part of `Practice_Init`'s setup, but more importantly the
+function that reads `DmaEntry.vRomAddress` is documented in CLAUDE.md as
+unsafe to call against ROM/physical addresses on hardware. Decision:
+**stays in `MAIN`** — its access pattern to `gDmaTable` is part of the
+boot-time-ish surface and the "is this safe" answer is fragile enough
+that the audit should not move it.
+
+The audit procedure above is also encoded in the `reclaim-rom-headroom`
+skill at `.claude/skills/reclaim-rom-headroom/SKILL.md`.
 
 ### Default routing
 
@@ -330,12 +432,21 @@ new feature is "land in `_core`."
 
 ```
 PRACTICE_MAIN_OBJS = [
-    "practice_main",      # contains Practice_Init + Practice_Late_Init call
-    "late/loader",        # the orchestrator itself
-    "late/select",        # pure ops-table selector
-    "late/ops_tables",    # static dispatch tables (data lives in main)
-    "late/stubs",         # stub implementations
-    "practice_overlay",   # touches gDmaTable; verify boot-time at audit
+    "practice_main",         # contains Practice_Init + Practice_Late_Init call
+    "late/loader",           # the orchestrator itself
+    "late/select",           # pure ops-table selector
+    "late/ops_tables",       # static dispatch tables (.data in main)
+    "late/stubs",            # stub implementations (Pak-absent path)
+    "practice_overlay",      # reads gDmaTable; called by save subsystem early
+                             # in Practice_Init's setup path. Documented gotcha
+                             # in CLAUDE.md re: vRomAddress on hardware. Stays
+                             # in main; not a candidate for migration.
+    # Pinned-BSS objects: .text/.data/.rodata land in main; .bss is intercepted
+    # by an existing Pak-only segment defined before this work. See "Pinned-BSS
+    # objects" in Memory Layout. Moving these to LATE_PAK breaks the BSS pin.
+    "practice_save_slotpool",  # .bss pinned at practice_pool_pak (0x80400000)
+    "practice_macro_buf",      # .bss pinned at practice_macro_pak (0x80680000)
+    "practice_macro_snap",     # .bss pinned at practice_macro_snap_pak (0x80691940)
 ]
 
 PRACTICE_LATE_CORE_OBJS = [
@@ -353,13 +464,20 @@ PRACTICE_LATE_CORE_OBJS = [
 PRACTICE_LATE_PAK_OBJS = [
     "lib/fatfs/ff", "lib/fatfs/ffunicode", "lib/fatfs/ff_libc", "lib/fatfs/diskio",
     "lib/ui/osk", "lib/ui/file_browser",
-    "practice_save", "practice_save_slotpool",
-    "practice_macro", "practice_macro_buf", "practice_macro_snap",
+    "practice_save",         # save logic; .bss is small and goes here
+    "practice_macro",        # macro coordinator; .bss is small and goes here
     "practice_sd", "practice_test_fatfs",
     "practice_logo_tex", "practice_owl_tex",
     "practice_boss_test",
 ]
 ```
+
+`practice_save` (the save coordinator) goes in `_pak` — its `.bss` is
+small and Pak-resident already in spirit. `practice_save_slotpool` is
+the *separate* object holding the giant snapshot pool BSS that must
+stay pinned at `0x80400000`. Same split for `practice_macro` (logic in
+`_pak`) vs `practice_macro_buf` and `practice_macro_snap` (BSS-pinned in
+existing pak segments, stay in main).
 
 This is the Phase 3 endpoint, not the Phase 1 starting point. Phase 1
 moves only `lib/iodev/*`, `lib/sd_host`, `lib/sd_crc`, `lib/serial`,
@@ -415,6 +533,15 @@ practice_late_pak_ROM_END = __romPos;
 
 The shape mirrors existing overlays so downstream tools (`audit_ram_layout.py`,
 the splat-aware map parser) require no changes.
+
+The `FILL(0x00000000)` directive on the loaded `.practice_late_core`
+section applies to padding bytes within the loaded image, not to the
+separate `(NOLOAD)` BSS section. NOLOAD bytes are never staged from ROM,
+so zero-init for the BSS region must come from the loader's explicit
+`bzero` call (see Boot Sequence and Late-Load Module). The `FILL` is
+retained because it matches the convention of every other vanilla
+overlay segment in the script and prevents stale ROM bytes from leaking
+into alignment padding.
 
 ### Patcher tool refactor
 
@@ -479,14 +606,30 @@ compatibility with future splat regenerations of the base linker script.
 | Check | What it catches |
 |---|---|
 | `check_late_default_routing()` | Every `.c` in `src/practice/` and `lib/` is in exactly one OBJS list. New file added without classification → build error. |
-| `check_no_early_late_refs()` | No symbol from `_core` or `_pak` is referenced by any `.c` in `src/sys/`, `src/libultra/`, or the `Game_Initialize`-reachable subset of `src/engine/`. Catches "I added a hook in fox_play.c that calls into a late-segment file" before it boot-hangs the cart. |
-| `check_pak_only_calls_dispatched()` | Every call site of a `_pak`-resident symbol goes through `gLateOps->...`, never a direct call. Direct call → build error with file + symbol + caller. |
-| `check_no_pak_refs_from_core()` | `_core` code can't call `_pak` code. One-way dependency: core works alone, pak depends on core. Reverse dependency means stock carts crash. |
-| `check_late_segment_addresses()` | Linker map confirms `practice_late_core_VRAM == 0x801F4000` and `practice_late_pak_VRAM == 0x80500000`. Catches accidental relocations from manual `.ld` edits. |
-| `check_late_segment_budgets()` | `practice_late_core_ROM_SIZE < 0x80000` (512 KB). `practice_late_pak_ROM_SIZE < 0x180000` (1.5 MB). Hits before runtime failures. |
+| `check_no_early_late_refs()` | No `.c` outside `src/practice/` and `lib/` references `_core` or `_pak` symbols. (Allowlist exception: `late/loader`, `late/select`, `late/ops_tables`, `late/stubs` may reference late symbols even though they live in `MAIN`.) Catches "I added a hook in fox_play.c that calls into a late-segment file" before it boot-hangs the cart. |
+| `check_pak_only_calls_dispatched()` | Every reference to a `_pak`-resident symbol from outside the dispatch table is forbidden. Implemented via `mips-linux-gnu-objdump -dr` over each `_core` and `MAIN`-bucket `.o`, parsing relocations whose target symbol resolves to `_pak` and rejecting any whose source is not `late/ops_tables.o`. Cannot be done with grep alone — relocation-level analysis is the contract. |
+| `check_no_pak_refs_from_core()` | `_core` code can't reference `_pak` code. Implemented same way as `check_pak_only_calls_dispatched`, restricted to `_core`-bucket `.o`s. One-way dependency: core works alone, pak depends on core. Reverse dependency means stock carts crash. |
+| `check_late_segment_addresses()` | Linker map confirms `practice_late_core_VRAM == 0x801F4000` and `practice_late_pak_VRAM == 0x80500000` (start addresses). Catches accidental relocations from manual `.ld` edits. |
+| `check_late_segment_ram_caps()` | `practice_late_core_BSS_END < 0x80274000` (preserves the 52 KB cushion before `.buffers`) and `practice_late_pak_BSS_END < 0x80680000` (no overlap with `practice_macro_pak`). Distinct from the ROM-size budget — covers the BSS-blowout failure mode that motivated parking `practice_save_slotpool` in `practice_pool_pak` originally. |
+| `check_late_segment_rom_budgets()` | `practice_late_core_ROM_SIZE < 0x80000` (512 KB). `practice_late_pak_ROM_SIZE < 0x180000` (1.5 MB). Catches ROM-image growth before patcher / manifest churn. Distinct from the RAM cap above. |
 
 The existing `check_boot_main_rom_budget` (the `0xFD000` check) stays
 unchanged.
+
+The two budget checks (`_ram_caps` and `_rom_budgets`) are
+intentionally separate. ROM size and RAM extent diverge the moment a
+file adds a large `.bss` array — and silently exceeding the RAM cap is
+the same failure class as the Aquas-crash that motivated
+`practice_pool_pak` (a hundreds-of-KB scratch allocated in normal BSS
+clobbered runtime data). Belt and suspenders.
+
+The two relocation-analysis checks (`_pak_only_calls_dispatched` and
+`_no_pak_refs_from_core`) require a real toolchain pass over each `.o`,
+not a source-level grep. The cost is one objdump invocation per object
+during pre-commit (~hundreds of ms over the practice-tree, acceptable).
+Grep cannot distinguish `gLateOps->fs_open(...)` (legal indirect call
+whose pointer happens to land in `_pak`) from `fs_open(...)` (illegal
+direct call) without parsing relocations.
 
 ### Unit tests (host-side)
 
@@ -546,20 +689,48 @@ Manual checklist documented in `docs/superpowers/plans/HW_VERIFY_practice_late.m
 
 Smallest possible change that gets `main_ROM_END` back under `0xFD000`.
 
+**Phase 1 prerequisite (gate before any code change):**
+1. Run `python3 tools/audit_ram_layout.py`. Confirm nothing currently
+   resides at `0x801F4000`–`0x80274000`. If a previously-uncatalogued
+   region claims any of that span, the architecture's stock-RAM target
+   is wrong and addresses must be re-picked before proceeding.
+2. Validate function-pointer-across-segments behavior with a single
+   throwaway test: in Phase 1's `loader.c`, declare
+   `static void (*const sLateProbe[])(void) = { (void(*)(void))iodev_detect };`,
+   then call `sLateProbe[0]()` after the loader runs. If the linker
+   emits a relocation requiring runtime fixup, boot will fault before
+   the practice menu. This proves Phase 2's dispatch model is sound
+   before we commit to the refactor. Remove after the smoke test.
+
+**Phase 1 implementation:**
 - New: `.practice_late_core` segment in linker script at `0x801F4000`.
 - New: `src/practice/late/loader.c` with a minimal `Practice_Late_Init()`
-  that DMAs core only.
-- Move: `lib/iodev/*.o`, `lib/sd_host/sd_host.o`, `lib/sd_crc.o`,
+  that DMAs core only and explicitly `bzero`'s its BSS.
+- New: `include/practice_late.h` with `DECLARE_SEGMENT(practice_late_core)`.
+- Move: `lib/iodev/*.o` (6 files), `lib/sd_host/sd_host.o`, `lib/sd_crc.o`,
   `lib/serial.o`, `lib/slot_manager.o`, `lib/crc32.o` from main → `_core`.
-- No dispatch struct yet, no `_pak` segment, no Pak gating —
-  `iodev_detect()` etc. are direct calls (the linker resolves them to
-  `_core` VRAM, which the loader has populated by the time the call fires).
+- No dispatch struct yet, no `_pak` segment, no Pak gating. The iodev
+  call sites use direct `jal` calls (MIPS link-resolved within the
+  256 MB segment, low risk), not function-pointer dispatch.
 - Invariants added: `check_late_segment_addresses`,
-  `check_late_segment_budgets`. Existing `check_boot_main_rom_budget`
-  keeps running.
-- Verification: stock-cart cold boot + practice menu reachable.
-- Expected headroom recovered: 16 KB+, leaves `main` with significant
-  margin.
+  `check_late_segment_rom_budgets`, `check_late_segment_ram_caps`.
+  Existing `check_boot_main_rom_budget` keeps running.
+- One-line CLAUDE.md update: "ROM memory architecture under restructure
+  — see `docs/superpowers/specs/2026-05-09-practice-rom-memory-architecture-design.md`.
+  New `.c` in `src/practice/` or `lib/`: ask before adding to
+  `PRACTICE_OBJS` (Phase 3 will rename it)."
+- Verification: stock-cart cold boot + practice menu reachable + the
+  function-pointer probe call succeeds.
+
+**Expected headroom recovered (concrete):** the moved objects'
+`.text+.data+.rodata` totals (per `size build/.../*.o`):
+- `lib/iodev/iodev.o` ~1.0 KB; `iodev_sc64.o` ~1.5 KB; `iodev_ed64.o` ~3.5 KB;
+  `iodev_ed64_v1.o` ~3.5 KB; `iodev_ed64_v2.o` ~4.5 KB; `iodev_stub.o` ~0.5 KB
+- `sd_host.o` ~5 KB; `sd_crc.o` ~1 KB; `serial.o` ~1.5 KB;
+  `slot_manager.o` ~10 KB; `crc32.o` ~1 KB
+- Total: roughly **30–35 KB** moved out of `main`, recovering well above
+  the 16,144 bytes needed and leaving `main` with **~14–19 KB of headroom
+  under the cap** for incremental future work.
 
 ### Phase 2 — Pak segment + LateOps dispatch
 
@@ -567,17 +738,31 @@ The architectural lift.
 
 - New: `.practice_late_pak` segment at `0x80500000`.
 - New: `src/practice/late/{ops.h, ops_tables.c, stubs.c, select.c}`.
-- Move: `lib/fatfs/*`, `lib/ui/*`, `practice_save*`, `practice_macro*`,
-  `practice_sd`, `practice_test_fatfs`, `practice_logo_tex`,
+- Move: `lib/fatfs/*`, `lib/ui/*`, `practice_save` (logic), `practice_macro`
+  (logic), `practice_sd`, `practice_test_fatfs`, `practice_logo_tex`,
   `practice_owl_tex`, `practice_boss_test` from main → `_pak`.
+- **Do not move**: `practice_save_slotpool`, `practice_macro_buf`,
+  `practice_macro_snap` — these are pinned-BSS objects whose `.bss` lives
+  in the existing `practice_pool_pak` / `practice_macro_pak` /
+  `practice_macro_snap_pak` segments at `0x80400000` / `0x80680000` /
+  `0x80691940`. Moving them to `_pak` would re-route their `.bss` to
+  `0x80500000+` and break `Practice_Save_ScratchBase()` and the macro
+  pools. They stay in `PRACTICE_MAIN_OBJS`. (See "Pinned-BSS objects" in
+  the Memory Layout section.)
 - Refactor every caller of `_pak`-resident symbols to dispatch through
-  `gLateOps->...`.
+  `gLateOps->...`. The function-pointer-crossing-segments approach is
+  already validated in Phase 1's probe.
 - Add `osMemSize`-based Pak detection in `Practice_Late_Init`.
-- Add UI gating in practice menu for Pak-required features.
+- Add UI gating in practice menu for Pak-required features (driven by
+  `gLateOps->sd_available` / `fs_available` / `ui_available` capability
+  flags).
 - Invariants added: `check_pak_only_calls_dispatched`,
-  `check_no_pak_refs_from_core`.
+  `check_no_pak_refs_from_core` (both via `objdump -dr` relocation
+  analysis as specified in Tests and Invariants).
 - Verification: stock cart + Pak cart cold boot, SD save/load on Pak
-  cart, Pak-absent stub behavior on stock cart.
+  cart, Pak-absent stub behavior on stock cart, no regression in save
+  snapshot behavior (the BSS-pinned `practice_save_slotpool` should
+  function exactly as before).
 
 ### Phase 3 — Patcher refactor + bulk audit + default routing
 
@@ -604,20 +789,29 @@ flagged so future contributors know the path.
 
 ### Release / patcher / manifest impact
 
-Every phase that ships changes the ROM byte layout:
+Phase boundaries and **public release boundaries are independent**.
+Internal phases that don't ship to users don't churn the patcher or
+manifest. Only versions that go out as a release regenerate:
 
-- Regenerate the bps patch
-  (`tools/patcher/src/assets/sf64-practice-vX.Y.Z.bps`).
-- Update `tools/patcher/src/assets/manifest.json` — `patch.fileName`,
+- The bps patch (`tools/patcher/src/assets/sf64-practice-vX.Y.Z.bps`).
+- `tools/patcher/src/assets/manifest.json` — `patch.fileName`,
   `patch.size`, `patch.sha256`, `target.size`, `target.sha256`, version
   string.
-- Old bps files for prior versions stay valid for users patching the same
-  base ROM; they don't gain the new architecture.
-- Recommend bumping minor version to **v0.3.0** at the end of Phase 1
-  (architectural change worth signaling) and incrementing patch version
-  per phase thereafter.
-- The `-everdrive` suffix is reserved for branch-specific EverDrive
-  variants; the architecture work targets the base series.
+
+Old bps files for prior versions stay valid for users patching the same
+base ROM; they don't gain the new architecture.
+
+**Versioning guidance (not a strict rule):**
+- The first public release that includes Phase 1's architectural
+  scaffolding bumps the minor version (tentatively **v0.3.0**) — it's
+  worth signaling that the cart-RAM model changed.
+- Subsequent phases that ship together with new user-visible features
+  bump the patch version normally.
+- Phases that land internally (no user-facing change) stay on the same
+  version; the release ships when there's something for users.
+
+The `-everdrive` suffix is reserved for branch-specific EverDrive
+variants; the architecture work targets the base series.
 
 ### Rollback plan
 
@@ -636,21 +830,24 @@ Every phase that ships changes the ROM byte layout:
 
 ## Risks
 
-- **The 60 KB stock-RAM gap I'm claiming for `_core` may have hidden
-  occupants I haven't enumerated.** Every gap I see in the linker map
-  could be reserved by something I missed. Phase 1 starts with verifying
-  no occupant exists at `0x801F4000`–`0x80274000`.
+- **The stock-RAM gap I'm claiming for `_core` may have hidden
+  occupants I haven't enumerated.** *Treat this as a Phase 1
+  prerequisite, not a Phase 1 task.* Run `tools/audit_ram_layout.py`
+  against the current map and verify nothing lives in
+  `0x801F4000–0x80274000` before any code is written. Five-minute
+  check that gates the entire architecture; if it finds an occupant,
+  the addresses must be re-picked before proceeding.
 - **Linker-resolved function pointers may behave unexpectedly across
   segments.** The static dispatch tables in `main`'s `.data` reference
   symbols in late VRAM. If the linker emits relocations that need
-  runtime fixup (rather than static absolute addresses), boot will
-  reference a not-yet-fixed-up pointer. Mitigation: verify in Phase 1
-  with a single function pointer crossing segments before doing the
-  full dispatch refactor in Phase 2.
-- **`practice_overlay.c`'s read of `gDmaTable` may run earlier than I
-  think.** If it runs during boot before `Practice_Late_Init`, then any
-  symbol it references must be in main. The audit in Phase 1 verifies
-  this.
+  runtime fixup (rather than static absolute addresses), the dispatch
+  call sites would reference a not-yet-fixed-up pointer. Mitigation:
+  Phase 1's prerequisite includes a function-pointer probe — declare a
+  single `static const fn_ptr_t [] = { iodev_detect }` table in
+  `loader.c`, call through it after the loader runs. If that succeeds,
+  Phase 2's full dispatch model is sound. *Direct calls (MIPS `jal`)
+  resolve at link time and are not the risky path; only data-resident
+  function pointers are.*
 - **Phase 3's medium-feature audit is volume-heavy and easy to get
   wrong.** Each migrated file is a potential boot-hang if the audit
   misses a boot-time reference. Mitigation: the
@@ -662,16 +859,21 @@ Every phase that ships changes the ROM byte layout:
 
 ## Open Questions
 
-- Should `_core` pre-zero its BSS via FILL(0) in the linker (as the
-  current overlay segments do) AND the explicit `bzero` in the loader,
-  or just one of those? Probably explicit `bzero` is sufficient and the
-  FILL is redundant; verify in Phase 1.
-- Does the IS-Viewer print buffer need to be in `_core`, or can it stay
-  in main? `osSyncPrintf` runs very early; the buffer should stay in
-  main for safety.
-- Should the loader signal load failure to the user UI, or just hard-hang
-  on DMA failure? Current design: hard-hang (no useful recovery path).
-  Worth revisiting if real hardware ever surfaces partial DMA failures.
+All previously-listed open questions are resolved; section retained as a
+landing zone for new questions surfaced during implementation.
+
+*Resolved during spec review:*
+- BSS zero-init: explicit `bzero` in the loader is required, not
+  optional. `FILL(0)` on a `(NOLOAD)` section is a no-op (NOLOAD bytes
+  never enter the ROM image). Captured in Boot Sequence section.
+- IS-Viewer print buffer location: stays in main. `osSyncPrintf` runs
+  before `Practice_Late_Init` (it's the diagnostic channel for boot
+  itself), so its buffer must be IPL-staged.
+- Loader DMA failure UI: no recovery path. Synchronous PI DMA either
+  completes or hangs the bus; we have no working UI to report a failure
+  during boot. The cart is dead in either case. Documented for future
+  revisit if real hardware ever surfaces partial DMA failures, but no
+  in-scope work.
 
 ## References
 
