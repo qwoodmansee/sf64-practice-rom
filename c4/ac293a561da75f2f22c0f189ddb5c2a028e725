@@ -1,0 +1,35 @@
+docs/superpowers/specs/2026-05-09-practice-rom-memory-architecture-design.md
+  s_49a816d98b2602::t_98de4b6716637a 551
+  s_49a816d98b2602::t_63fff559fd08e7 601-608,611-615
+  s_49a816d98b2602::t_9d239eac8dff09 786
+  s_49a816d98b2602::t_c024ecc2cb2373 258-259,265-267,273-275
+  s_49a816d98b2602::t_09191e4752372a 268-269,276-277,282-287
+  s_49a816d98b2602::t_bd458581c48418 213
+  s_49a816d98b2602::t_2b96cf60ba1bf8 648-650
+  s_49a816d98b2602::t_0e1733119ba9fa 169-170,172-174,181-185
+  s_49a816d98b2602::t_4e1e4ba57a82d3 796
+  s_49a816d98b2602::t_6e8d21d5122907 137-144,147-151
+  s_49a816d98b2602::t_7e44ea8db4b7a8 734-750
+  s_49a816d98b2602::t_273d00ab117745 903
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "c4ac293a561da75f2f22c0f189ddb5c2a028e725",
+  "prompts": {},
+  "humans": {
+    "h_a88c22cb6d1409": {
+      "author": "qwoodmansee <github@qwoodmansee.xyz>"
+    }
+  },
+  "sessions": {
+    "s_49a816d98b2602": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "850902a9-a0e8-45c5-9eb1-752b3ebc1bc3",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "qwoodmansee <github@qwoodmansee.xyz>"
+    }
+  }
+}
