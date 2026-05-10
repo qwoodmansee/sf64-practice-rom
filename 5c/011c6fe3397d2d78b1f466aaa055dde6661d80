@@ -1,0 +1,44 @@
+tools/patch_linker_script.py
+  s_49a816d98b2602::t_67c18e44e8cad6 56-58,71-79,305-307,320-321,391,393,395-416,433-435,438-439
+  s_0658daf0174915::t_364529517f64f1 542-562
+  s_dfe6f1ab600e00::t_698e5d22e0298e 308
+  s_0658daf0174915::t_db35b9028f34e4 96-102
+  s_0658daf0174915::t_dc56d335b824f3 151-209
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "5c011c6fe3397d2d78b1f466aaa055dde6661d80",
+  "prompts": {},
+  "humans": {
+    "h_a88c22cb6d1409": {
+      "author": "qwoodmansee <github@qwoodmansee.xyz>"
+    }
+  },
+  "sessions": {
+    "s_0658daf0174915": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b4c9b912-018f-4b2b-affd-9b8d68345438",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "qwoodmansee <github@qwoodmansee.xyz>"
+    },
+    "s_49a816d98b2602": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "850902a9-a0e8-45c5-9eb1-752b3ebc1bc3",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "qwoodmansee <github@qwoodmansee.xyz>"
+    },
+    "s_dfe6f1ab600e00": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "05eee7e0-2417-47cb-9d07-12d683e38629",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "qwoodmansee <github@qwoodmansee.xyz>"
+    }
+  }
+}
