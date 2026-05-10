@@ -27,7 +27,7 @@
 ## File Structure
 
 **New files:**
-- `include/practice_late.h` — `DECLARE_SEGMENT(practice_late_core)` + explicit BSS extern declarations.
+- `include/practice_late.h` — `DECLARE_SEGMENT(practice_late_core)` (which already provides the `_VRAM`, `_ROM`, `_TEXT`, `_DATA`, `_RODATA`, and `_BSS` extern declarations via the macro chain in `include/sf64dma.h`).
 - `src/practice/late/loader.c` — `Practice_Late_Init()` orchestrator. Reads top-to-bottom: load core segment, bzero BSS, optional probe.
 - `docs/superpowers/plans/HW_VERIFY_practice_late_phase1.md` — manual hardware verification checklist.
 
@@ -60,21 +60,16 @@ ls -la bin include/assets baserom asm 2>&1 | head -10
 ```
 Expected: each is a symlink (`lrwxr-xr-x ... -> ...`). The exact target paths are user-specific (typically the main repo at `/Users/qwoodmansee/code/sf64-practice-rom/...` or a cached location like `~/.claude/assets-build` for `include/assets`). If any of these is missing, broken, or appears as an empty directory, **stop** and restore per CLAUDE.md's "Worktree setup" section before continuing — the canonical pattern is `ln -sfn <main-repo-or-cache-target> <worktree-relative-path>`. Do not invent target paths; use whatever the user's other working worktrees use.
 
-- [ ] **Step 1: Verify build artifact symlinks/copies (per CLAUDE.md "Worktree setup")**
+- [ ] **Step 1: Verify build artifact symlinks (per CLAUDE.md "Worktree setup")**
 
-The build needs `build/bin/us/rev1/*.o`, `build/src/assets/`, and a copied (not symlinked) `linker_scripts/us/rev1/starfox64.ld`. Run:
+The build needs `build/bin/us/rev1/*.o` and `build/src/assets/` symlinked from the main repo, plus a **copied** (not symlinked) `linker_scripts/us/rev1/starfox64.ld`. Run:
 ```bash
 ls build/bin/us/rev1/alt_ipl3.textbin.o build/src/assets 2>&1 | head -3
 ls -la linker_scripts/us/rev1/starfox64.ld 2>&1 | head -1
 ```
-Expected: the .o file exists (probably symlinked from main repo's build dir), the assets dir is present, and the .ld is a regular file (not a symlink). If any is missing, restore by copying from `/Users/qwoodmansee/code/sf64-practice-rom/build/`:
-```bash
-mkdir -p build/asm build/bin build/src
-cp -R /Users/qwoodmansee/code/sf64-practice-rom/build/asm/. build/asm/
-cp -R /Users/qwoodmansee/code/sf64-practice-rom/build/bin/. build/bin/
-cp -R /Users/qwoodmansee/code/sf64-practice-rom/build/src/assets build/src/
-cp /Users/qwoodmansee/code/sf64-practice-rom/linker_scripts/us/rev1/starfox64.ld linker_scripts/us/rev1/starfox64.ld
-```
+Expected: the .o file exists (resolved through a symlink from the main repo's build dir), the assets dir is present, and the .ld is a regular file (not a symlink).
+
+If any is missing, **do not `cp -R` the contents**. Restore the symlink pattern your other worktrees use — see CLAUDE.md "Worktree setup" for the canonical recipe. The missing-asm-objects issue from a prior session was specifically caused by `rm -rf build/` blowing away the symlinks; a fresh symlink restore (via `ln -s` to the main repo paths) is the supported path. The .ld file should be `cp`'d (single file, gets modified per-build by the patcher), but everything under `build/bin/` and `build/src/assets/` should be symlinks.
 
 - [ ] **Step 2: Build the current state to populate the linker map**
 
@@ -434,8 +429,9 @@ git commit --no-verify -m "$(cat <<'EOF'
 feat(practice/late): add Practice_Late_Init orchestrator + probe
 
 New module src/practice/late/ with:
-- include/practice_late.h: DECLARE_SEGMENT(practice_late_core) + explicit
-  BSS extern declarations.
+- include/practice_late.h: DECLARE_SEGMENT(practice_late_core), which
+  provides VRAM/ROM/TEXT/DATA/RODATA/BSS extern declarations via the
+  existing sf64dma.h macro chain.
 - src/practice/late/loader.c: Practice_Late_Init() reads top-to-bottom,
   calls Lib_DmaRead on the core segment and bzeros its BSS. Includes a
   #ifdef PRACTICE_LATE_PROBE block that validates data-resident function
@@ -469,7 +465,7 @@ The headroom-recovering wave. Move eleven `.o` files out of `main` into the new 
 
 The eleven targets (from the spec):
 - `lib/iodev/iodev`, `iodev_sc64`, `iodev_ed64`, `iodev_ed64_v1`, `iodev_ed64_v2`, `iodev_stub` (six entries in `LIB_IODEV_OBJS` per the patcher's bare-name convention)
-- `lib/sd_host/sd_host` (one entry; the existing patcher hard-codes the `lib/sd_host/` prefix per `tools/patch_linker_script.py:240`)
+- `lib/sd_host/sd_host` (one entry; sole member of `LIB_SD_HOST_OBJS` at `tools/patch_linker_script.py:75`, emitted with the `lib/sd_host/` prefix)
 - `lib/sd_crc`, `lib/serial`, `lib/slot_manager`, `lib/crc32` (four entries in `LIB_TOP_OBJS`)
 
 Verify:
@@ -570,52 +566,104 @@ emit_practice_late_core_segment(
 
 - [ ] **Step 4: Refactor the patcher's anchoring chain to handle empty source lists**
 
-Critical: removing all six iodev objects from `LIB_IODEV_OBJS` makes it empty, which breaks `last_iodev_obj = LIB_IODEV_OBJS[-1]` at `tools/patch_linker_script.py:311` (IndexError). Same risk for `LIB_TOP_OBJS` and the sd_host hardcode in the chain.
+Critical: this Phase 1 migration empties **three** source lists simultaneously: `LIB_IODEV_OBJS`, `LIB_TOP_OBJS`, and `LIB_SD_HOST_OBJS` all become `[]`. The current patcher has multiple sites that index `[-1]` on these lists or compute fallback predecessors using a `last_iodev_obj` variable that's only assigned via `LIB_IODEV_OBJS[-1]`. Without a refactor, the patcher raises `IndexError` on the next run and no `.ld` is produced.
 
-Add a helper at the top of the file:
+**Step 4a: Add a chain helper.** Insert at the top of `tools/patch_linker_script.py` (alongside the existing imports / constants):
+
 ```python
-def chain_anchor(*lists, fallback):
-    """Return the last entry from the first non-empty list. If all are
-    empty, return `fallback`. Used to compute the predecessor for
-    injection-point anchoring when one or more OBJS lists has been
-    fully migrated out (e.g. all of LIB_IODEV_OBJS into PRACTICE_LATE_CORE)."""
-    for L in lists:
+def chain_predecessor(prefix_pairs, fallback):
+    """Walk an ordered sequence of (prefix, list) pairs and return the
+    formatted predecessor string from the first non-empty list.
+    If all are empty, return `fallback`. Used to compute injection-point
+    anchors when one or more OBJS lists has been fully migrated.
+
+    prefix_pairs: list of (build_prefix, objs_list) tuples in priority order.
+    fallback: a fully-formatted "build/..." predecessor used when every list
+              is empty.
+    """
+    for prefix, L in prefix_pairs:
         if L:
-            return L[-1]
+            return f"{prefix}{L[-1]}"
     return fallback
 ```
 
-Then replace each anchor lookup. For the `LIB_TOP_OBJS` anchoring at line ~316:
+**Step 4b: Replace the bare `last_iodev_obj` assignment at line ~311.** Find:
 ```python
-# OLD:
-# predecessor = f"build/lib/iodev/{last_iodev_obj}"
-# NEW:
-last_iodev_obj = chain_anchor(LIB_IODEV_OBJS, fallback=None)
-if last_iodev_obj:
-    predecessor = f"build/lib/iodev/{last_iodev_obj}"
-else:
-    predecessor = f"build/src/practice/{PRACTICE_OBJS[-1]}"  # fall back to last practice obj
+last_iodev_obj = LIB_IODEV_OBJS[-1]
+```
+Replace with:
+```python
+# Anchor pointer for downstream chains. Walk LIB_IODEV_OBJS, then fall
+# back through PRACTICE_OBJS. Phase 1 migration empties LIB_IODEV_OBJS;
+# the chain helper handles that case.
+predecessor_after_iodev = chain_predecessor(
+    [("build/lib/iodev/", LIB_IODEV_OBJS),
+     ("build/src/practice/", PRACTICE_OBJS)],
+    fallback="build/src/practice/practice_main",
+)
+```
+Note: the variable is renamed because its meaning changed from "last entry name in LIB_IODEV_OBJS" to "fully-formatted predecessor string". Update every reference accordingly.
+
+**Step 4c: Update the LIB_TOP_OBJS injection at line ~316.** Find:
+```python
+predecessor = f"build/lib/iodev/{last_iodev_obj}"
+```
+Replace with:
+```python
+predecessor = predecessor_after_iodev
 ```
 
-And similarly for the sd_host fallback at line ~329–331:
+**Step 4d: Update the sd_host fallback at lines ~329–331.** Find:
 ```python
-last_top_predecessor_for_sd = chain_anchor(LIB_TOP_OBJS, LIB_IODEV_OBJS, fallback=PRACTICE_OBJS[-1])
-if last_top_predecessor_for_sd in LIB_TOP_OBJS:
-    last_top_predecessor_for_sd = f"build/lib/{last_top_predecessor_for_sd}"
-elif last_top_predecessor_for_sd in LIB_IODEV_OBJS:
-    last_top_predecessor_for_sd = f"build/lib/iodev/{last_top_predecessor_for_sd}"
+if LIB_TOP_OBJS:
+    last_top_predecessor_for_sd = f"build/lib/{LIB_TOP_OBJS[-1]}"
 else:
-    last_top_predecessor_for_sd = f"build/src/practice/{last_top_predecessor_for_sd}"
+    last_top_predecessor_for_sd = f"build/lib/iodev/{last_iodev_obj}"
+```
+Replace with:
+```python
+last_top_predecessor_for_sd = chain_predecessor(
+    [("build/lib/", LIB_TOP_OBJS),
+     ("build/lib/iodev/", LIB_IODEV_OBJS),
+     ("build/src/practice/", PRACTICE_OBJS)],
+    fallback="build/src/practice/practice_main",
+)
 ```
 
-(Adjust syntax to whatever's idiomatic in the existing file. The principle is: never index `[-1]` on a list that may now be empty.)
+**Step 4e: Update the LIB_FATFS predecessor chain at lines ~348–353.** Find the block:
+```python
+if LIB_SD_HOST_OBJS:
+    last_top_predecessor = f"build/lib/sd_host/{LIB_SD_HOST_OBJS[-1]}"
+elif LIB_TOP_OBJS:
+    last_top_predecessor = f"build/lib/{LIB_TOP_OBJS[-1]}"
+else:
+    last_top_predecessor = f"build/lib/iodev/{last_iodev_obj}"
+```
+Replace with:
+```python
+last_top_predecessor = chain_predecessor(
+    [("build/lib/sd_host/", LIB_SD_HOST_OBJS),
+     ("build/lib/", LIB_TOP_OBJS),
+     ("build/lib/iodev/", LIB_IODEV_OBJS),
+     ("build/src/practice/", PRACTICE_OBJS)],
+    fallback="build/src/practice/practice_main",
+)
+```
+
+**Step 4f: Audit for any remaining `last_iodev_obj` references.** Run:
+```bash
+grep -n "last_iodev_obj\|LIB_IODEV_OBJS\[-1\]\|LIB_TOP_OBJS\[-1\]\|LIB_SD_HOST_OBJS\[-1\]" tools/patch_linker_script.py
+```
+Expected: no results (every site has been replaced with `chain_predecessor` or removed). If any remain, replace using the same pattern.
 
 - [ ] **Step 5: Remove the migrated entries from their prior lists**
 
 In `tools/patch_linker_script.py`:
-- `LIB_IODEV_OBJS`: remove all six iodev entries (`iodev`, `iodev_sc64`, `iodev_ed64`, `iodev_ed64_v1`, `iodev_ed64_v2`, `iodev_stub`). The list is now `[]`.
-- `LIB_TOP_OBJS`: remove `sd_crc`, `serial`, `slot_manager`, `crc32`. Whatever was there before stays.
-- The hardcoded `lib/sd_host` emission (lines ~240–242 area): remove the `sd_host` entry from whatever drives that emission. If it's a literal in the code, delete that block.
+- `LIB_IODEV_OBJS` (line ~53): remove all six iodev entries (`iodev`, `iodev_sc64`, `iodev_ed64`, `iodev_ed64_v1`, `iodev_ed64_v2`, `iodev_stub`). The list becomes `[]`.
+- `LIB_TOP_OBJS` (line ~64): remove `sd_crc`, `serial`, `slot_manager`, `crc32`. Per the current source, that's all four entries — the list becomes `[]`.
+- `LIB_SD_HOST_OBJS` (line ~75): remove `sd_host`. That's the only entry — the list becomes `[]`.
+
+`LIB_FATFS_OBJS` and `LIB_UI_OBJS` are untouched in Phase 1 (their migration is Phase 2).
 
 Verify with grep that no `.o` is referenced in two places that would emit duplicate `.text`:
 ```bash
