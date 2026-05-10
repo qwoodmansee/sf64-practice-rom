@@ -163,13 +163,18 @@ def check_score_stats_hooks():
             error("fox_enmy.c Actor_Move despawn must check OBJ_DYING to split crash vs escape")
         # Unkillable-actor filter: EVID_EVENT_HANDLER actors (script drivers, like the
         # Corneria Slippy-chase Granga after re-init), anything pinned in long-form
-        # invulnerability via timer_0C2, and Corneria scripted Granga chase captains
-        # must NOT count as escapes - the player could not have realistically damaged
-        # them during the chase window.
+        # invulnerability via timer_0C2, event actors below the scale damage gate,
+        # regular no-hitbox actor classes with no player-shot collision path, and
+        # Corneria scripted Granga chase captains must NOT count as escapes - the
+        # player could not have realistically damaged them during the chase window.
         if "EVID_EVENT_HANDLER" not in move_fn:
             error("fox_enmy.c Actor_Move escape counter must exclude EVID_EVENT_HANDLER actors")
         if "timer_0C2" not in move_fn:
             error("fox_enmy.c Actor_Move escape counter must exclude actors with long timer_0C2 invuln")
+        if "scale < 0.5f" not in move_fn:
+            error("fox_enmy.c Actor_Move escape counter must exclude event actors below the damage scale gate")
+        if "OBJ_ACTOR_ME_METEOR_SHOWER_1" not in move_fn or "OBJ_ACTOR_SO_PROMINENCE" not in move_fn:
+            error("fox_enmy.c Actor_Move escape counter must exclude unshootable no-hitbox actor classes")
         if "EVA_GROUP_FLAG" not in move_fn or "EVA_TEAM_ID" not in move_fn:
             error("fox_enmy.c Actor_Move escape counter must exclude chase captains "
                   "(actors with EVA_GROUP_FLAG set whose group has a teammate sibling)")

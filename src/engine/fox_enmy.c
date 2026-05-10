@@ -2738,7 +2738,15 @@ void Actor_Move(Actor* this) {
          *      pass through them (timer_0C2 = 10000, see fox_beam.c).
          *   2. Anything parked in long-form invulnerability (e.g. the
          *      EVID_SX_LASER post-hit state pins timer_0C2 = 10000).
-         *   3. Corneria's scripted Granga chase actors. The Slippy one can
+         *   3. Event actors whose scale is below the damage gate used by
+         *      ActorEvent_Update. Beam hits on these actors are reflected or
+         *      ignored, and ActorEvent_ApplyDamage is not called. Meteo's
+         *      dark gray meteor rocks use this path.
+         *   4. Regular no-hitbox actor classes with bonus set in ObjectInfo
+         *      but no player-shot collision path. ME_MOLAR_ROCK is not listed:
+         *      fox_beam.c gives it an explicit poly-collision path, so it is
+         *      shootable and should still count.
+         *   5. Corneria's scripted Granga chase actors. The Slippy one can
          *      cull after its group fields have been cleared/reset; the
          *      remaining durable signature at cull time is a reserved team slot,
          *      EVID_GRANGA_FIGHTER_2, TEAM_ID_MAX. Earlier chase Grangas
@@ -2748,6 +2756,15 @@ void Actor_Move(Actor* this) {
         bool isEventHandler =
             (this->obj.id == OBJ_ACTOR_EVENT) && (this->eventType == EVID_EVENT_HANDLER);
         bool isLongInvuln = this->timer_0C2 >= 1000;
+        bool isSmallScaleEventActor = (this->obj.id == OBJ_ACTOR_EVENT) && (this->scale < 0.5f);
+        bool isUnshootableNoHitboxActor =
+            (this->obj.id == OBJ_ACTOR_ME_METEOR_SHOWER_1) ||
+            (this->obj.id == OBJ_ACTOR_ME_METEOR_SHOWER_2) ||
+            (this->obj.id == OBJ_ACTOR_ME_METEOR_SHOWER_3) ||
+            (this->obj.id == OBJ_ACTOR_TI_GREAT_FOX) ||
+            (this->obj.id == OBJ_ACTOR_UNK_237) ||
+            (this->obj.id == OBJ_ACTOR_SO_WAVE) ||
+            (this->obj.id == OBJ_ACTOR_SO_PROMINENCE);
         bool isGrangaChaseActor =
             (this->obj.id == OBJ_ACTOR_EVENT) && (this->eventType == EVID_GRANGA_FIGHTER_2) &&
             (this->iwork[EVA_TEAM_ID] == TEAM_ID_MAX);
@@ -2769,7 +2786,8 @@ void Actor_Move(Actor* this) {
             }
         }
         if (gPracticeConfig.showHitTracking && (this->info.bonus > 0) && !isEventHandler && !isLongInvuln &&
-            !isChaseCaptain && !isCorneriaGrangaChaseCaptain && !isGrangaChaseActor) {
+            !isSmallScaleEventActor && !isUnshootableNoHitboxActor && !isChaseCaptain &&
+            !isCorneriaGrangaChaseCaptain && !isGrangaChaseActor) {
             if (this->obj.status == OBJ_DYING) {
                 gPracticeStats.crashes++;
             } else {

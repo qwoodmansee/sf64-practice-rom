@@ -1,6 +1,8 @@
--- Test: Actors the player physically cannot damage (EVID_EVENT_HANDLER and
--- anything pinned in long-form invulnerability via timer_0C2) must NOT
--- count as escapes when Actor_Move's cull catches them.
+-- Test: Actors the player physically cannot damage (EVID_EVENT_HANDLER,
+-- anything pinned in long-form invulnerability via timer_0C2, event actors
+-- below the scale damage gate, and regular no-hitbox actors with no shot
+-- collision path) must NOT count as escapes when Actor_Move's cull catches
+-- them.
 --
 -- Origin bug: aCoEventScript_script_16 spawns the Slippy-chase Granga as
 -- EVID_GRANGA_FIGHTER_2 (killable), then re-inits the same actor as
@@ -78,6 +80,7 @@ local function spawn_synth(slot, eventType, timer_val, bonus)
     -- info.bonus must be > 0 for the score-stats hook to even consider it.
     H.write_u8(addr + S.actor.info_bonus, bonus)
     H.write_s32(addr + S.actor.index, slot)
+    H.write_s32(addr + S.actor.scale, 0x3F800000)  -- 1.0
     -- Identity
     H.write_u16(addr + S.actor.obj_id, S.const.OBJ_ACTOR_EVENT)
     H.write_s32(addr + S.actor.eventType, eventType)
@@ -87,6 +90,22 @@ local function spawn_synth(slot, eventType, timer_val, bonus)
     H.write_s32(addr + S.actor.obj_pos_y, 0x00000000)  -- 0.0
     H.write_s32(addr + S.actor.obj_pos_z, 0x00000000)  -- 0.0
     -- Status last so the engine doesn't see a half-built actor.
+    H.write_u8(addr + S.actor.obj_status, S.const.OBJ_ACTIVE)
+end
+
+local function spawn_synth_object(slot, objId, bonus)
+    local addr = actor_addr(slot)
+    H.write_s32(addr + INFO_ACTION_OFF, 0)
+    H.write_s32(addr + INFO_CULLDISTANCE_OFF, 0x42480000)
+    H.write_u8(addr + S.actor.info_bonus, bonus)
+    H.write_s32(addr + S.actor.index, slot)
+    H.write_s32(addr + S.actor.scale, 0x3F800000)
+    H.write_u16(addr + S.actor.obj_id, objId)
+    H.write_s32(addr + S.actor.eventType, 0)
+    H.write_u16(addr + S.actor.timer_0C2, 0)
+    H.write_s32(addr + S.actor.obj_pos_x, 0x49742400)
+    H.write_s32(addr + S.actor.obj_pos_y, 0x00000000)
+    H.write_s32(addr + S.actor.obj_pos_z, 0x00000000)
     H.write_u8(addr + S.actor.obj_status, S.const.OBJ_ACTIVE)
 end
 
@@ -150,7 +169,46 @@ after = read_escapes()
 H.assert_eq(after, before,
     "escapes unchanged when timer_0C2-pinned actor culls (filter works)")
 
--- ===== Case 4: Chase captain (group_flag set, teammate sibling) =====
+-- ===== Case 4: Event actor below damage scale gate =====
+-- ActorEvent_Update reflects/ignores beam hits when scale < 0.5 and only
+-- calls ActorEvent_ApplyDamage when scale >= 0.5. Meteo's dark gray meteor
+-- rocks use this path: bonus-eligible, but physically unshootable.
+slot = find_free_slot()
+H.assert_true(slot ~= nil, "found free actor slot for scale-gated synth")
+
+before = read_escapes()
+spawn_synth(slot, S.const.EVID_ME_METEOR_6, 0, 1)
+H.write_s32(actor_addr(slot) + S.actor.scale, 0xBF800000) -- -1.0
+H.advance(2)
+
+status_after = H.read_u8(actor_addr(slot) + S.actor.obj_status)
+H.assert_eq(status_after, S.const.OBJ_FREE,
+    "scale-gated synth actor was culled by Actor_Move")
+
+after = read_escapes()
+H.assert_eq(after, before,
+    "escapes unchanged when unshootable scale-gated event actor culls")
+
+-- ===== Case 5: Regular no-hitbox actor with no shot path =====
+-- Meteo's meteor-shower actors use gNoHitbox and Meteo_ReflectDamage; they
+-- are not reachable by the normal actor hitbox path even though ObjectInfo
+-- gives them bonus=1. They should behave like the dark event rocks above.
+slot = find_free_slot()
+H.assert_true(slot ~= nil, "found free actor slot for no-hitbox actor synth")
+
+before = read_escapes()
+spawn_synth_object(slot, S.const.OBJ_ACTOR_ME_METEOR_SHOWER_1, 1)
+H.advance(2)
+
+status_after = H.read_u8(actor_addr(slot) + S.actor.obj_status)
+H.assert_eq(status_after, S.const.OBJ_FREE,
+    "no-hitbox synth actor was culled by Actor_Move")
+
+after = read_escapes()
+H.assert_eq(after, before,
+    "escapes unchanged when unshootable regular no-hitbox actor culls")
+
+-- ===== Case 6: Chase captain (group_flag set, teammate sibling) =====
 -- The Corneria Slippy-chase Granga is the canonical instance: script_16
 -- adds it as captain (EVA_GROUP_FLAG = 256) of group 12, script_17 adds
 -- Slippy to the same group with EVA_TEAM_ID = TEAM_ID_SLIPPY. The
@@ -215,7 +273,7 @@ H.write_u8(actor_addr(teammate_slot) + S.actor.obj_status, S.const.OBJ_FREE)
 H.write_s32(actor_addr(teammate_slot) + S.actor.iwork_team_id, 0)
 H.write_s32(actor_addr(teammate_slot) + S.actor.iwork_group_id, 0)
 
--- ===== Case 5: Corneria Granga chase captain after sibling is gone =====
+-- ===== Case 7: Corneria Granga chase captain after sibling is gone =====
 -- This is the live miss: by cull time the teammate relationship may no
 -- longer be discoverable, but the chaser still carries the durable script
 -- identity (Corneria + Granga eventType + nonzero group flag). It must not
@@ -249,7 +307,7 @@ after = read_escapes()
 H.assert_eq(after, before,
     "escapes unchanged when no-sibling Corneria Granga chase captain culls")
 
--- ===== Case 6: Live Slippy-chase cull signature =====
+-- ===== Case 8: Live Slippy-chase cull signature =====
 -- Hardware readout after the bad +1 showed:
 --   reserved slot 1/3, OBJ_ACTOR_EVENT, EVID_GRANGA_FIGHTER_2
 --   group 0, flag 0, team TEAM_ID_MAX, timer_0C2 0, state 200

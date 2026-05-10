@@ -194,6 +194,7 @@ ACTOR_OFFSETS = {
     "eventType":       0x0B4,  # s16
     "state":           0x0B8,  # s16
     "timer_0C2":       0x0C2,  # u16
+    "scale":           0x110,  # f32
 }
 ACTOR_SIZEOF = 0x2F4
 
@@ -240,9 +241,12 @@ CONSTANTS = {
     "OBJ_ACTIVE":               2,
     "OBJ_DYING":                3,
     "OBJ_ACTOR_EVENT":          200,
+    "OBJ_ACTOR_ME_METEOR_SHOWER_1": 183,
+    "OBJ_ACTOR_SO_PROMINENCE":  279,
     "EVID_GRANGA_FIGHTER_1":    4,
     "EVID_GRANGA_FIGHTER_2":    5,
     "EVID_EVENT_HANDLER":       40,
+    "EVID_ME_METEOR_6":         65,
     "TEAM_ID_MAX":              6,
 }
 
