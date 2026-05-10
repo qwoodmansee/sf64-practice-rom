@@ -1,0 +1,57 @@
+tests/test_unkillable_no_escape.lua
+  s_9514044ff6566e::t_c77b81dd988c95 266
+  s_399ce6e3dc89cb::t_0f234ce8fef8b8 153-217
+  s_9514044ff6566e::t_d979700289bec8 68
+  s_9514044ff6566e::t_fb3198b1424a12 253-255
+  s_399ce6e3dc89cb::t_078710b563a189 1-9,11-14,16-67,69-75,77-79,81-96,98-116,118-134,136-152,289
+  s_9514044ff6566e::t_1eec126945e033 10,15,76,97,117,135
+  s_9514044ff6566e::t_23d7350afd14a8 80,251-252,256-265,267-269,271-287
+  s_9514044ff6566e::t_7f39c50b321f40 218-250,288
+  s_9514044ff6566e::t_5d324c73074cb5 270
+src/engine/fox_enmy.c
+  s_399ce6e3dc89cb::t_81f56095ebe558 2736,2738-2740,2746-2747,2760-2770
+  s_9514044ff6566e::t_d325db13c21f48 2748-2750,2752-2753,2771-2772
+  s_399ce6e3dc89cb::t_025aad4ec1d03e 2734-2735,2737
+  s_9514044ff6566e::t_2a2085a4e58ddd 2743
+  s_9514044ff6566e::t_a21d535859bf16 2741-2742,2744-2745,2756-2757
+  s_9514044ff6566e::t_db51a00930ed03 2751,2758
+  s_9514044ff6566e::t_be6130910174d7 2754-2755,2759
+tools/extract_symbols.py
+  s_399ce6e3dc89cb::t_e94f11da29518f 300
+  s_9514044ff6566e::t_e64e217ba60744 190,246
+  s_399ce6e3dc89cb::t_aa24043f6b5312 179-182,184-189,191-196
+  s_399ce6e3dc89cb::t_8dcf5e10ed2f39 198
+  s_399ce6e3dc89cb::t_3bd2c10d05d867 238-242,245
+  s_9514044ff6566e::t_c40b67d67167b9 243-244
+tools/practice_invariants.py
+  s_399ce6e3dc89cb::t_ec6ed436788857 164,169-172
+  s_9514044ff6566e::t_c24723b7e0f22d 166,168,176-177
+  s_9514044ff6566e::t_22c05075718e70 167
+  s_399ce6e3dc89cb::t_a5ef899f32692c 165,173-175
+tests/symbols.lua
+  s_9514044ff6566e::t_07a52f1e91dfb1 7-58,126-136,138-139,148-150,166-170,185
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "e0a099619c8684ac81d144684416b98d21fa8889",
+  "prompts": {},
+  "sessions": {
+    "s_399ce6e3dc89cb": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "fb344822-828d-4993-9536-fedd16710482",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "qwoodmansee <github@qwoodmansee.xyz>"
+    },
+    "s_9514044ff6566e": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "019e0fdf-bed1-73c1-aa92-5470e5c82262",
+        "model": "gpt-5.5"
+      },
+      "human_author": "qwoodmansee <github@qwoodmansee.xyz>"
+    }
+  }
+}
