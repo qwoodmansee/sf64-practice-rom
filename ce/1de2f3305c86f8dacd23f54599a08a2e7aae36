@@ -1,0 +1,19 @@
+tools/practice_invariants.py
+  s_49a816d98b2602::t_67c18e44e8cad6 316-407,409-414,416-417,430,447-450,452-455,457-462,574-576,2063-2064
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "ce1de2f3305c86f8dacd23f54599a08a2e7aae36",
+  "prompts": {},
+  "sessions": {
+    "s_49a816d98b2602": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "850902a9-a0e8-45c5-9eb1-752b3ebc1bc3",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "qwoodmansee <github@qwoodmansee.xyz>"
+    }
+  }
+}

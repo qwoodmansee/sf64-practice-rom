@@ -1,0 +1,51 @@
+include/practice_late.h
+  s_0658daf0174915::t_662210e7a10bc8 1-14
+src/practice/late/loader.c
+  s_0658daf0174915::t_95cc6286a6522d 1-28,34-37
+  s_0658daf0174915::t_61e54e02e2d9b2 29-33
+src/practice/practice_main.c
+  s_0658daf0174915::t_6421133825a655 3,13-14
+tools/patch_linker_script.py
+  s_49a816d98b2602::t_67c18e44e8cad6 62,80,306-308,321-322,399-411
+  s_0658daf0174915::t_db35b9028f34e4 97-98,103
+  s_0658daf0174915::t_dc56d335b824f3 153-159,165-177,180-182,185-186,189-196,199-208
+  s_0658daf0174915::t_d373f78e815705 209-210
+  s_dfe6f1ab600e00::t_698e5d22e0298e 309
+  s_0658daf0174915::t_364529517f64f1 543-552,554-562
+  s_0658daf0174915::t_5012576706be43 48
+Makefile
+  s_0658daf0174915::t_bfd5aad3468f20 176-184
+  s_49a816d98b2602::t_67c18e44e8cad6 382-383
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "a059f99bbe27890608abb76ee1348f17a27a2718",
+  "prompts": {},
+  "sessions": {
+    "s_0658daf0174915": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b4c9b912-018f-4b2b-affd-9b8d68345438",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "qwoodmansee <github@qwoodmansee.xyz>"
+    },
+    "s_49a816d98b2602": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "850902a9-a0e8-45c5-9eb1-752b3ebc1bc3",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "qwoodmansee <github@qwoodmansee.xyz>"
+    },
+    "s_dfe6f1ab600e00": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "05eee7e0-2417-47cb-9d07-12d683e38629",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "qwoodmansee <github@qwoodmansee.xyz>"
+    }
+  }
+}

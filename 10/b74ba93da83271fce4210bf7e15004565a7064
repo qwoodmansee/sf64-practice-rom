@@ -1,0 +1,39 @@
+lib/iodev/iodev_ed64.c
+  s_7a2b11fc53e78d::t_69136ddb8af505 296,333
+  s_49a816d98b2602::t_67c18e44e8cad6 399
+  s_dfe6f1ab600e00::t_d9d2f8f7e6bf51 431
+tools/practice_invariants.py
+  s_49a816d98b2602::t_67c18e44e8cad6 316
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "10b74ba93da83271fce4210bf7e15004565a7064",
+  "prompts": {},
+  "sessions": {
+    "s_49a816d98b2602": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "850902a9-a0e8-45c5-9eb1-752b3ebc1bc3",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "qwoodmansee <github@qwoodmansee.xyz>"
+    },
+    "s_7a2b11fc53e78d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "78adae1d-43a7-4ebb-b815-7e3ec7ab9388",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "qwoodmansee <github@qwoodmansee.xyz>"
+    },
+    "s_dfe6f1ab600e00": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "05eee7e0-2417-47cb-9d07-12d683e38629",
+        "model": "claude-opus-4-7"
+      },
+      "human_author": "qwoodmansee <github@qwoodmansee.xyz>"
+    }
+  }
+}
