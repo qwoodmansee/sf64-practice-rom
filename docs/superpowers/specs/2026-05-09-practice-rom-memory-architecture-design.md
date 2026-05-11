@@ -201,7 +201,7 @@ defined before this work and must be preserved:
 
 | Object | `.bss` lives at | Reason |
 |---|---|---|
-| `practice_save_slotpool.o` | `practice_pool_pak` (`0x80400000`, 2.5 MB) | 4 × 256 KB save snapshots |
+| `practice_save_slotpool.o` | `practice_pool_pak` (`0x80400000`, 2.5 MB) | Save snapshot pool — actual BSS extent is `0x280000` per the linker map (see "Confirmed sizes" above). The older "4 × 256 KB" rationale in the patcher's inline comment is stale. |
 | `practice_macro_buf.o` | `practice_macro_pak` (`0x80680000`) | macro recording buffer |
 | `practice_macro_snap.o` | `practice_macro_snap_pak` (`0x80691940`) | macro snapshot pool |
 
@@ -641,7 +641,7 @@ compatibility with future splat regenerations of the base linker script.
 
 | Check | What it catches |
 |---|---|
-| `check_late_default_routing()` | Every `.c` in `src/practice/` and `lib/` is in exactly one OBJS list. New file added without classification → build error. |
+| `check_late_default_routing()` | Every `.c` in `src/practice/` and `lib/` resolves to exactly one OBJS list — either explicitly listed or auto-classified by `classify_unlisted()` into `PRACTICE_LATE_CORE_OBJS` (see "Patcher tool refactor" above). The check prints a logged warning for auto-classified files (so they can be promoted to an explicit list entry in PR review) and only hard-errors when a file is in `src/practice/` or `lib/` but the classifier itself refuses to bucket it. New files outside those directories → build error. |
 | `check_no_early_late_refs()` | No `.c` outside `src/practice/` and `lib/` references `_core` or `_pak` symbols. (Allowlist exception: `late/loader`, `late/select`, `late/ops_tables`, `late/stubs` may reference late symbols even though they live in `MAIN`.) Catches "I added a hook in fox_play.c that calls into a late-segment file" before it boot-hangs the cart. |
 | `check_pak_only_calls_dispatched()` | Every reference to a `_pak`-resident symbol from outside the dispatch table is forbidden. Implemented via `mips-linux-gnu-objdump -dr` over each `_core` and `MAIN`-bucket `.o`, parsing relocations whose target symbol resolves to `_pak` and rejecting any whose source is not `late/ops_tables.o`. Cannot be done with grep alone — relocation-level analysis is the contract. |
 | `check_no_pak_refs_from_core()` | `_core` code can't reference `_pak` code. Implemented same way as `check_pak_only_calls_dispatched`, restricted to `_core`-bucket `.o`s. One-way dependency: core works alone, pak depends on core. Reverse dependency means stock carts crash. |

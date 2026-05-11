@@ -3,8 +3,11 @@
 > Run after merging Phase 1 of the practice ROM memory architecture
 > spec (`docs/superpowers/specs/2026-05-09-practice-rom-memory-architecture-design.md`).
 > Confirms the .practice_late_core segment loads correctly on real
-> cartridges and that the eleven migrated objects function from their
-> new RAM home.
+> cartridges and that the eight migrated objects function from their
+> new RAM home:
+>
+>   `lib/iodev/{iodev, iodev_sc64, iodev_ed64, iodev_stub}`
+>   `lib/{sd_crc, serial, slot_manager, crc32}`
 
 ## Pre-flight
 
@@ -40,8 +43,7 @@ Exercise at least one feature whose code path hits a migrated `.o`:
 - **iodev path**: insert a known SD card; confirm IS-Viewer prints
   `[iodev] cart=N sd_init=R` with N matching the cart variant and R
   indicating SD success or expected failure code. This validates
-  `lib/iodev/iodev*.o` and `lib/sd_host/sd_host.o` are running from
-  `.practice_late_core`.
+  `lib/iodev/iodev*.o` is running from `.practice_late_core`.
 - **CRC path** (if a CRC-using feature is in the menu): exercise it.
   This validates `lib/crc32.o` and `lib/sd_crc.o`.
 - **Slot manager / serial** (if a slot-list view is in the menu):
