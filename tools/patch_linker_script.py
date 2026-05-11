@@ -48,9 +48,6 @@ PRACTICE_OBJS = [
     "late/loader",          # Phase 1: .practice_late_core loader (Practice_Late_Init)
 ]
 
-# Order matters: each entry's predecessor must precede it in the list,
-# because the dynamic patcher anchors each missing entry on the previous
-# list element.
 # Phase 1: every lib/iodev/* file moved into .practice_late_core via
 # PRACTICE_LATE_CORE_IODEV_OBJS below. Kept as an empty list so the
 # patcher's chain anchors and fresh-extract injection still know about
@@ -63,7 +60,12 @@ LIB_IODEV_OBJS = []
 # the same reason as LIB_IODEV_OBJS.
 LIB_TOP_OBJS = []
 
-# lib/fatfs/* objects. Anchored on the last LIB_TOP entry; each subsequent
+# Phase 1: lib/sd_host/sd_host.o moved into .practice_late_core via
+# PRACTICE_LATE_CORE_SD_HOST_OBJS below. Empty for the same reason as
+# LIB_IODEV_OBJS.
+LIB_SD_HOST_OBJS = []
+
+# lib/fatfs/* objects. Anchored on the last LIB_SD_HOST entry; each subsequent
 # entry anchors on the previous LIB_FATFS entry. ff_libc supplies memset/
 # memcmp shims for FatFs (the project's libultra doesn't expose them).
 LIB_FATFS_OBJS = [
@@ -84,15 +86,17 @@ LIB_UI_OBJS = [
 # Loaded at boot by Practice_Late_Init via Lib_DmaRead. See spec at
 # docs/superpowers/specs/2026-05-09-practice-rom-memory-architecture-design.md.
 #
-# Two sublists, mirroring the existing LIB_IODEV_OBJS / LIB_TOP_OBJS
-# structure. Each sublist's entries are bare names; the emit helper
-# prefixes "build/<prefix>/". Wave 4 of the Phase 1 plan moves these
-# eight .o files out of .main (under their original LIB_*_OBJS
+# Three sublists, mirroring the existing LIB_IODEV_OBJS / LIB_TOP_OBJS /
+# LIB_SD_HOST_OBJS structure. Each sublist's entries are bare names; the
+# emit helper prefixes "build/<prefix>/". Wave 4 of the Phase 1 plan moves
+# these eleven .o files out of .main (under their original LIB_*_OBJS
 # membership) and into the new segment.
 PRACTICE_LATE_CORE_IODEV_OBJS = [
     "iodev",
     "iodev_sc64",
     "iodev_ed64",
+    "iodev_ed64_v1",
+    "iodev_ed64_v2",
     "iodev_stub",
 ]
 PRACTICE_LATE_CORE_LIB_OBJS = [
@@ -100,6 +104,9 @@ PRACTICE_LATE_CORE_LIB_OBJS = [
     "serial",
     "slot_manager",
     "crc32",
+]
+PRACTICE_LATE_CORE_SD_HOST_OBJS = [
+    "sd_host",
 ]
 
 ANCHOR = "build/src/engine/fox_save.o"
@@ -150,7 +157,7 @@ PRACTICE_MACRO_SNAP_SECTION = """\
 """
 
 
-def emit_practice_late_core_segment(iodev_objs, lib_objs):
+def emit_practice_late_core_segment(iodev_objs, lib_objs, sd_host_objs):
     """Emit the .practice_late_core (LOAD) + .practice_late_core_bss (NOLOAD)
     block as a single linker-script snippet.
 
@@ -158,14 +165,15 @@ def emit_practice_late_core_segment(iodev_objs, lib_objs):
     DECLARE_SEGMENT macro chain in include/sf64dma.h consumes the boundary
     symbols (VRAM/ROM/TEXT/DATA/RODATA/BSS START/END) emitted here.
 
-    Two sublists, each prefixed with the appropriate build path:
-    - iodev_objs -> build/lib/iodev/{name}.o
-    - lib_objs   -> build/lib/{name}.o
+    Three sublists, each prefixed with the appropriate build path:
+    - iodev_objs    -> build/lib/iodev/{name}.o
+    - lib_objs      -> build/lib/{name}.o
+    - sd_host_objs  -> build/lib/sd_host/{name}.o
 
-    Wave 2 of the Phase 1 plan calls the predecessor of this helper with
+    Wave 2 of the Phase 1 plan called the predecessor of this helper with
     an empty list to scaffold the segment; Wave 4 splits the membership
-    into two prefix-keyed sublists matching the existing LIB_*_OBJS
-    convention and populates them with the eight migration targets.
+    into three prefix-keyed sublists matching the existing LIB_*_OBJS
+    convention and populates them with the eleven migration targets.
     """
     lines = []
 
@@ -174,6 +182,8 @@ def emit_practice_late_core_segment(iodev_objs, lib_objs):
             lines.append(f"        build/lib/iodev/{obj}.o({section});")
         for obj in lib_objs:
             lines.append(f"        build/lib/{obj}.o({section});")
+        for obj in sd_host_objs:
+            lines.append(f"        build/lib/sd_host/{obj}.o({section});")
 
     lines.append("    /* practice_late_core: stock-RAM safe persistent overlay")
     lines.append("     * Loaded at boot by Practice_Late_Init via Lib_DmaRead. See")
@@ -215,13 +225,14 @@ def emit_practice_late_core_segment(iodev_objs, lib_objs):
     return "\n".join(lines) + "\n"
 
 
-def strip_late_core_objs_from_main(content, iodev_objs, lib_objs):
+def strip_late_core_objs_from_main(content,
+                                   iodev_objs, lib_objs, sd_host_objs):
     """Phase 1 migration scrubber: when .practice_late_core is injected
     with non-empty member sublists, the same object names may also still
     appear inside .main from prior patcher runs (the canonical .ld
-    snapshot was produced when LIB_IODEV_OBJS / LIB_TOP_OBJS were
-    non-empty). Each migrated .o would then appear twice and the linker
-    would emit duplicate sections.
+    snapshot was produced when LIB_IODEV_OBJS / LIB_TOP_OBJS /
+    LIB_SD_HOST_OBJS were non-empty). Each migrated .o would then appear
+    twice and the linker would emit duplicate sections.
 
     Walk every section listing for each migrated target and remove
     occurrences that live OUTSIDE the .practice_late_core /
@@ -235,6 +246,8 @@ def strip_late_core_objs_from_main(content, iodev_objs, lib_objs):
         targets.append(f"build/lib/iodev/{obj}")
     for obj in lib_objs:
         targets.append(f"build/lib/{obj}")
+    for obj in sd_host_objs:
+        targets.append(f"build/lib/sd_host/{obj}")
 
     if not targets:
         return content
@@ -377,6 +390,10 @@ def patch():
                 f"        build/lib/{obj}.o({section});"
                 for obj in LIB_TOP_OBJS
             )
+            sd_host_block = "\n".join(
+                f"        build/lib/sd_host/{obj}.o({section});"
+                for obj in LIB_SD_HOST_OBJS
+            )
             fatfs_block = "\n".join(
                 f"        build/lib/fatfs/{obj}.o({section});"
                 for obj in LIB_FATFS_OBJS
@@ -388,6 +405,8 @@ def patch():
             blocks = [practice_block, iodev_block]
             if top_block:
                 blocks.append(top_block)
+            if sd_host_block:
+                blocks.append(sd_host_block)
             if fatfs_block:
                 blocks.append(fatfs_block)
             if ui_block:
@@ -465,10 +484,32 @@ def patch():
             content = _replace_after_anchor(content, anchor_line, injection)
         inject_count += 1
 
-    # lib/fatfs/* — anchored on LIB_TOP -> LIB_IODEV -> PRACTICE_OBJS[-1].
-    # Each subsequent entry anchors on the previous LIB_FATFS entry.
-    last_top_predecessor = chain_predecessor(
+    # lib/sd_host/* — anchored on the last LIB_TOP entry, falling back
+    # through LIB_IODEV_OBJS, then PRACTICE_OBJS[-1].
+    last_top_predecessor_for_sd = chain_predecessor(
         [("build/lib/", LIB_TOP_OBJS),
+         ("build/lib/iodev/", LIB_IODEV_OBJS)],
+        fallback=f"build/src/practice/{last_practice_obj}",
+    )
+    for i, obj in enumerate(LIB_SD_HOST_OBJS):
+        if f"build/lib/sd_host/{obj}.o" in content:
+            continue
+        if i == 0:
+            predecessor = last_top_predecessor_for_sd
+        else:
+            predecessor = f"build/lib/sd_host/{LIB_SD_HOST_OBJS[i - 1]}"
+        for section in [".text", ".data", ".rodata", ".bss"]:
+            anchor_line = f"{predecessor}.o({section});"
+            injection = f"        build/lib/sd_host/{obj}.o({section});"
+            content = _replace_after_anchor(content, anchor_line, injection)
+        inject_count += 1
+
+    # lib/fatfs/* — anchored on LIB_SD_HOST -> LIB_TOP -> LIB_IODEV ->
+    # PRACTICE_OBJS[-1]. Each subsequent entry anchors on the previous
+    # LIB_FATFS entry.
+    last_top_predecessor = chain_predecessor(
+        [("build/lib/sd_host/", LIB_SD_HOST_OBJS),
+         ("build/lib/", LIB_TOP_OBJS),
          ("build/lib/iodev/", LIB_IODEV_OBJS)],
         fallback=f"build/src/practice/{last_practice_obj}",
     )
@@ -485,11 +526,12 @@ def patch():
             content = _replace_after_anchor(content, anchor_line, injection)
         inject_count += 1
 
-    # lib/ui/* — anchored on LIB_FATFS -> LIB_TOP -> LIB_IODEV ->
-    # PRACTICE_OBJS[-1]. Each subsequent entry anchors on the previous
-    # LIB_UI entry.
+    # lib/ui/* — anchored on LIB_FATFS -> LIB_SD_HOST -> LIB_TOP ->
+    # LIB_IODEV -> PRACTICE_OBJS[-1]. Each subsequent entry anchors on the
+    # previous LIB_UI entry.
     last_fatfs_predecessor = chain_predecessor(
         [("build/lib/fatfs/", LIB_FATFS_OBJS),
+         ("build/lib/sd_host/", LIB_SD_HOST_OBJS),
          ("build/lib/", LIB_TOP_OBJS),
          ("build/lib/iodev/", LIB_IODEV_OBJS)],
         fallback=f"build/src/practice/{last_practice_obj}",
@@ -605,6 +647,7 @@ def patch():
         segment_text = emit_practice_late_core_segment(
             PRACTICE_LATE_CORE_IODEV_OBJS,
             PRACTICE_LATE_CORE_LIB_OBJS,
+            PRACTICE_LATE_CORE_SD_HOST_OBJS,
         )
         replacement = anchor_line + "\n\n" + segment_text
         new_content = content.replace(needle, replacement, 1)
@@ -618,12 +661,13 @@ def patch():
 
     # If the late_core members are also present inside .main from a prior
     # patcher run (canonical .ld pre-Phase-1 had them in LIB_IODEV_OBJS /
-    # LIB_TOP_OBJS), strip the duplicates so each migrated .o is only listed
-    # inside .practice_late_core. Idempotent.
+    # LIB_TOP_OBJS / LIB_SD_HOST_OBJS), strip the duplicates so each migrated
+    # .o is only listed inside .practice_late_core. Idempotent.
     content = strip_late_core_objs_from_main(
         content,
         PRACTICE_LATE_CORE_IODEV_OBJS,
         PRACTICE_LATE_CORE_LIB_OBJS,
+        PRACTICE_LATE_CORE_SD_HOST_OBJS,
     )
 
     dirty = (content != initial_content) or inject_count != 0

@@ -314,13 +314,107 @@ def check_iodev_sc64():
         elif unlock_pos > ident_pos:
             error(f"{path}: sc64_detect must write the unlock key sequence BEFORE reading SC64_REG_IDENT (in user-ROM mode the register interface is locked and IDENT returns garbage until unlocked)")
 
-def check_iodev_ed64():
-    """ED64 X iodev backend must preserve protocol invariants.
+def check_slot_manager_atomic_write():
+    """slot_manager_save_sd_named must use temp+rename, not direct overwrite.
 
-    Phase 1b Tasks 1-2 only ship cart detection + the verified CRC layer;
-    SD init / read / write are stubs. The invariants below cover what is
-    actually implemented; once Tasks 3-5 land, additional checks (sd_crc.h
-    include, sd_crc7 callsite) should be added here.
+    A direct overwrite (f_open with FA_CREATE_ALWAYS at the destination
+    path) leaves a half-written file behind on power loss / ROM crash --
+    the user loses their prior save and gets nothing in return. The
+    atomic temp+rename pattern keeps the prior save intact until the
+    new one is fully written and closed.
+
+    The matching unit test is test_slot_manager_sd.c::test_atomic_write_
+    produces_final_file; that test verifies the post-condition (no tmp
+    leftover, final file present). This invariant guards the call shape
+    so the test stays honest. """
+    path = "lib/slot_manager.c"
+    if not os.path.isfile(path):
+        return
+    src = read(path)
+
+    # The atomic path constructs <path>.tmp then renames it.
+    if "f_rename" not in src:
+        error(f"{path}: slot_manager_save_sd_named must use f_rename for atomic writes")
+    if '".tmp"' not in src and "'.tmp'" not in src and ".tmp" not in src:
+        error(f"{path}: slot_manager_save_sd_named must use a .tmp suffix for atomic writes")
+
+
+def check_sd_host():
+    """Generic SD-protocol engine (lib/sd_host) must keep its public shape.
+
+    Wave 1 of the gz-mirror introduces lib/sd_host as the shared SD
+    protocol state machine driven by ED64-X (and, in later waves, V1/V2
+    SPI backends). The contract surface lives in two headers:
+      - sd_host.h: function-pointer table (sd_host_t) + 5 public funcs.
+      - sd_proto.h: SD-spec CMD numbers and response sizes.
+
+    These checks guard against accidental API regressions that would
+    silently break either the ED64 backend or the future V1/V2 backends.
+    """
+    h_path = "lib/sd_host/sd_host.h"
+    c_path = "lib/sd_host/sd_host.c"
+    p_path = "lib/sd_host/sd_proto.h"
+
+    # If the gz-mirror waves haven't landed yet, skip silently.
+    if not (os.path.isfile(h_path) and os.path.isfile(c_path)):
+        return
+
+    h = read(h_path)
+    c = read(c_path)
+
+    # Public functions every backend (and the diskio glue) depends on.
+    for fn in ("sd_host_init", "sd_host_read_blocks", "sd_host_write_blocks",
+               "sd_host_send_cmd_r1", "sd_host_send_cmd_r1b"):
+        if fn not in h:
+            error(f"{h_path}: missing public function declaration: {fn}")
+        # The implementation must define them too.
+        if fn not in c:
+            error(f"{c_path}: missing implementation: {fn}")
+
+    # The function-pointer table must expose the SDIO primitives the ED64
+    # backend wires up. Removing or renaming any of these would silently
+    # break iodev_ed64.c at compile time, but this catches subtler reorders
+    # in the typedef block (IDO C89 cares about positional struct init).
+    for ptr in ("sdio_cmd_tx_byte", "sdio_cmd_rx_byte", "sdio_cmd_rx_bit",
+                "sdio_dat_tx_word", "sdio_dat_rx_word", "sdio_dat_idle_clks",
+                "set_spd", "rx_mblk", "tx_mblk"):
+        if ptr not in h:
+            error(f"{h_path}: sd_host_t missing function pointer: {ptr}")
+
+    # SPI hooks are reserved for Wave 4 -- the slots must be present in
+    # the struct now so V2/V1 backends can land without a header revisit.
+    for ptr in ("spi_io", "spi_tx_buf", "spi_rx_buf"):
+        if ptr not in h:
+            error(f"{h_path}: sd_host_t missing SPI slot reserved for Wave 4: {ptr}")
+
+    # sd_proto.h must define every CMD/ACMD that sd_host actually uses.
+    if os.path.isfile(p_path):
+        p = read(p_path)
+        for sym in ("SDP_CMD0", "SDP_CMD2", "SDP_CMD3", "SDP_CMD7", "SDP_CMD8",
+                    "SDP_CMD12", "SDP_CMD16", "SDP_CMD17", "SDP_CMD18",
+                    "SDP_CMD24", "SDP_CMD55", "SDP_ACMD6", "SDP_ACMD41",
+                    "SDP_OCR_BUSY_DONE", "SDP_OCR_CCS_IS_HC",
+                    "SDP_DATA_RESP_MASK", "SDP_DATA_RESP_ACCEPTED"):
+            if sym not in p:
+                error(f"{p_path}: missing SD-protocol constant: {sym}")
+
+    # sd_host.c must reuse lib/sd_crc.c rather than carry its own CRC7.
+    # If a future change inlines a hand-rolled CRC here, that's drift we
+    # want surfaced (fixes belong in sd_crc.c so all callers benefit).
+    if "sd_crc7(" not in c:
+        error(f"{c_path}: must reuse sd_crc7() from lib/sd_crc.c (do not inline CRC7)")
+
+
+def check_iodev_ed64():
+    """ED64 X iodev backend must preserve cart + SDIO protocol invariants.
+
+    The ED64-X SD path is native 4-bit SDIO (NOT SPI) driven through the
+    FPGA registers. After the gz-mirror Wave 2 refactor most protocol
+    code lives in lib/sd_host/sd_host.c; this backend supplies the
+    register I/O primitives, detection, and the FPGA-DMA fast read path.
+
+    The invariants below guard patterns that, if removed, would silently
+    break SD I/O on real EverDrive X hardware.
     """
     path = "lib/iodev/iodev_ed64.c"
     if not os.path.isfile(path):
@@ -333,12 +427,7 @@ def check_iodev_ed64():
         error(f"{path}: PI_WRITE_FLUSH macro must be defined and pair IO_WRITE with a draining IO_READ")
 
     # Cart-unlock magic. The Krikzz X7/X8 hardware spec uses a single
-    # 0xAA55 write to open the FPGA register window. The Phase 1b plan
-    # called for a 0xAA55 + 0x55AA pair, but the gz reference firmware
-    # (mature working code on real ED64 X hardware) and Krikzz public
-    # docs use only 0xAA55. Match the literal 0xAA55 in a #define
-    # (not just any mention) so a typo in the constant is caught
-    # rather than passing because of an unchanged comment.
+    # 0xAA55 write to open the FPGA register window.
     if not re.search(r"#define\s+\w+\s+0xAA55(?:[uU]?[lL]{0,2})?(?!\w)", src):
         error(f"{path}: must define the cart-unlock magic 0xAA55 (#define <NAME> 0xAA55[u])")
 
@@ -354,6 +443,23 @@ def check_iodev_ed64():
     # cart on the bus.
     if "0xED64" not in src:
         error(f"{path}: detection must check REG_EDID for 0xED64 magic")
+
+    # SDIO init: CMD8 echo check (0x01AA) distinguishes SDHC from SD v1/MMC.
+    # Until Wave 2 lifts CMD8 into sd_host.c, the literal must appear here;
+    # after Wave 2 the literal moves to lib/sd_host/sd_proto.h which has
+    # its own check (check_sd_host_proto).
+    if "0x01AA" not in src and "SD_CMD8_ARG" not in src:
+        # Tolerate: post-Wave-2 the constant lives in sd_proto.h. The
+        # sd_host check below catches that case.
+        if not os.path.isfile("lib/sd_host/sd_proto.h"):
+            error(f"{path}: ed64_sd_init must check CMD8 echo for SDHC detection (0x01AA)")
+
+    # FPGA-DMA fast read: ED64-X reads sectors via REG_DMA_ADDR + REG_DMA_LEN
+    # into a cart-bus staging area before doing a PI DMA into RDRAM. Without
+    # this fast path, reads fall back to byte-by-byte DAT bus I/O which is
+    # ~256x slower per sector.
+    if "REG_DMA_ADDR" not in src and "ED64_REG_DMA_ADDR" not in src:
+        error(f"{path}: read path must use FPGA DMA (REG_DMA_ADDR/REG_DMA_LEN), not byte-by-byte DAT reads")
 
 
 def check_spawn_zone_typing():
@@ -465,7 +571,9 @@ def check_lib_isolation():
 # Files allowed to include libultra headers (PI/cart-bus access).
 LIBULTRA_ALLOWED = [
     "lib/iodev/iodev_sc64.c",
-    "lib/iodev/iodev_ed64.c",  # Phase 1b
+    "lib/iodev/iodev_ed64.c",     # X7/X8, Phase 1b
+    "lib/iodev/iodev_ed64_v2.c",  # V2/V2.5, gz-mirror Wave 4
+    "lib/iodev/iodev_ed64_v1.c",  # V1, gz-mirror Wave 5
     "lib/lib_types.h",         # toolchain shim — bridges <stdint.h> ↔ PR/ultratypes.h
 ]
 LIBULTRA_INCLUDE_PATTERNS = [
@@ -1524,6 +1632,57 @@ def check_minimap_boss():
         error(f"{minimap_c}: boss rot.y not NaN-guarded - SIN_DEG on a NaN freezes the N64")
 
 
+def check_xbld_load_zeros_entities():
+    """Cross-build loads must zero actor/boss/playerShots arrays when the overlay
+    build ID mismatches, to prevent a MIPS float-to-int trap on the next update frame."""
+    save_c = os.path.join(SRC_PRACTICE, "practice_save.c")
+    src = read(save_c)
+    if "sSdLastLoadWasXBld" not in src:
+        error(f"{save_c}: sSdLastLoadWasXBld flag missing - cross-build load safety not implemented")
+    for arr in ('actors', 'bosses', 'scenery', 'sprites', 'effects', 'items', 'playerShots'):
+        if f'bzero(sn->{arr}' not in src:
+            error(f"{save_c}: bzero(sn->{arr}) missing - entity array not cleared on overlay mismatch")
+    if "SD XBLD OK" not in src:
+        error(f"{save_c}: 'SD XBLD OK' status missing - cross-build loads must show distinct status")
+
+    sd_c = os.path.join(SRC_PRACTICE, "practice_sd.c")
+    sd_src = read(sd_c)
+    if "Practice_Save_LastLoadWasXBuild" not in sd_src:
+        error(f"{sd_c}: Practice_Save_LastLoadWasXBuild not called - cross-build status not shown to user")
+
+
+def check_status_banner_draws_during_pause():
+    """Practice_Hud_Draw must render the SD save/load status banner before the
+    PLAY_UPDATE early-return, otherwise results triggered from the in-game pause
+    menu finish silently. See practice_hud.c bug found 2026-05-02."""
+    hud_c = os.path.join(SRC_PRACTICE, "practice_hud.c")
+    src = read(hud_c)
+
+    func_match = re.search(
+        r"void\s+Practice_Hud_Draw\s*\(\s*void\s*\)\s*\{(.*?)\n\}",
+        src, re.DOTALL
+    )
+    if not func_match:
+        error(f"{hud_c}: Practice_Hud_Draw function not found")
+        return
+
+    body = func_match.group(1)
+    status_idx = body.find("sStatusTimer > 0")
+    guard_idx = body.find("gPlayState != PLAY_UPDATE")
+
+    if status_idx < 0:
+        error(f"{hud_c}: status banner draw (sStatusTimer > 0) missing from Practice_Hud_Draw")
+        return
+    if guard_idx < 0:
+        error(f"{hud_c}: PLAY_UPDATE guard missing from Practice_Hud_Draw")
+        return
+    if status_idx > guard_idx:
+        error(
+            f"{hud_c}: status banner draw must come BEFORE the PLAY_UPDATE guard, "
+            f"otherwise SD save/load results from the pause menu render silently"
+        )
+
+
 def check_build_info():
     """Build hash header is generated and included in the level-select draw path."""
     gen_script = os.path.join("tools", "gen_build_info.py")
@@ -1901,6 +2060,8 @@ def main():
     check_phase3_ram_detection()
     check_practice_pool_placement()
     check_practice_pool_no_overlay_overlap()
+    check_sd_host()
+    check_slot_manager_atomic_write()
     check_boot_main_rom_budget()
     check_late_segment_addresses()
     check_late_segment_ram_caps()
@@ -1922,6 +2083,8 @@ def main():
     check_hit64_logo()
     check_owl_logo()
     check_minimap_boss()
+    check_xbld_load_zeros_entities()
+    check_status_banner_draws_during_pause()
     check_build_info()
     check_boss_test()
     check_enemy_health()

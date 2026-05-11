@@ -34,6 +34,11 @@ iodev_result_t iodev_sd_init(void);
  * diskio.c uses this to avoid re-issuing the SD_OP_INIT command on every f_open. */
 int iodev_sd_was_ok(void);
 
+/* Returns the raw result code from the most-recent iodev_sd_init() call.
+ * -99 = never called; 0 = IODEV_OK; negative = iodev_result_t error code.
+ * Useful for diagnostic HUD messages on carts without IS-Viewer (e.g. ED64). */
+int iodev_sd_init_result(void);
+
 /* Read `count` 512-byte sectors starting at `lba` into `buf`.
  * `buf` must be 8-byte aligned (DMA requirement) and `count * 512` bytes long. */
 iodev_result_t iodev_sd_read_sectors(uint32_t lba, uint32_t count, void *buf);
@@ -52,5 +57,11 @@ iodev_result_t iodev_sd_release(void);
  * that follows a prior iodev_sd_release(). Updates the init-result cache so
  * diskio.c continues to function correctly. */
 iodev_result_t iodev_sd_acquire(void);
+
+/* Returns the raw 32-bit value read from the ED64 EDID register during
+ * iodev_detect().  Upper 16 bits should be 0xED64 on a real ED64 X7/X8.
+ * Returns 0 if ed64_detect() was never called.
+ * Used for diagnostic HUD messages when IODEV_NONE is detected. */
+uint32_t iodev_ed64_raw_edid(void);
 
 #endif /* LIB_IODEV_H */

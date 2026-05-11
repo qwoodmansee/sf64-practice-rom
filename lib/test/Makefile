@@ -17,12 +17,18 @@ INCLUDES = -I.. -I.
 
 TEST_DISKIO_IMG = /tmp/test_diskio.img
 
-TESTS = test_sd_crc test_serial test_slot_manager test_crc32 test_diskio test_fatfs_smoke test_osk test_file_browser test_slot_manager_sd
+TESTS = test_sd_crc test_serial test_slot_manager test_crc32 test_diskio test_fatfs_smoke test_osk test_file_browser test_slot_manager_sd test_sd_host
 
 all: run-all
 
 test_sd_crc: test_sd_crc.c ../sd_crc.c ../sd_crc.h ../lib_types.h
 	$(CC) $(CFLAGS) $(INCLUDES) test_sd_crc.c ../sd_crc.c -o $@
+
+# sd_host's protocol engine: links sd_host.c + sd_crc.c. The mock SD
+# card lives in test_sd_host.c itself.
+test_sd_host: test_sd_host.c ../sd_host/sd_host.c ../sd_host/sd_host.h \
+              ../sd_host/sd_proto.h ../sd_crc.c ../sd_crc.h ../lib_types.h
+	$(CC) $(CFLAGS) $(INCLUDES) test_sd_host.c ../sd_host/sd_host.c ../sd_crc.c -o $@
 
 test_serial: test_serial.c ../serial.c ../serial.h ../lib_types.h
 	$(CC) $(CFLAGS) $(INCLUDES) test_serial.c ../serial.c -o $@
@@ -85,7 +91,7 @@ run-all: $(TESTS)
 	@for t in $(TESTS); do \
 		echo "===> $$t"; \
 		case "$$t" in \
-		  test_sd_crc|test_serial|test_slot_manager|test_crc32|test_osk|test_file_browser|test_slot_manager_sd) ./$$t || exit 1 ;; \
+		  test_sd_crc|test_serial|test_slot_manager|test_crc32|test_osk|test_file_browser|test_slot_manager_sd|test_sd_host) ./$$t || exit 1 ;; \
 		  *) \
 		    rm -f $(TEST_DISKIO_IMG); \
 		    $(MAKE) -s $(TEST_DISKIO_IMG); \

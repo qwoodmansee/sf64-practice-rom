@@ -129,18 +129,19 @@ void Practice_Hud_Draw(void) {
     s32 valueX;
     s32 lineCount = 0;
 
-    /* Draw before the PLAY_UPDATE guard so it remains visible while frozen. */
+    /* Draw before the PLAY_UPDATE guard so both remain visible while frozen
+     * or during PLAY_PAUSE (e.g. SD save/load results from the pause menu). */
     if ((gGameState == GSTATE_PLAY) && Practice_FrameAdvance_IsPaused()) {
         Practice_DrawTextColor(8, 8, "PAUSED", 255, 220, 60);
-    }
-
-    if ((gGameState != GSTATE_PLAY) || (gPlayState != PLAY_UPDATE)) {
-        return;
     }
 
     if ((sStatusTimer > 0) && (sStatusText != NULL)) {
         Practice_DrawBox(74, 36, 172, 14, 0, 0, 0, 170);
         Practice_DrawTextColor(80, 39, sStatusText, sStatusR, sStatusG, sStatusB);
+    }
+
+    if ((gGameState != GSTATE_PLAY) || (gPlayState != PLAY_UPDATE)) {
+        return;
     }
 
     if (!gPracticeConfig.showHudOverlay) {
