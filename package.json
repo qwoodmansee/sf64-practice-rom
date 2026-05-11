@@ -1,0 +1,11 @@
+{
+  "name": "sf64-practice-rom-tools",
+  "private": true,
+  "dependencies": {
+    "pdfkit": "^0.15.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/pdfkit": "^0.13.0"
+  }
+}
