@@ -117,6 +117,15 @@ if the float is in a valid memory location.
 
 ## Adding a new practice source file (checklist)
 
+> **Memory architecture is mid-restructure (as of 2026-05-09).** New
+> practice/lib code currently still lands in `PRACTICE_OBJS` per the
+> checklist below, but Phase 3 of the restructure (see
+> `docs/superpowers/specs/2026-05-09-practice-rom-memory-architecture-design.md`)
+> will switch the default to `.practice_late_core`. If you're adding a
+> file and the spec's Phase 3 has landed, follow that plan instead.
+> Phase 1 (the `.practice_late_core` scaffold + iodev/sd_host migration)
+> is in tree under `docs/superpowers/plans/2026-05-09-phase1-practice-late-core.md`.
+
 1. Create `src/practice/practice_<name>.c` (wrap in `#ifdef PRACTICE_ROM`)
 2. Add function declarations to `include/practice.h`
 3. Add any config fields to `PracticeConfig` struct in `include/practice.h`
