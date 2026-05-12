@@ -9,7 +9,7 @@ import path from 'path';
 
 // ─── Color palette ────────────────────────────────────────────────────────────
 const C = {
-  bg:        '#0A0A14',   // space black — used for ALL pages now
+  bg:        '#0A0A14',
   panelDark: '#1F254E',
   panelMid:  '#2C3269',
   border:    '#3D42A0',
@@ -18,9 +18,9 @@ const C = {
   red:       '#FB1A32',
   grey:      '#B5B89C',
   white:     '#FFFFFF',
-  textMain:  '#D0CEC4',   // light warm text (dark bg)
-  textDim:   '#9090B0',   // muted blue-grey (dark bg)
-  rowAlt:    '#13152A',   // subtle dark-navy alt row
+  textMain:  '#D0CEC4',
+  textDim:   '#9090B0',
+  rowAlt:    '#13152A',
 };
 
 // ─── Page geometry ────────────────────────────────────────────────────────────
@@ -33,7 +33,6 @@ const MT   = HBAR + 14;
 const MB   = HBAR + 14;
 
 // ─── Color helpers ────────────────────────────────────────────────────────────
-// PDFKit fill() does NOT understand CSS rgb() strings — always convert to hex
 function rgbToHex(r: number, g: number, b: number): string {
   return '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('');
 }
@@ -48,7 +47,6 @@ function linearGrad(
   return g as unknown as string;
 }
 
-// Relative luminance (WCAG formula) — returns 0 (black) … 1 (white)
 function luminance(r: number, g: number, b: number): number {
   return [r, g, b].reduce((acc, v, i) => {
     const s = v / 255;
@@ -57,7 +55,6 @@ function luminance(r: number, g: number, b: number): number {
   }, 0);
 }
 
-// Returns '#FFFFFF' or '#1A1A2E' depending on which has better contrast
 function contrastText(r: number, g: number, b: number): string {
   return luminance(r, g, b) > 0.35 ? '#1A1A2E' : '#FFFFFF';
 }
@@ -65,6 +62,54 @@ function contrastText(r: number, g: number, b: number): string {
 // ─── Page state ───────────────────────────────────────────────────────────────
 let pageNum = 0;
 let doc: PDFKit.PDFDocument;
+
+// ─── Starfield ────────────────────────────────────────────────────────────────
+// Subtle space background: one faint nebula smudge + ~100 dim stars per page.
+// Uses a deterministic per-page seed so the PDF is reproducible.
+function drawStarfield() {
+  let s = (pageNum * 7919 + 31337) >>> 0;
+  function r(): number {
+    s = ((s * 1664525 + 1013904223) >>> 0);
+    return (s >>> 1) / 0x7FFFFFFF;
+  }
+
+  doc.save();
+
+  // One soft nebula glow — barely visible, adds depth
+  doc.fillColor('#1A1050').fillOpacity(0.13);
+  doc.circle(r() * W, r() * H, 55 + r() * 90).fill();
+
+  // Star field
+  for (let i = 0; i < 100; i++) {
+    const x    = r() * W;
+    const y    = r() * H;
+    const roll = r();
+    let radius: number, opacity: number, color: string;
+
+    if (roll < 0.70) {
+      // Majority: tiny, barely visible
+      radius  = 0.2 + r() * 0.3;
+      opacity = 0.07 + r() * 0.11;
+      color   = '#FFFFFF';
+    } else if (roll < 0.93) {
+      // Some: small, dim — occasional blue tint
+      radius  = 0.45 + r() * 0.4;
+      opacity = 0.10 + r() * 0.17;
+      color   = r() > 0.55 ? '#B8CCFF' : '#FFFFFF';
+    } else {
+      // Few: slightly brighter
+      radius  = 0.9 + r() * 0.8;
+      opacity = 0.16 + r() * 0.20;
+      color   = '#FFFFFF';
+    }
+
+    doc.fillColor(color).fillOpacity(opacity);
+    doc.circle(x, y, radius).fill();
+  }
+
+  doc.fillOpacity(1);
+  doc.restore();
+}
 
 function pageHeader(section: string) {
   doc.rect(0, 0, W, HBAR).fill(C.panelDark);
@@ -84,18 +129,48 @@ function pageFooter() {
      .text(`sageraces.com  -  page ${pageNum}`, ML, H - 17, { width: PW, align: 'center', lineBreak: false });
 }
 
+// ─── Side tab ─────────────────────────────────────────────────────────────────
+// Vertical section label on the right margin — N64 manual chapter tab style
+function pageSideTab(section: string) {
+  if (!section) return;
+  const tabW = 18;
+  const tabX = W - tabW;
+  const tabTop = HBAR + 1;
+  const tabH   = H - HBAR * 2 - 2;
+  const cx = tabX + tabW / 2;
+  const cy = tabTop + tabH / 2;
+
+  doc.rect(tabX, tabTop, tabW, tabH).fill(C.panelDark);
+  // Thin green left edge on the tab
+  doc.rect(tabX, tabTop, 2, tabH).fill(C.greenBot);
+
+  // Draw text rotated so it reads bottom-to-top
+  doc.save();
+  doc.translate(cx, cy);
+  doc.rotate(90, { origin: [0, 0] });
+  doc.fillColor(C.greenBot).font('Courier-Bold').fontSize(7)
+     .text(section.toUpperCase(), -(tabH / 2 - 6), -3.5, {
+       width: tabH - 12,
+       align: 'center',
+       lineBreak: false,
+       characterSpacing: 1.6,
+     });
+  doc.restore();
+}
+
 function newPage(section = '') {
   pageNum++;
   doc.addPage();
-  doc.rect(0, 0, W, H).fill(C.bg);   // dark background on every page
+  doc.rect(0, 0, W, H).fill(C.bg);
+  drawStarfield();
   pageHeader(section);
   pageFooter();
+  pageSideTab(section);
   doc.y = MT;
 }
 
 // ─── Typography helpers ───────────────────────────────────────────────────────
 
-// Section header: green gradient bg, Helvetica-Bold (not Courier), larger, letter-spaced
 function sectionHeader(title: string) {
   const y = doc.y + 3;
   const h = 27;
@@ -126,6 +201,56 @@ function bodyText(text: string, indent = 0) {
   doc.y += 3;
 }
 
+// ─── Inline body text with embedded button icons ───────────────────────────────
+// segments: alternating strings and button token arrays
+// e.g. inlineBody(['Press ', ['Z','+','DR'], ' to open the menu.'])
+type TextSeg = string | BtnToken[];
+
+function inlineBody(segments: TextSeg[], indent = 0) {
+  const startX = ML + indent;
+  const maxX   = ML + PW;
+  let x = startX;
+  let y = doc.y;
+  const lineH    = 13.5;
+  const iconOffY = -1;   // raise icons slightly to align with text cap-height
+
+  function breakLine() { x = startX; y += lineH; }
+
+  function tokenW(tok: BtnToken): number {
+    if (tok === 'Z') return 22;
+    if (tok === 'R' || tok === 'L') return 24;
+    if (tok === 'START') return 14;
+    if (tok === 'A') return 14;
+    if (tok === 'B') return 12;
+    if (tok === '+') return 9;
+    if (tok === '/') return 7;
+    return 15; // DPad directions
+  }
+
+  for (const seg of segments) {
+    if (Array.isArray(seg)) {
+      const w = (seg as BtnToken[]).reduce((s, t) => s + tokenW(t), 0);
+      if (x + w > maxX && x > startX) breakLine();
+      drawTokens(seg as BtnToken[], x, y + iconOffY);
+      x += w;
+    } else {
+      doc.fillColor(C.textMain).font('Helvetica').fontSize(9.5);
+      const words = (seg as string).split(' ');
+      for (let i = 0; i < words.length; i++) {
+        const word = words[i];
+        if (!word && i > 0) continue;
+        const display = (i < words.length - 1) ? word + ' ' : word;
+        const w = doc.widthOfString(display);
+        if (x + w > maxX && x > startX) breakLine();
+        doc.text(display, x, y, { lineBreak: false });
+        x += w;
+      }
+    }
+  }
+
+  doc.y = y + lineH + 3;
+}
+
 function vspace(pts = 6) { doc.y += pts; }
 
 function hRule(color = C.grey) {
@@ -144,7 +269,6 @@ function bullet(items: string[], indent = 0) {
   }
 }
 
-// Standard option/reference table (no button icons)
 function ctrlTable(rows: { key: string; val: string }[]) {
   const rowH = 17;
   const keyW = 135;
@@ -178,10 +302,7 @@ function callout(text: string, type: 'warning' | 'info' | 'tip' = 'info') {
 }
 
 // ─── N64 Controller Button Drawing ────────────────────────────────────────────
-// Each draw fn positions at (x, y) and returns width consumed.
-// Text/stroke colors respect luminance contrast automatically.
-
-const BTN_SZ = 12;   // base size for round buttons
+const BTN_SZ = 12;
 
 function drawBtnA(x: number, y: number, sz = BTN_SZ): number {
   const r = sz / 2;
@@ -209,7 +330,6 @@ function drawBtnZ(x: number, y: number): number {
 
 function drawBtnR(x: number, y: number): number {
   const w = 22, h = 9, py = y + 4;
-  // Shoulder shape: wider on one side
   doc.roundedRect(x, py, w, h, 3).fill('#484858');
   doc.fillColor('#D0D0E0').font('Helvetica-Bold').fontSize(7)
      .text('R', x, py + 1.5, { width: w, align: 'center', lineBreak: false });
@@ -232,16 +352,12 @@ function drawBtnStart(x: number, y: number, sz = BTN_SZ): number {
   return sz + 2;
 }
 
-// D-pad: cross shape, optional direction highlight (which arm to accent in green)
 function drawBtnDPad(x: number, y: number, dir?: 'U' | 'D' | 'L' | 'R', sz = 13): number {
   const arm = Math.round(sz / 3);
   const base = '#303038';
   const hi   = C.greenBot;
-  // Vertical bar
   doc.rect(x + arm, y, arm, sz).fill(base);
-  // Horizontal bar
   doc.rect(x, y + arm, sz, arm).fill(base);
-  // Direction highlight
   if (dir === 'U') doc.rect(x + arm, y,          arm, arm).fill(hi);
   if (dir === 'D') doc.rect(x + arm, y + arm * 2, arm, arm).fill(hi);
   if (dir === 'L') doc.rect(x,       y + arm,     arm, arm).fill(hi);
@@ -249,8 +365,7 @@ function drawBtnDPad(x: number, y: number, dir?: 'U' | 'D' | 'L' | 'R', sz = 13)
   return sz + 2;
 }
 
-// ─── Button-row control table (for pages with controller shortcuts) ───────────
-// Each row: array of "tokens" that draw button icons or connector text, plus description.
+// ─── Button-row control table ─────────────────────────────────────────────────
 type BtnToken = 'A' | 'B' | 'Z' | 'R' | 'L' | 'START' | 'DU' | 'DD' | 'DL' | 'DR' | '+' | '/';
 
 function drawTokens(tokens: BtnToken[], x: number, y: number): number {
@@ -283,7 +398,7 @@ function drawTokens(tokens: BtnToken[], x: number, y: number): number {
   return ox - x;
 }
 
-const ICON_COL = 110;   // reserved width for button icons in icon tables
+const ICON_COL = 110;
 
 function iconCtrlTable(rows: { btns: BtnToken[]; val: string; note?: string }[]) {
   const rowH = 22;
@@ -331,7 +446,6 @@ function radialDiagram(cx: number, cy: number, R = 88) {
     const py  = cy + Math.sin(rad) * R;
     const hex = rgbToHex(...s.rgb);
     doc.roundedRect(px - PW2 / 2, py - PH / 2, PW2, PH, 2.5).fill(hex);
-    // Contrast-safe text: auto dark/light based on pill color
     doc.fillColor(contrastText(...s.rgb)).font('Courier-Bold').fontSize(6.2)
        .text(s.label, px - PW2 / 2 + 2, py - 4.5, { width: PW2 - 4, align: 'center', lineBreak: false });
   }
@@ -341,7 +455,6 @@ function radialDiagram(cx: number, cy: number, R = 88) {
   doc.text('STICK', cx - 14, cy - 8, { width: 28, align: 'center', lineBreak: false });
   doc.text('THEN A', cx - 14, cy - 1, { width: 28, align: 'center', lineBreak: false });
 
-  // ASCII compass labels (Unicode arrows not supported in built-in PDF fonts)
   doc.fillColor(C.grey).font('Helvetica').fontSize(5.5);
   doc.text('^ UP',   cx - 8,       cy - R - 20, { lineBreak: false });
   doc.text('v DOWN', cx - 10,      cy + R + 10, { lineBreak: false });
@@ -354,6 +467,7 @@ function pageCover() {
   pageNum++;
   doc.addPage();
   doc.rect(0, 0, W, H).fill(C.bg);
+  drawStarfield();
 
   doc.rect(0, 0, W, HBAR).fill(C.panelDark);
   doc.rect(0, HBAR, W, 1).fill(C.border);
@@ -363,7 +477,7 @@ function pageCover() {
   doc.rect(0, H - HBAR, W, HBAR).fill(C.panelDark);
   doc.rect(0, H - HBAR, W, 1).fill(C.border);
   doc.fillColor(C.grey).font('Helvetica').fontSize(8)
-     .text('sageraces.com  -  staging.sageraces.com (beta)', ML, H - 17, { width: PW, align: 'center', lineBreak: false });
+     .text('sageraces.com  -  staging.sageraces.com/practice-roms (beta)', ML, H - 17, { width: PW, align: 'center', lineBreak: false });
 
   const ruleY1 = 90;
   doc.rect(ML, ruleY1, PW, 1.5).fill(C.border);
@@ -373,7 +487,6 @@ function pageCover() {
   doc.rect(ML, ruleY2, PW, 1.5).fill(C.border);
   doc.rect(ML + 50, ruleY2 + 2, PW - 100, 1).fill(C.panelMid);
 
-  // Title
   const titleY = 130;
   doc.fillColor(C.white).font('Courier-Bold').fontSize(50)
      .text('STAR FOX 64', ML, titleY, { width: PW, align: 'center', lineBreak: false });
@@ -388,7 +501,6 @@ function pageCover() {
   doc.fillColor(C.border).font('Helvetica').fontSize(11)
      .text('BETA USER GUIDE', ML, dotY + 14, { width: PW, align: 'center', lineBreak: false });
 
-  // SD warning
   const wY = 338;
   const wH = 96;
   doc.rect(ML, wY, PW, wH).fill('#280008');
@@ -405,7 +517,6 @@ function pageCover() {
        ML + 14, wY + 36, { width: PW - 22 }
      );
 
-  // Feature grid
   const featY = 454;
   doc.fillColor(C.border).font('Courier-Bold').fontSize(9)
      .text('WHAT IS INCLUDED', ML, featY, { width: PW, align: 'center', lineBreak: false });
@@ -436,11 +547,11 @@ function pageCover() {
        .text(desc, fx, fy + 11, { width: colW, lineBreak: false });
   }
 
-  // Quick start
+  // Quick start with inline button icons
   const qY = fY + 4 * 26 + 20;
   doc.moveTo(ML, qY).lineTo(ML + PW, qY).strokeColor(C.panelMid).lineWidth(0.5).stroke();
-  const qTy = qY + 6;   // text baseline row
-  const qIy = qY + 4;   // icon row (slightly higher to center with text)
+  const qTy = qY + 6;
+  const qIy = qY + 4;
   let qx = ML;
   doc.fillColor(C.grey).font('Helvetica').fontSize(9);
   doc.text('QUICK START', qx, qTy, { lineBreak: false });
@@ -531,8 +642,8 @@ function pageControls() {
   newPage('Controls');
 
   sectionHeader('OPENING THE MENU');
-  bodyText('Press  Z + D-pad Right  at any time during active gameplay to open the radial practice menu.');
-  vspace(4);
+  inlineBody(['Press ', ['Z', '+', 'DR'], ' at any time during active gameplay to open the radial practice menu.']);
+  vspace(2);
 
   sectionHeader('DURING GAMEPLAY  (menu CLOSED)');
   callout(
@@ -585,11 +696,12 @@ function pageRadialMenu() {
   newPage('Radial Menu');
 
   sectionHeader('THE RADIAL PRACTICE MENU');
-  bodyText(
-    'Press Z + D-pad Right to open the menu. Tilt the control stick toward any option, then press A to confirm. ' +
-    'Options are arranged like a compass -- stick up selects RESTART, stick right selects SAVE, etc.'
-  );
-  vspace(6);
+  inlineBody([
+    'Press ', ['Z', '+', 'DR'], ' to open the menu. Tilt the control stick toward any option, ' +
+    'then press ', ['A'], ' to confirm. ' +
+    'Options are arranged like a compass -- stick up selects RESTART, stick right selects SAVE, etc.',
+  ]);
+  vspace(4);
 
   const diagCY = doc.y + 108;
   radialDiagram(W / 2, diagCY, 88);
@@ -659,11 +771,11 @@ function pageSaveStates() {
   vspace(6);
 
   sectionHeader('FRAME ADVANCE');
-  bodyText(
-    'Pause the game at any moment and step forward one frame at a time. ' +
-    'Useful for analyzing inputs, routing, and hitbox interactions.'
-  );
-  vspace(4);
+  inlineBody([
+    'Pause with ', ['DD'], ' at any moment and step forward ', ['DU'],
+    ' one frame at a time. Useful for analyzing inputs, routing, and hitbox interactions.',
+  ]);
+  vspace(2);
 
   iconCtrlTable([
     { btns: ['DD'], val: 'Toggle pause / unpause' },
@@ -724,7 +836,7 @@ function pageCheats() {
 
     const y0  = doc.y;
     const hex = rgbToHex(...cheat.color);
-    const txt = contrastText(...cheat.color);   // auto contrast text on pill
+    const txt = contrastText(...cheat.color);
 
     doc.rect(ML, y0, PW, bh).fill('#0F1026');
     doc.rect(ML, y0, 5, bh).fill(hex);
@@ -928,10 +1040,13 @@ function pageSDCard() {
 
   vspace(6);
   sectionHeader('IN THE MEANTIME: RAM SAVES');
-  bodyText('RAM save states work fully right now (cleared on power-off):');
+  inlineBody([
+    'Use ', ['DL'], ' to save and ', ['DR'],
+    ' to load -- instant, every frame, on all hardware. Slots survive across levels ' +
+    'but are cleared on power-off.',
+  ]);
   vspace(2);
   bullet([
-    'D-PAD LEFT to save, D-PAD RIGHT to load -- instant, every frame',
     'Multiple slots -- cycle with L/R while the menu is open',
     'Works alongside frame advance -- save/load while paused',
     'Fast and reliable on all hardware configurations',
@@ -939,7 +1054,7 @@ function pageSDCard() {
 
   vspace(6);
   callout(
-    'For updates on SD card support, check staging.sageraces.com. ' +
+    'For updates on SD card support, check staging.sageraces.com/practice-roms. ' +
     'When SD saving goes live, a new ROM version will be released at sageraces.com.',
     'info'
   );
