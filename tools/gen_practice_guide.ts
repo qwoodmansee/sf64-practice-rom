@@ -691,6 +691,205 @@ function pageControls() {
   ]);
 }
 
+// ─── Page: Quick Reference (1-pager) ─────────────────────────────────────────
+function pageQuickRef() {
+  newPage('Quick Reference');
+
+  // ── Title ──────────────────────────────────────────────────────────────────
+  vspace(4);
+  doc.fillColor(C.white).font('Courier-Bold').fontSize(20)
+     .text('SHORTCUT REFERENCE', ML, doc.y, { width: PW, align: 'center', lineBreak: false });
+  doc.y += 26;
+  const ruleX = W / 2 - 55;
+  doc.rect(ruleX, doc.y, 110, 1).fill(C.greenBot);
+  doc.y += 12;
+
+  // ── Top section: two shortcut columns side by side ─────────────────────────
+  const COL_GAP  = 10;
+  const COL_W    = (PW - COL_GAP) / 2;
+  const COL_R    = ML + COL_W + COL_GAP;   // right col x
+  const ROW_H    = 24;
+  const ICON_W   = 90;                      // icon column within each col
+  const FONT_SZ  = 9.5;
+  const HDR_H    = 24;
+
+  // Tallest column sets the block height (left has 5 rows, right has 3)
+  const leftRows = 5;
+  const blockH   = HDR_H + leftRows * ROW_H;
+
+  type ColRow = { btns: BtnToken[]; label: string; note?: string };
+
+  function drawCol(
+    x: number, colW: number,
+    title: string, colorTop: string, colorBot: string,
+    rows: ColRow[]
+  ) {
+    // Header
+    const g = linearGrad(doc, x, doc.y, x, doc.y + HDR_H, [[0, colorTop], [1, colorBot]]);
+    doc.rect(x, doc.y, colW, HDR_H).fill(g);
+    doc.rect(x, doc.y + HDR_H - 1, colW, 1).fill(colorBot);
+    doc.fillColor(C.white).font('Helvetica-Bold').fontSize(9)
+       .text(title, x + 8, doc.y + 8, { width: colW - 16, lineBreak: false, characterSpacing: 0.5 });
+    // Rows — draw at fixed y offsets so both columns are anchored together
+    rows.forEach(({ btns, label, note }, i) => {
+      const ry = doc.y + HDR_H + i * ROW_H;
+      if (i % 2 === 0) doc.rect(x, ry, colW, ROW_H).fill(C.rowAlt);
+      drawTokens(btns, x + 6, ry + (ROW_H - BTN_SZ) / 2 - 1);
+      doc.fillColor(note ? '#FFB0B8' : C.textMain).font('Helvetica').fontSize(FONT_SZ)
+         .text(label, x + ICON_W, ry + (ROW_H - FONT_SZ * 1.15) / 2,
+               { width: colW - ICON_W - 6, lineBreak: false });
+    });
+    // Fill remaining rows with blank alternating bg so columns match height
+    for (let i = rows.length; i < leftRows; i++) {
+      const ry = doc.y + HDR_H + i * ROW_H;
+      if (i % 2 === 0) doc.rect(x, ry, colW, ROW_H).fill(C.rowAlt);
+    }
+  }
+
+  const savedY = doc.y;
+  drawCol(ML, COL_W,
+    'DURING GAMEPLAY  (menu closed)',
+    C.greenTop, C.greenBot,
+    [
+      { btns: ['Z', '+', 'DR'], label: 'Open the practice menu' },
+      { btns: ['DD'],            label: 'Pause / unpause frame advance' },
+      { btns: ['DU'],            label: 'Advance one frame  (paused only)' },
+      { btns: ['DL'],            label: 'Save state' },
+      { btns: ['DR'],            label: 'Load state' },
+    ]
+  );
+  doc.y = savedY;
+  drawCol(COL_R, COL_W,
+    'WHILE MENU IS OPEN',
+    '#0D1848', C.border,
+    [
+      { btns: ['A'],           label: 'Confirm option' },
+      { btns: ['L', '/', 'R'], label: 'Cycle save slot' },
+      { btns: ['START'],       label: 'Return to title  (hold)' },
+    ]
+  );
+  doc.y = savedY + blockH + 14;
+
+  // ── Common patterns section ────────────────────────────────────────────────
+  const secY = doc.y;
+  const secH = 22;
+  const g2 = linearGrad(doc, ML, secY, ML, secY + secH, [[0, C.panelMid], [1, C.panelDark]]);
+  doc.rect(ML, secY, PW, secH).fill(g2);
+  doc.rect(ML, secY + secH - 1, PW, 1).fill(C.border);
+  doc.fillColor(C.white).font('Helvetica-Bold').fontSize(10)
+     .text('COMMON PATTERNS', ML + 10, secY + 6, { lineBreak: false, characterSpacing: 1 });
+  doc.y = secY + secH + 8;
+
+  // ── Pattern cards (2 columns × 3 rows) ────────────────────────────────────
+  const CARD_W   = (PW - COL_GAP) / 2;
+  const CARD_H   = 118;
+  const CARD_GAP = 8;
+  const CARD_HDR = 20;
+  const STEP_H   = 17;
+  const STEP_ICON_W = 58;   // icon column within card
+
+  type Step = { btns?: BtnToken[]; text: string; dim?: boolean };
+  type Card = { title: string; color: string; steps: Step[] };
+
+  const cards: Card[] = [
+    {
+      title: 'MANAGE SLOTS',
+      color: C.greenBot,
+      steps: [
+        { btns: ['Z', '+', 'DR'],   text: 'Open menu' },
+        { btns: ['L', '/', 'R'],    text: 'Cycle active slot (in menu)' },
+        { btns: ['DL'],             text: 'Save to active slot' },
+        { btns: ['DR'],             text: 'Load from active slot' },
+        { dim: true, text: 'Open SAVE option to browse all slots' },
+      ],
+    },
+    {
+      title: 'FRAME ADVANCE',
+      color: '#50A0FF',
+      steps: [
+        { btns: ['DD'],   text: 'Toggle pause on / off' },
+        { btns: ['DU'],   text: 'Step one frame  (while paused)' },
+        { btns: ['DL'],   text: 'Save state  (works while paused)' },
+        { btns: ['DR'],   text: 'Load state  (works while paused)' },
+      ],
+    },
+    {
+      title: 'CHANGING LEVELS',
+      color: '#E08020',
+      steps: [
+        { btns: ['Z', '+', 'DR'],  text: 'Open menu' },
+        { dim: true, text: 'Stick DOWN  →  LEVELS, press A' },
+        { dim: true, text: 'Navigate planet map with stick' },
+        { btns: ['A'],             text: 'Confirm warp' },
+      ],
+    },
+    {
+      title: 'CHANGE VISUALIZERS',
+      color: '#A040C0',
+      steps: [
+        { btns: ['Z', '+', 'DR'],  text: 'Open menu' },
+        { dim: true, text: 'Stick UP-RIGHT  →  DISPLAY, press A' },
+        { dim: true, text: 'Navigate to VISUALIZERS  →  HITBOXES' },
+        { btns: ['A'],             text: 'Toggle on / off' },
+        { btns: ['DL', 'DR'],      text: 'Change color scheme' },
+      ],
+    },
+    {
+      title: 'INPUT MONITOR',
+      color: '#20A8A0',
+      steps: [
+        { btns: ['Z', '+', 'DR'],  text: 'Open menu' },
+        { dim: true, text: 'Stick UP-RIGHT  →  DISPLAY, press A' },
+        { dim: true, text: 'Navigate to INPUT' },
+        { btns: ['A'],             text: 'Toggle on / off' },
+      ],
+    },
+    {
+      title: 'SAVE TO SD CARD',
+      color: C.red,
+      steps: [
+        { btns: ['Z', '+', 'DR'],  text: 'Open menu' },
+        { btns: ['Z'],             text: 'Save state to SD' },
+        { btns: ['Z', '+', 'B'],   text: 'Load state from SD' },
+        { dim: true, text: '(!) NOT WORKING ON EVERDRIVE' },
+      ],
+    },
+  ];
+
+  function drawCard(cx: number, cy: number, card: Card) {
+    doc.rect(cx, cy, CARD_W, CARD_H).fill(C.rowAlt);
+    doc.rect(cx, cy, CARD_W, CARD_HDR).fill(card.color);
+    doc.fillColor(contrastText(...hexToRgb(card.color))).font('Helvetica-Bold').fontSize(8.5)
+       .text(card.title, cx + 8, cy + 6, { width: CARD_W - 16, lineBreak: false });
+
+    let sy = cy + CARD_HDR + 4;
+    for (const step of card.steps) {
+      if (step.btns && step.btns.length > 0) {
+        drawTokens(step.btns, cx + 6, sy + 3);
+        doc.fillColor(C.textMain).font('Helvetica').fontSize(7.8)
+           .text(step.text, cx + STEP_ICON_W, sy + 4, { width: CARD_W - STEP_ICON_W - 6, lineBreak: false });
+      } else {
+        doc.fillColor(step.dim ? C.textDim : C.textMain).font('Helvetica').fontSize(7.8)
+           .text(step.text, cx + 8, sy + 4, { width: CARD_W - 14, lineBreak: false });
+      }
+      sy += STEP_H;
+    }
+  }
+
+  // hex color to rgb — needed for contrastText on card titles
+  function hexToRgb(hex: string): [number, number, number] {
+    const n = parseInt(hex.replace('#', ''), 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  }
+
+  const cardStartY = doc.y;
+  for (let row = 0; row < 3; row++) {
+    const cy = cardStartY + row * (CARD_H + CARD_GAP);
+    drawCard(ML,         cy, cards[row * 2]);
+    drawCard(ML + CARD_W + COL_GAP, cy, cards[row * 2 + 1]);
+  }
+}
+
 // ─── Page: Radial Menu ────────────────────────────────────────────────────────
 function pageRadialMenu() {
   newPage('Radial Menu');
@@ -1082,6 +1281,7 @@ function main() {
   pageCover();
   pageWelcome();
   pageControls();
+  pageQuickRef();
   pageRadialMenu();
   pageSaveStates();
   pageCheats();
