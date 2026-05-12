@@ -124,7 +124,6 @@ extern s32 gPracticeActiveSlot;
 extern s32 gPracticeSlotValidBits;
 extern s32 gPracticeLastSaveResult;
 extern s32 gPracticeLastLoadResult;
-extern s32 gPracticePostLoadDiag;
 
 /* Phase 3 — RAM checkpoint selection (Practice_Save_Init at boot).
  * These live in .main_bss. The slot pool megabyte sits in Expansion Pak DRAM

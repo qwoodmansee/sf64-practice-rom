@@ -41,8 +41,6 @@ s32 gPracticeActiveSlot;
 s32 gPracticeSlotValidBits;
 s32 gPracticeLastSaveResult;
 s32 gPracticeLastLoadResult;
-s32 gPracticePostLoadDiag;
-
 /* Per-slot metadata captured at save time. Used by the cross-scene state
  * machine (to know which scene a slot is for without parsing the TLV body)
  * and by the slot picker UI (to display level / phase / "saved at" info).
@@ -1267,8 +1265,6 @@ static int Practice_Load_Cb(const void *buf, uint32_t size) {
     SAVE_TR_STAGE("load before Snapshot_ApplyToGame");
     Snapshot_ApplyToGame(sn);
     SAVE_TR_STAGE("load_cb ok return 0");
-    gPracticePostLoadDiag = 1;
-    osSyncPrintf("[save] post_load_set ps=%d\n", (s32)gPlayState);
     return 0;
 }
 

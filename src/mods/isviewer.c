@@ -40,9 +40,23 @@ static u8 sISViewerFailureCount = 0;
 static void ISViewer_Write(const u8* data, s32 len);
 
 void ISViewer_Init(void) {
+    u32 read_back;
+
+    /* Verify the token write lands in actual SC64 SDRAM rather than being
+     * silently dropped (as happens on EverDrive, where cart ROM space ignores
+     * CPU writes). On EverDrive 0x13FF0000 is past the ROM → reads return
+     * 0xFFFFFFFF → token mismatch → IS-Viewer stays disabled.
+     * The extra IO_READ between write and verify drains the PI write FIFO. */
+    IO_WRITE(ISV_BASE + ISV_TOKEN_OFF, ISV_TOKEN);
+    (void) IO_READ(ISV_BASE + ISV_TOKEN_OFF);
+    read_back = IO_READ(ISV_BASE + ISV_TOKEN_OFF);
+    if (read_back != ISV_TOKEN) {
+        sISViewerInitialized = 0;
+        return;
+    }
+
     sISViewerInitialized = 1;
     sISViewerFailureCount = 0;
-    PI_WRITE(ISV_BASE + ISV_TOKEN_OFF,     ISV_TOKEN);
     PI_WRITE(ISV_BASE + ISV_READ_PTR_OFF,  0);
     PI_WRITE(ISV_BASE + ISV_WRITE_PTR_OFF, 0);
 }

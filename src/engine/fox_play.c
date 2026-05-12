@@ -6980,16 +6980,7 @@ void Play_UpdateLevel(void) {
 void Play_Update(void) {
     s32 i;
 
-#ifdef PRACTICE_ROM
-#define PLD_PRINT(msg) do { if (gPracticePostLoadDiag) { osSyncPrintf("[play] pld: " msg "\n"); } } while(0)
-    PLD_PRINT("play_update enter");
-#endif
-
     Play_UpdateFillScreen();
-
-#ifdef PRACTICE_ROM
-    PLD_PRINT("after fill_screen");
-#endif
 
     for (i = TEAM_ID_FALCO; i <= TEAM_ID_PEPPY; i++) {
         if (gTeamDamage[i] > 0) {
@@ -7003,29 +6994,12 @@ void Play_Update(void) {
 
     for (i = 0; i < gCamCount; i++) {
         gPlayer[i].num = gPlayerNum = i;
-#ifdef PRACTICE_ROM
-        if (gPracticePostLoadDiag) {
-            osSyncPrintf("[play] pld: player_update i=%d state=%d\n", i, (s32)gPlayer[i].state);
-        }
-#endif
         Player_Update(&gPlayer[i]);
     }
 
-#ifdef PRACTICE_ROM
-    PLD_PRINT("after player_update");
-#endif
-
     Object_Update();
 
-#ifdef PRACTICE_ROM
-    PLD_PRINT("after object_update");
-#endif
-
     PlayerShot_UpdateAll();
-
-#ifdef PRACTICE_ROM
-    PLD_PRINT("after playershot_update");
-#endif
 
     BonusText_Update();
 
@@ -7033,10 +7007,6 @@ void Play_Update(void) {
         gPlayer[i].num = gPlayerNum = i;
         Camera_Update(&gPlayer[i]);
     }
-
-#ifdef PRACTICE_ROM
-    PLD_PRINT("after camera_update");
-#endif
 
     gCameraShakeY = 0.0f;
     if (gCameraShake != 0) {
@@ -7050,17 +7020,7 @@ void Play_Update(void) {
         gCameraShakeY = var_fv1 * SIN_DEG(gGameFrameCount * 70.0f);
     }
 
-#ifdef PRACTICE_ROM
-    PLD_PRINT("before play_update_level");
-#endif
-
     Play_UpdateLevel();
-
-#ifdef PRACTICE_ROM
-    PLD_PRINT("play_update done");
-    gPracticePostLoadDiag = 0;
-#undef PLD_PRINT
-#endif
 }
 
 u8 sVsItemSpawnIndex = -1;
@@ -7092,13 +7052,6 @@ void Play_Main(void) {
     s32 pad[3];
     s32 i;
     f32 fovYtarget;
-
-#ifdef PRACTICE_ROM
-    if (gPracticePostLoadDiag) {
-        osSyncPrintf("[play] post_load play_main ps=%d fovY=%d fovMode=%d\n",
-                     (s32)gPlayState, (s32)gFovY, (s32)gFovYMode);
-    }
-#endif
 
     switch (gFovYMode) {
         case 0:
