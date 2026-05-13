@@ -656,6 +656,15 @@ grep -n "last_iodev_obj\|LIB_IODEV_OBJS\[-1\]\|LIB_TOP_OBJS\[-1\]\|LIB_SD_HOST_O
 ```
 Expected: no results (every site has been replaced with `chain_predecessor` or removed). If any remain, replace using the same pattern.
 
+**Step 4g: STOP — human review of the patcher refactor required.**
+This is the gnarliest single edit in Phase 1 — five sites in a non-trivial Python file. A silent malformed `.ld` would link cleanly with wrong placements, which doesn't fail loudly. Surface the diff to the user before continuing:
+
+```bash
+git --no-pager diff tools/patch_linker_script.py | head -200
+```
+
+Stop here. Do not proceed to Step 5 until the user confirms the refactor is correct. If the user asks for changes, apply them and re-run Step 4f's audit grep before re-presenting.
+
 - [ ] **Step 5: Remove the migrated entries from their prior lists**
 
 In `tools/patch_linker_script.py`:
@@ -693,10 +702,11 @@ awk '/^\s*\.main 0x80000450/,/main_ROM_END/' linker_scripts/us/rev1/starfox64.ld
 ```
 Expected: empty output (none of the migrated `.o` should still be referenced inside `.main`).
 
-- [ ] **Step 7: Clean rebuild and confirm `main_ROM_END` drops below the cap**
+- [ ] **Step 7: Incremental rebuild and confirm `main_ROM_END` drops below the cap**
 
+Do **not** `rm -rf build/`. The worktree's `build/asm/`, `build/bin/`, `build/src/assets/` are symlinks to the main repo's build artifacts; nuking them triggers a cascade of cryptic errors when make tries to find missing `.textbin.bin` files that aren't in the user's tree (per CLAUDE.md "never run `make init` / `make extract`"). Make's incremental dependency tracking handles segment changes correctly:
 ```bash
-rm -rf build/ && make practice -j4
+make practice -j4
 ```
 Expected: build succeeds. Then:
 ```bash
@@ -739,32 +749,35 @@ Expected: **passes**. The `check_boot_main_rom_budget` invariant — which has b
 
 If it still fails, the headroom estimate was wrong; collect actual sizes via `size build/lib/iodev/*.o` etc. and either migrate one more file or surface to the human.
 
-- [ ] **Step 10: Re-run the function-pointer probe (now cross-segment)**
+- [ ] **Step 10: Build probe-enabled cross-segment + boot sanity, single hardware cycle**
 
-This is the architecturally meaningful run. `iodev_detect` now lives in `.practice_late_core` at `0x801F4000+`; the probe's `sLateProbe[]` table lives in main's `.rodata`. The call is data-resident-pointer-into-late-VRAM, exactly the Phase 2 dispatch pattern.
+This is the architecturally meaningful checkpoint. `iodev_detect` now lives in `.practice_late_core` at `0x801F4000+`; the probe's `sLateProbe[]` table lives in main's `.rodata`. The call is data-resident-pointer-into-late-VRAM, exactly the Phase 2 dispatch pattern.
+
+The user prefers a single hardware-flash cycle for this checkpoint, so build twice but flash once with the most-stringent variant:
 
 ```bash
+# 1. Probe-enabled cross-segment build (validates the dispatch architecture):
 rm -f build/src/practice/late/loader.o
 make practice -j4 PRACTICE_LATE_PROBE=1
-```
-Run on emulator/hardware. Expected: boots cleanly to the practice menu.
+# Note the .z64 path output by the build.
 
-If this faults but the same probe succeeded in Wave 3 (in-segment), the dispatch model has a problem — investigate the linker relocations on `sLateProbe` (`mips-linux-gnu-objdump -dr build/src/practice/late/loader.o | grep -A2 sLateProbe`). Surface to the human. **Do not proceed to Wave 5.**
-
-If it succeeds, the architecture is validated end-to-end. The `#ifdef` block stays in tree (default off) per the spec.
-
-- [ ] **Step 11: Hardware boot sanity check (no probe)**
-
-Build without the probe and run on hardware (or emulator):
-```bash
+# 2. Probe-disabled production build (validates the no-probe path; default state of the branch):
+rm -f build/src/practice/late/loader.o
 make practice -j4
 ```
-Expected:
+
+Flash and run **the probe-enabled build** on hardware (it's the more stringent test — both probe + normal flow must work). Confirm:
 - ROM boots, no blue screen.
 - Practice menu reachable.
-- A previously-working `_core` feature exercises the migrated path. Verify any of: `iodev_detect` returning the expected cart ID over IS-Viewer (`[iodev] cart=N sd_init=...` line), or simply that the practice ROM boots and the menu appears.
+- IS-Viewer shows the existing `[iodev] cart=N sd_init=...` line (validates `iodev_detect` from `_core` ran successfully via both the probe call AND `Practice_Init`'s normal call).
 
-This is the live confirmation that the migrated code runs from its new RAM home.
+If the probe-enabled build fails but the same probe succeeded in Wave 3 Step 10 (in-segment), the dispatch model has a problem — investigate the linker relocations on `sLateProbe`:
+```bash
+mips-linux-gnu-objdump -dr build/src/practice/late/loader.o | grep -A2 sLateProbe
+```
+Surface to the human. **Do not proceed to Wave 5.**
+
+If the probe-enabled build boots cleanly, the architecture is validated end-to-end. The probe-disabled build is then the production state for Wave 5+; no second flash needed unless verifying the `make practice -j4` (no flag) path produces a different boot result is desired.
 
 - [ ] **Step 12: Commit**
 

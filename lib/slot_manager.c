@@ -267,6 +267,32 @@ void slot_manager_set_sd_scratch(void *buf, uint32_t buf_size) {
     sSlotManager.sd_scratch_size = buf_size;
 }
 
+#ifdef SLOT_MANAGER_USE_FATFS
+/* Atomic save scratch: file path + ".tmp" suffix. Pak-size paths are
+ * comfortably under 255 chars; the buffer covers FatFs's FF_MAX_LFN
+ * plus the suffix. Lives in .bss because game-thread stacks are tight. */
+#define SLOT_TMP_PATH_MAX  280u
+static char sSlotTmpPath[SLOT_TMP_PATH_MAX];
+
+/* Build "<path>.tmp" in sSlotTmpPath. Returns 0 on success, -1 if the
+ * full path wouldn't fit -- in which case the caller falls back to a
+ * non-atomic write (still safer than truncating the path). */
+static int slot_build_tmp_path(const char *path) {
+    int i = 0;
+    while (path[i] != '\0') {
+        if ((unsigned)i >= SLOT_TMP_PATH_MAX - 5u) return -1;  /* leave room for .tmp + NUL */
+        sSlotTmpPath[i] = path[i];
+        i++;
+    }
+    sSlotTmpPath[i++] = '.';
+    sSlotTmpPath[i++] = 't';
+    sSlotTmpPath[i++] = 'm';
+    sSlotTmpPath[i++] = 'p';
+    sSlotTmpPath[i]   = '\0';
+    return 0;
+}
+#endif
+
 int slot_manager_save_sd_named(const char *path) {
 #ifndef SLOT_MANAGER_USE_FATFS
     (void)path;
@@ -280,6 +306,8 @@ int slot_manager_save_sd_named(const char *path) {
     uint32_t payload_cap;
     uint32_t payload_size;
     uint32_t total_size;
+    const char *write_path;
+    int        atomic;
 
     if (!path || !sSlotManager.save_cb)      return SLOT_MANAGER_ERR_PARAM;
     if (!sSlotManager.sd_scratch ||
@@ -303,15 +331,37 @@ int slot_manager_save_sd_named(const char *path) {
     slot_put_le16(&base[0x06], sSlotManager.state_version);
     slot_put_le32(&base[0x08], total_size);
 
-    res = f_open(&fp, path, FA_WRITE | FA_CREATE_ALWAYS);
+    /* Atomic write: send data to "<path>.tmp" first, then rename to
+     * <path> on success. If the ROM crashes mid-write, the user keeps
+     * their previous save instead of getting a half-finished one.
+     * If the path is too long for the .tmp suffix to fit, fall back to
+     * a direct write -- still safer than silently truncating. */
+    atomic = (slot_build_tmp_path(path) == 0);
+    write_path = atomic ? sSlotTmpPath : path;
+
+    res = f_open(&fp, write_path, FA_WRITE | FA_CREATE_ALWAYS);
     if (res != FR_OK) return SLOT_MANAGER_ERR_IO_OPEN;
 
     res = f_write(&fp, base, total_size, &written);
     f_close(&fp);
 
     if (res != FR_OK || written != total_size) {
-        f_unlink(path);
+        f_unlink(write_path);
         return SLOT_MANAGER_ERR_IO_WRITE;
+    }
+
+    if (atomic) {
+        /* f_rename refuses to overwrite, so unlink any prior file at
+         * `path` first. Both unlink and rename are best-effort: if
+         * unlink fails because the file didn't exist, that's fine; if
+         * rename then fails the tmp file is left behind and reported
+         * as IO_RENAME so the caller can show a clear error. */
+        (void)f_unlink(path);
+        res = f_rename(sSlotTmpPath, path);
+        if (res != FR_OK) {
+            f_unlink(sSlotTmpPath);
+            return SLOT_MANAGER_ERR_IO_RENAME;
+        }
     }
 
     return SLOT_MANAGER_OK;

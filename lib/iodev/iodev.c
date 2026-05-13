@@ -24,20 +24,31 @@ int iodev_sd_was_ok(void) {
     return (sIodevSdInitResult == IODEV_OK);
 }
 
+int iodev_sd_init_result(void) {
+    return sIodevSdInitResult;
+}
+
 iodev_id_t iodev_detect(void) {
     /* Probe order: SC64 first, then ED64, fallback to stub.
      * First-match-wins; SC64's SCv2 IDENT magic and ED64's REG_EDID magic
      * are distinct enough that cross-detection is not a concern.
      * IDO is C89, so all declarations must precede statements. */
-    const iodev_backend_t *candidates[2];
+    const iodev_backend_t *candidates[4];
     int i;
 
     if (gIodevActive) {
         return gIodevActive->id;
     }
 
+    /* Probe order: SC64 (SCv2 magic) -> ED64-X (0xAA55 + 0xED64) ->
+     * ED64-V2/V2.5 (0x1234 + REG_VER>=0x0116) -> ED64-V1 (0x1234 +
+     * REG_VER<0x0116). Distinct unlock magics + version gates make all
+     * four mutually exclusive -- a real cart of one variant fails
+     * detection in the other three. */
     candidates[0] = iodev_backend_sc64();
     candidates[1] = iodev_backend_ed64();
+    candidates[2] = iodev_backend_ed64_v2();
+    candidates[3] = iodev_backend_ed64_v1();
 
     for (i = 0; i < (int)(sizeof(candidates) / sizeof(candidates[0])); i++) {
         if (candidates[i]->detect() == candidates[i]->id) {

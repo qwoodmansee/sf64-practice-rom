@@ -41,7 +41,6 @@ s32 gPracticeActiveSlot;
 s32 gPracticeSlotValidBits;
 s32 gPracticeLastSaveResult;
 s32 gPracticeLastLoadResult;
-
 /* Per-slot metadata captured at save time. Used by the cross-scene state
  * machine (to know which scene a slot is for without parsing the TLV body)
  * and by the slot picker UI (to display level / phase / "saved at" info).
@@ -78,9 +77,15 @@ static u32         sSdCrossOvBuildId;
 static u32         sSdCrossOvVram;
 static bool        sSdCrossHaveSegs;
 static u32         sSdCrossSegs[16];
+static bool        sSdCrossXBld;
+static bool        sSdLastLoadWasXBld;
 
 bool Practice_Sd_LoadIsPending(void) {
     return sSdCrossPending;
+}
+
+bool Practice_Save_LastLoadWasXBuild(void) {
+    return sSdLastLoadWasXBld;
 }
 
 void Practice_QueueBgmRescue(u16 seqId, s32 delayFrames) {
@@ -1178,6 +1183,33 @@ static int Practice_Load_Cb(const void *buf, uint32_t size) {
 #endif
     (void)have_overlay_meta;
 
+    /* Cross-build compatibility: when the saved overlay's build ID does not match
+     * the current ROM, the overlay bytes are not restorable.  Actor / boss state
+     * machines are overlay-dependent; leaving them as saved would cause a MIPS
+     * float-to-int trap on the next game update frame.  Zero those arrays now so
+     * Snapshot_ApplyToGame installs safe (inactive) entries instead.
+     * Player state, scalars, and path progression are overlay-independent and are
+     * always restored regardless of build.
+     * practice_overlay_build_id() is safe to call for any level regardless of
+     * which overlay is currently resident (it hashes DMA-table + linker constants). */
+    sSdLastLoadWasXBld = false;
+    if ((overlay_src != NULL) && (overlay_len > 0)) {
+        u32 xbld_cur = practice_overlay_build_id((LevelId)tlv_level_id);
+        if (tlv_ov_build_id != xbld_cur) {
+            osSyncPrintf("[practice_save] WARN xbld: saved=%08x cur=%08x, clearing entity arrays\n",
+                         tlv_ov_build_id, xbld_cur);
+            bzero(sn->actors,      sizeof(sn->actors));
+            bzero(sn->bosses,      sizeof(sn->bosses));
+            bzero(sn->scenery,     sizeof(sn->scenery));
+            bzero(sn->sprites,     sizeof(sn->sprites));
+            bzero(sn->effects,     sizeof(sn->effects));
+            bzero(sn->items,       sizeof(sn->items));
+            bzero(sn->playerShots, sizeof(sn->playerShots));
+            have_segments      = false;
+            sSdLastLoadWasXBld = true;
+        }
+    }
+
     /* Guard: only apply immediately when the right scene is live.  Any other
      * state (title screen, wrong level, mid-transition) defers to
      * Practice_Save_Tick via the SD cross-scene state. */
@@ -1194,6 +1226,7 @@ static int Practice_Load_Cb(const void *buf, uint32_t size) {
         sSdCrossOvBuildId  = tlv_ov_build_id;
         sSdCrossOvVram     = tlv_ov_vram_u32;
         sSdCrossHaveSegs   = have_segments;
+        sSdCrossXBld       = sSdLastLoadWasXBld;
         if (have_segments) {
             bcopy(segments_copy, sSdCrossSegs, sizeof(sSdCrossSegs));
         }
@@ -1221,10 +1254,13 @@ static int Practice_Load_Cb(const void *buf, uint32_t size) {
     }
     SAVE_TR_STAGE("load after overlay restore");
 
-    if (have_segments) {
-        SAVE_TR_STAGE("load apply TAG_SEGMENTS");
-        bcopy(segments_copy, gSegments, sizeof(gSegments));
-    }
+    /* gSegments is NOT restored for same-scene loads. The level is already
+     * running and all segment registers are valid. Restoring stale segment
+     * values here corrupts audio-heap pointers that Audio_SetAudioSpec
+     * updated (e.g. during a preceding cross-scene load), causing an audio
+     * RSP fault on the next audio frame. Segments are still restored in the
+     * cross-scene path (sd_cross_apply_now), where Play_Init just ran and
+     * the overlay's segment registers need to be set up. */
 
     SAVE_TR_STAGE("load before Snapshot_ApplyToGame");
     Snapshot_ApplyToGame(sn);
@@ -1611,6 +1647,9 @@ static void sd_cross_apply_now(void) {
                 (sSdCrossOvVram    == cur_va)  &&
                 (sSdCrossOvLen     == ds)) {
                 bcopy((void *)sSdCrossOvSrc, dst, ds);
+            } else {
+                osSyncPrintf("[practice_save] WARN xbld cross apply: saved=%08x cur=%08x\n",
+                             sSdCrossOvBuildId, cur_bld);
             }
         }
     }
@@ -1619,7 +1658,8 @@ static void sd_cross_apply_now(void) {
     }
     Snapshot_ApplyToGame(Practice_SaveScratch());
     sSdCrossPending = false;
-    Practice_Hud_ShowStatus("SD LOAD OK", 80, 255, 120);
+    Practice_Hud_ShowStatus(sSdCrossXBld ? "SD XBLD OK" : "SD LOAD OK", 80, 255, 120);
+    sSdCrossXBld = false;
 }
 
 void Practice_Save_Tick(void) {

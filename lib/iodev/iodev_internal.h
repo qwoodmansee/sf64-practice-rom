@@ -18,7 +18,9 @@ typedef struct {
 
 /* Each backend exposes a single getter for its descriptor. */
 const iodev_backend_t *iodev_backend_sc64(void);
-const iodev_backend_t *iodev_backend_ed64(void);  /* Phase 1b */
+const iodev_backend_t *iodev_backend_ed64(void);     /* X7/X8 (Phase 1b) */
+const iodev_backend_t *iodev_backend_ed64_v2(void);  /* V2/V2.5 */
+const iodev_backend_t *iodev_backend_ed64_v1(void);  /* V1 */
 const iodev_backend_t *iodev_backend_stub(void);
 
 #endif /* LIB_IODEV_INTERNAL_H */

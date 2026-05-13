@@ -23,6 +23,7 @@ static FATFS sFatfsWork;
 static bool sSdAvailable = false;
 static char sSavePath[SD_PATH_MAX];
 static char sSdStatus[48];
+static const char *sNoSdMsg = "NO SD CART";
 
 /* Lazy-mount FatFs before any operation so it discards cached FAT state.
  * We do NOT touch the hardware SD lock here: the card stays acquired from
@@ -119,12 +120,16 @@ static void on_load_file_selected(const char *path, void *ud) {
     sd_op_end();
     osSyncPrintf("[sd] slot_load=%d\n", res);
     Practice_Menu_Close();
+    osSyncPrintf("[sd] menu_closed\n");
     if (res == SLOT_MANAGER_OK) {
         if (Practice_Sd_LoadIsPending()) {
             Practice_Hud_ShowStatus("XSCENE WAIT", 220, 220, 80);
+        } else if (Practice_Save_LastLoadWasXBuild()) {
+            Practice_Hud_ShowStatus("SD XBLD OK", 220, 220, 80);
         } else {
             Practice_Hud_ShowStatus("SD LOAD OK", 80, 255, 120);
         }
+        osSyncPrintf("[sd] load_cb done pending=%d\n", (s32)Practice_Sd_LoadIsPending());
         return;
     }
     switch (res) {
@@ -158,6 +163,25 @@ void Practice_Sd_Init(void) {
     osSyncPrintf("[sd_init] file_browser_close exit; iodev_sd_was_ok enter\n");
     sSdAvailable = iodev_sd_was_ok();
     osSyncPrintf("[sd_init] iodev_sd_was_ok=%d\n", (s32) sSdAvailable);
+    if (!sSdAvailable) {
+        iodev_id_t cart = iodev_detect();
+        int res = iodev_sd_init_result();
+        if (cart == IODEV_ED64) {
+            sprintf(sSdStatus, "ED SD ERR %d", res);
+            sNoSdMsg = sSdStatus;
+        } else if (cart == IODEV_SC64) {
+            sprintf(sSdStatus, "SC SD ERR %d", res);
+            sNoSdMsg = sSdStatus;
+        } else {
+            /* IODEV_NONE: show raw EDID upper 16 bits for hardware diagnosis.
+             * 0xED64 = magic present but wrong BITLEN/detection bug.
+             * 0x0000 = registers locked or PI write dropped.
+             * 0xFFFF = open bus (cart not present / address wrong). */
+            sprintf(sSdStatus, "NO SD ID %04X",
+                    (unsigned int)((iodev_ed64_raw_edid() >> 16) & 0xFFFFu));
+            sNoSdMsg = sSdStatus;
+        }
+    }
     if (sSdAvailable) {
         /* Create the save directory tree at ROM boot so the first save never
          * stalls on fresh directory allocation mid-game. */
@@ -184,7 +208,7 @@ bool Practice_Sd_IsActive(void) {
 
 void Practice_Sd_StartSave(void) {
     if (!sSdAvailable || gPracticeSaveDisabled) {
-        Practice_Hud_ShowStatus("NO SD CART", 255, 180, 80);
+        Practice_Hud_ShowStatus(sNoSdMsg, 255, 180, 80);
         return;
     }
     osk_open("SD SAVE NAME:", "", OSK_MAX_TEXT,
@@ -194,7 +218,7 @@ void Practice_Sd_StartSave(void) {
 void Practice_Sd_StartLoad(void) {
     int r;
     if (!sSdAvailable || gPracticeSaveDisabled) {
-        Practice_Hud_ShowStatus("NO SD CART", 255, 180, 80);
+        Practice_Hud_ShowStatus(sNoSdMsg, 255, 180, 80);
         return;
     }
     sd_op_begin();

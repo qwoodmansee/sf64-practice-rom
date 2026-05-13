@@ -6996,8 +6996,11 @@ void Play_Update(void) {
         gPlayer[i].num = gPlayerNum = i;
         Player_Update(&gPlayer[i]);
     }
+
     Object_Update();
+
     PlayerShot_UpdateAll();
+
     BonusText_Update();
 
     for (i = 0; i < gCamCount; i++) {
@@ -7016,6 +7019,7 @@ void Play_Update(void) {
         }
         gCameraShakeY = var_fv1 * SIN_DEG(gGameFrameCount * 70.0f);
     }
+
     Play_UpdateLevel();
 }
 
