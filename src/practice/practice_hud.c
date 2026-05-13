@@ -81,12 +81,13 @@ void Practice_Hud_Update(void) {
         for (j = 0, sz_actor = &gActors[0]; j < ARRAY_COUNT(gActors); j++, sz_actor++) {
             if (sz_actor->obj.status != OBJ_ACTIVE) { continue; }
             if (sz_actor->obj.id != OBJ_ACTOR_SZ_SPACE_JUNK) { continue; }
-            gRadarMarks[sz_actor->index].enabled = true;
-            gRadarMarks[sz_actor->index].type = AI360_ENEMY;
-            gRadarMarks[sz_actor->index].pos.x = sz_actor->obj.pos.x;
-            gRadarMarks[sz_actor->index].pos.y = sz_actor->obj.pos.y;
-            gRadarMarks[sz_actor->index].pos.z = sz_actor->obj.pos.z;
-            gRadarMarks[sz_actor->index].yRot = 0.0f;
+            if (j >= (s32)ARRAY_COUNT(gRadarMarks)) { continue; }
+            gRadarMarks[j].enabled = true;
+            gRadarMarks[j].type = AI360_ENEMY;
+            gRadarMarks[j].pos.x = sz_actor->obj.pos.x;
+            gRadarMarks[j].pos.y = sz_actor->obj.pos.y;
+            gRadarMarks[j].pos.z = sz_actor->obj.pos.z;
+            gRadarMarks[j].yRot = 0.0f;
         }
     }
 
