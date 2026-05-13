@@ -145,7 +145,13 @@ void Practice_Minimap_Draw(void) {
                     Minimap_DrawTriangle(sx, sy, actor->obj.rot.y, 255, 120, 0);
                 }
                 break;
-            default: break;
+            default:
+                /* Sector Z: red dot for space junk satellites. */
+                if (gCurrentLevel == LEVEL_SECTOR_Z &&
+                    actor->obj.id == OBJ_ACTOR_SZ_SPACE_JUNK) {
+                    Practice_DrawBox(sx - 1, sy - 1, 3, 3, 255, 60, 60, 220);
+                }
+                break;
         }
     }
 

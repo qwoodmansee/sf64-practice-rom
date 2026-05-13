@@ -64,6 +64,7 @@ typedef struct PracticeConfig {
     bool enemyHealthBossOnly;   /* when true, skip actor section entirely */
     bool enemyHealthHideModels; /* ghost mode: suppress actor/boss 3-D models */
     s32 hitCount;               /* starting hit count applied on level launch */
+    bool showLevelTimers;       /* level-specific overlays: SZ missile dist, FO spawn countdown */
 } PracticeConfig;
 
 typedef enum PracticeSubMenu {

@@ -71,10 +71,26 @@ void Practice_Hud_Update(void) {
         Practice_ChargeShotHud_Tick();
     }
 
-    if (!gPracticeConfig.showHudOverlay) {
+    if ((gGameState != GSTATE_PLAY) || (gPlayState != PLAY_UPDATE)) {
         return;
     }
-    if ((gGameState != GSTATE_PLAY) || (gPlayState != PLAY_UPDATE)) {
+
+    if (gPracticeConfig.showLevelTimers && gCurrentLevel == LEVEL_SECTOR_Z) {
+        s32 j;
+        Actor* sz_actor;
+        for (j = 0, sz_actor = &gActors[0]; j < ARRAY_COUNT(gActors); j++, sz_actor++) {
+            if (sz_actor->obj.status != OBJ_ACTIVE) { continue; }
+            if (sz_actor->obj.id != OBJ_ACTOR_SZ_SPACE_JUNK) { continue; }
+            gRadarMarks[sz_actor->index].enabled = true;
+            gRadarMarks[sz_actor->index].type = AI360_ENEMY;
+            gRadarMarks[sz_actor->index].pos.x = sz_actor->obj.pos.x;
+            gRadarMarks[sz_actor->index].pos.y = sz_actor->obj.pos.y;
+            gRadarMarks[sz_actor->index].pos.z = sz_actor->obj.pos.z;
+            gRadarMarks[sz_actor->index].yRot = 0.0f;
+        }
+    }
+
+    if (!gPracticeConfig.showHudOverlay) {
         return;
     }
 
@@ -128,6 +144,7 @@ void Practice_Hud_Draw(void) {
     s32 labelX;
     s32 valueX;
     s32 lineCount = 0;
+    bool levelTimerHasContent = false;
 
     /* Draw before the PLAY_UPDATE guard so both remain visible while frozen
      * or during PLAY_PAUSE (e.g. SD save/load results from the pause menu). */
@@ -157,6 +174,20 @@ void Practice_Hud_Draw(void) {
     if (gPracticeConfig.showChargeShotMeter) { lineCount++; }
     if (gPracticeConfig.showMissedInputs) { lineCount++; }
     if (gPracticeConfig.showHitTracking) { lineCount += 6; }
+    if (gPracticeConfig.showLevelTimers) {
+        if (gCurrentLevel == LEVEL_FORTUNA) {
+            levelTimerHasContent = ((gAllRangeSpawnEvent - 500) - gAllRangeEventTimer > 0);
+        } else if (gCurrentLevel == LEVEL_SECTOR_Z) {
+            s32 i;
+            for (i = 10; i <= 12; i++) {
+                if (gActors[i].obj.status != OBJ_FREE && gActors[i].aiType == AI360_MISSILE) {
+                    levelTimerHasContent = true;
+                    break;
+                }
+            }
+        }
+        if (levelTimerHasContent) { lineCount++; }
+    }
 
     if (lineCount == 0) {
         return;
@@ -267,6 +298,29 @@ void Practice_Hud_Draw(void) {
         Practice_DrawTextColor(labelX, y, "TEAM:", 180, 180, 180);
         Practice_DrawNumber(valueX, y, gPracticeStats.teamKills);
         y += HUD_LINE_H;
+    }
+
+    if (levelTimerHasContent) {
+        if (gCurrentLevel == LEVEL_FORTUNA) {
+            Practice_DrawTextColor(labelX, y, "SPAWN:", 180, 180, 180);
+            Practice_DrawNumber(valueX, y, (gAllRangeSpawnEvent - 500) - gAllRangeEventTimer);
+            y += HUD_LINE_H;
+        } else if (gCurrentLevel == LEVEL_SECTOR_Z) {
+            s32 i;
+            f32 minDist = -1.0f;
+            for (i = 10; i <= 12; i++) {
+                if (gActors[i].obj.status != OBJ_FREE && gActors[i].aiType == AI360_MISSILE) {
+                    f32 raw = gActors[i].obj.pos.z - gBosses[0].obj.pos.z - 800.0f;
+                    if (raw < 0.0f) { raw = 0.0f; }
+                    if (minDist < 0.0f || raw < minDist) {
+                        minDist = raw;
+                    }
+                }
+            }
+            Practice_DrawTextColor(labelX, y, "MISS:", 180, 180, 180);
+            Practice_DrawNumber(valueX, y, minDist >= 0.0f ? (s32)minDist : 0);
+            y += HUD_LINE_H;
+        }
     }
 
 }

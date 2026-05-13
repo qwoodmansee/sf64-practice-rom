@@ -63,5 +63,6 @@ H.assert_eq(H.config_field("enemyHealthMinHp"), 0, "enemyHealthMinHp = 0")
 H.assert_eq(H.config_field("enemyHealthBossOnly"), 0, "enemyHealthBossOnly = false")
 H.assert_eq(H.config_field("enemyHealthHideModels"), 0, "enemyHealthHideModels = false")
 H.assert_eq(H.config_field("hitCount"), 0, "hitCount = 0")
+H.assert_eq(H.config_field("showLevelTimers"), 1, "showLevelTimers = true")
 
 H.finish()
