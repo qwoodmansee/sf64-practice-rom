@@ -5,6 +5,7 @@
 #include "variables.h"
 #include "bgm.h"
 #include "sf64audio_external.h"
+#include "sf64audio.h"
 #include "sf64thread.h"
 #include "practice_save_tags.h"
 #include "practice_save_config.h"
@@ -12,6 +13,10 @@
 
 #include "slot_manager.h"
 #include "serial.h"
+
+/* Audio engine array — defined in audio_general.c, not exposed via a header.
+ * We access it directly to clear isWaitingForFonts before a BGM rescue play. */
+extern ActiveSequence sActiveSequences[];
 
 #ifndef PRACTICE_SAVE_SELFTEST
 #define PRACTICE_SAVE_SELFTEST 1
@@ -1679,6 +1684,14 @@ void Practice_Save_Tick(void) {
         } else {
             osSyncPrintf("[bgm_dbg] rescue fire seqId=0x%04X ps=%d\n",
                          (u32)gPracticeBgmPendingSeqId, (s32)gPlayState);
+            /* Clear isWaitingForFonts before firing AUDIO_PLAY_BGM.
+             * If a same-spec BGM preview was cancelled mid-async-font-load
+             * (e.g. user presses A at level select), Audio_StopSequence cancels
+             * the DMA but does not reset isWaitingForFonts. The stuck flag causes
+             * Audio_ProcessSeqCmd to silently drop every subsequent AUDIO_PLAY_BGM,
+             * leaving the level running with no music.  Clearing it here makes the
+             * rescue call unconditionally effective. */
+            sActiveSequences[SEQ_PLAYER_BGM].isWaitingForFonts = 0;
             AUDIO_PLAY_BGM(gPracticeBgmPendingSeqId);
             gPracticeBgmPending = false;
         }

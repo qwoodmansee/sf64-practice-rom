@@ -1570,6 +1570,54 @@ def check_deferred_bgm_rescue():
         error(f"{PRACTICE_SAVE_C}: could not locate Practice_Save_Tick body")
 
 
+def check_bgm_rescue_clears_waiting_for_fonts():
+    """BGM rescue must clear isWaitingForFonts before calling AUDIO_PLAY_BGM.
+
+    If a same-spec BGM preview is cancelled mid-async-font-load (user presses
+    A quickly at level select), Audio_StopSequence cancels the DMA but does NOT
+    reset sActiveSequences[BGM].isWaitingForFonts. Audio_ProcessSeqCmd silently
+    drops every subsequent AUDIO_PLAY_BGM while that flag is set.  The rescue
+    in Practice_Save_Tick must clear the flag before firing AUDIO_PLAY_BGM to
+    ensure the call is unconditionally effective.
+    """
+    save_src = read(PRACTICE_SAVE_C)
+
+    tick_match = re.search(
+        r"void\s+Practice_Save_Tick\s*\([^)]*\)\s*\{(.*?)^\}",
+        save_src, re.DOTALL | re.MULTILINE,
+    )
+    if not tick_match:
+        error(f"{PRACTICE_SAVE_C}: could not locate Practice_Save_Tick body "
+              "(check_bgm_rescue_clears_waiting_for_fonts)")
+        return
+
+    tick_body = tick_match.group(1)
+
+    # The extern declaration for sActiveSequences must be visible.
+    if "extern ActiveSequence sActiveSequences" not in save_src:
+        error(
+            f"{PRACTICE_SAVE_C}: extern ActiveSequence sActiveSequences[] declaration missing; "
+            "needed to clear isWaitingForFonts in the BGM rescue path "
+            "(check_bgm_rescue_clears_waiting_for_fonts)"
+        )
+
+    # The rescue must clear isWaitingForFonts before AUDIO_PLAY_BGM.
+    clear_pos = tick_body.find("isWaitingForFonts = 0")
+    play_pos  = tick_body.find("AUDIO_PLAY_BGM(gPracticeBgmPendingSeqId)")
+    if clear_pos < 0:
+        error(
+            f"{PRACTICE_SAVE_C}: Practice_Save_Tick must clear "
+            "sActiveSequences[SEQ_PLAYER_BGM].isWaitingForFonts = 0 before "
+            "firing AUDIO_PLAY_BGM (check_bgm_rescue_clears_waiting_for_fonts)"
+        )
+    elif play_pos >= 0 and clear_pos > play_pos:
+        error(
+            f"{PRACTICE_SAVE_C}: isWaitingForFonts clear must come BEFORE "
+            "AUDIO_PLAY_BGM in Practice_Save_Tick "
+            "(check_bgm_rescue_clears_waiting_for_fonts)"
+        )
+
+
 def check_owl_logo():
     """owl-400 logo texture is wired into the level-select draw path correctly."""
     owl_c = os.path.join(SRC_PRACTICE, "practice_owl_tex.c")
@@ -2056,6 +2104,7 @@ def main():
     check_overlay_build_id_eager_init()
     check_audio_spec_for_level_single_source()
     check_deferred_bgm_rescue()
+    check_bgm_rescue_clears_waiting_for_fonts()
     check_phase5_state_machine_lifecycle()
     check_phase3_ram_detection()
     check_practice_pool_placement()
