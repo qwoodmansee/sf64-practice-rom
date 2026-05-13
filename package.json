@@ -1,0 +1,17 @@
+{
+  "name": "sf64-practice-rom-tools",
+  "private": true,
+  "scripts": {
+    "test": "vitest run practice-guide-docs/tests/",
+    "guide": "tsx practice-guide-docs/gen_practice_guide.ts"
+  },
+  "dependencies": {
+    "pdfkit": "^0.15.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/pdfkit": "^0.13.0",
+    "tsx": "^4.0.0",
+    "vitest": "^1.0.0"
+  }
+}

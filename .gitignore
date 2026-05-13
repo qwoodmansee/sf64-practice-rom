@@ -1,3 +1,5 @@
+practice-guide-docs/*.pdf
+node_modules/
 asm
 expected
 # baserom is a per-developer symlink (or directory) into a local extract of
