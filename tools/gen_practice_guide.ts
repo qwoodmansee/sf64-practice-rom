@@ -80,7 +80,7 @@ function drawStarfield() {
   doc.circle(r() * W, r() * H, 55 + r() * 90).fill();
 
   // Star field
-  for (let i = 0; i < 100; i++) {
+  for (let i = 0; i < 140; i++) {
     const x    = r() * W;
     const y    = r() * H;
     const roll = r();
@@ -89,17 +89,17 @@ function drawStarfield() {
     if (roll < 0.70) {
       // Majority: tiny, barely visible
       radius  = 0.2 + r() * 0.3;
-      opacity = 0.07 + r() * 0.11;
+      opacity = 0.10 + r() * 0.13;
       color   = '#FFFFFF';
     } else if (roll < 0.93) {
       // Some: small, dim — occasional blue tint
       radius  = 0.45 + r() * 0.4;
-      opacity = 0.10 + r() * 0.17;
+      opacity = 0.13 + r() * 0.20;
       color   = r() > 0.55 ? '#B8CCFF' : '#FFFFFF';
     } else {
       // Few: slightly brighter
       radius  = 0.9 + r() * 0.8;
-      opacity = 0.16 + r() * 0.20;
+      opacity = 0.20 + r() * 0.22;
       color   = '#FFFFFF';
     }
 
@@ -114,7 +114,7 @@ function drawStarfield() {
 function pageHeader(section: string) {
   doc.rect(0, 0, W, HBAR).fill(C.panelDark);
   doc.moveTo(0, HBAR).lineTo(W, HBAR).strokeColor(C.grey).lineWidth(0.4).stroke();
-  doc.fillColor(C.greenBot).font('Courier-Bold').fontSize(8.5)
+  doc.fillColor(C.greenBot).font('ShareTechMono').fontSize(8.5)
      .text('SF64 PRACTICE ROM', ML, 9, { lineBreak: false });
   if (section) {
     doc.fillColor(C.grey).font('Helvetica').fontSize(7.5)
@@ -148,7 +148,7 @@ function pageSideTab(section: string) {
   doc.save();
   doc.translate(cx, cy);
   doc.rotate(90, { origin: [0, 0] });
-  doc.fillColor(C.greenBot).font('Courier-Bold').fontSize(7)
+  doc.fillColor(C.greenBot).font('ShareTechMono').fontSize(7)
      .text(section.toUpperCase(), -(tabH / 2 - 6), -3.5, {
        width: tabH - 12,
        align: 'center',
@@ -275,7 +275,7 @@ function ctrlTable(rows: { key: string; val: string }[]) {
   for (let i = 0; i < rows.length; i++) {
     const y = doc.y;
     if (i % 2 === 0) doc.rect(ML, y, PW, rowH).fill(C.rowAlt);
-    doc.fillColor(C.greenBot).font('Courier-Bold').fontSize(8.5)
+    doc.fillColor(C.greenBot).font('ShareTechMono').fontSize(8.5)
        .text(rows[i].key, ML + 6, y + 4, { width: keyW, lineBreak: false });
     doc.fillColor(C.textMain).font('Helvetica').fontSize(8.5)
        .text(rows[i].val, ML + keyW + 8, y + 4, { width: PW - keyW - 14, lineBreak: false });
@@ -446,12 +446,12 @@ function radialDiagram(cx: number, cy: number, R = 88) {
     const py  = cy + Math.sin(rad) * R;
     const hex = rgbToHex(...s.rgb);
     doc.roundedRect(px - PW2 / 2, py - PH / 2, PW2, PH, 2.5).fill(hex);
-    doc.fillColor(contrastText(...s.rgb)).font('Courier-Bold').fontSize(6.2)
+    doc.fillColor(contrastText(...s.rgb)).font('ShareTechMono').fontSize(6.2)
        .text(s.label, px - PW2 / 2 + 2, py - 4.5, { width: PW2 - 4, align: 'center', lineBreak: false });
   }
 
   doc.circle(cx, cy, 28).fillAndStroke(C.panelMid, C.border);
-  doc.fillColor(C.grey).font('Courier-Bold').fontSize(5.5);
+  doc.fillColor(C.grey).font('ShareTechMono').fontSize(5.5);
   doc.text('STICK', cx - 14, cy - 8, { width: 28, align: 'center', lineBreak: false });
   doc.text('THEN A', cx - 14, cy - 1, { width: 28, align: 'center', lineBreak: false });
 
@@ -471,7 +471,7 @@ function pageCover() {
 
   doc.rect(0, 0, W, HBAR).fill(C.panelDark);
   doc.rect(0, HBAR, W, 1).fill(C.border);
-  doc.fillColor(C.greenBot).font('Courier-Bold').fontSize(9)
+  doc.fillColor(C.greenBot).font('ShareTechMono').fontSize(9)
      .text('SF64 PRACTICE ROM  -  BETA', ML, 9, { width: PW, align: 'center', lineBreak: false });
 
   doc.rect(0, H - HBAR, W, HBAR).fill(C.panelDark);
@@ -488,9 +488,9 @@ function pageCover() {
   doc.rect(ML + 50, ruleY2 + 2, PW - 100, 1).fill(C.panelMid);
 
   const titleY = 130;
-  doc.fillColor(C.white).font('Courier-Bold').fontSize(50)
+  doc.fillColor(C.white).font('ShareTechMono').fontSize(50)
      .text('STAR FOX 64', ML, titleY, { width: PW, align: 'center', lineBreak: false });
-  doc.fillColor(C.grey).font('Courier-Bold').fontSize(19)
+  doc.fillColor(C.grey).font('ShareTechMono').fontSize(19)
      .text('PRACTICE ROM', ML, titleY + 63, { width: PW, align: 'center', lineBreak: false });
 
   const dotY = titleY + 98;
@@ -506,7 +506,7 @@ function pageCover() {
   doc.rect(ML, wY, PW, wH).fill('#280008');
   doc.rect(ML, wY, PW, wH).strokeColor(C.red).lineWidth(0.9).stroke();
   doc.rect(ML, wY, 5, wH).fill(C.red);
-  doc.fillColor(C.red).font('Courier-Bold').fontSize(10.5)
+  doc.fillColor(C.red).font('ShareTechMono').fontSize(10.5)
      .text('(!) SD CARD SAVING: NOT WORKING ON EVERDRIVE', ML + 14, wY + 11, { width: PW - 20, lineBreak: false });
   doc.moveTo(ML + 14, wY + 28).lineTo(ML + PW - 8, wY + 28).strokeColor('#6B0010').lineWidth(0.5).stroke();
   doc.fillColor('#FFB0B8').font('Helvetica').fontSize(9.5)
@@ -518,7 +518,7 @@ function pageCover() {
      );
 
   const featY = 454;
-  doc.fillColor(C.border).font('Courier-Bold').fontSize(9)
+  doc.fillColor(C.border).font('ShareTechMono').fontSize(9)
      .text('WHAT IS INCLUDED', ML, featY, { width: PW, align: 'center', lineBreak: false });
   doc.moveTo(ML + 60, featY + 14).lineTo(W - ML - 60, featY + 14).strokeColor(C.border).lineWidth(0.5).stroke();
 
@@ -541,7 +541,7 @@ function pageCover() {
     const row = Math.floor(i / 2);
     const fx = ML + col * (colW + 12);
     const fy = fY + row * 26;
-    doc.fillColor(C.greenBot).font('Courier-Bold').fontSize(8)
+    doc.fillColor(C.greenBot).font('ShareTechMono').fontSize(8)
        .text(name, fx, fy, { width: colW, lineBreak: false });
     doc.fillColor(C.grey).font('Helvetica').fontSize(7.5)
        .text(desc, fx, fy + 11, { width: colW, lineBreak: false });
@@ -576,13 +576,13 @@ function pageWelcome() {
 
   bodyText(
     'Thank you sincerely for testing the beta version of the Star Fox 64 Practice ROM. ' +
-    'This ROM attempts to maintain as much vanilla code as possible while unlocking helpful ' +
+    'This ROM attempts to maintain as much vanilla functionality as possible while unlocking helpful ' +
     'practice tools similar to those found in other N64 practice ROMs.'
   );
   vspace(2);
   bodyText(
     'A huge thank you to the Star Fox 64 decomp team -- this project would not exist without ' +
-    'their incredible work reverse-engineering the original game. And to the HIT64 community: ' +
+    'their work. And to the HIT64 community:' +
     'thank you for being so welcoming and for all the help and feedback that has shaped this ROM.'
   );
   vspace(2);
@@ -619,7 +619,7 @@ function pageWelcome() {
     const y0 = doc.y;
     const bh = 18;
     if (y0 + bh > H - MB) { newPage('Welcome'); }
-    doc.fillColor(C.greenBot).font('Courier-Bold').fontSize(8.5)
+    doc.fillColor(C.greenBot).font('ShareTechMono').fontSize(8.5)
        .text(name, ML + 4, y0 + 4, { width: 100, lineBreak: false });
     doc.fillColor(C.textMain).font('Helvetica').fontSize(8.5)
        .text(desc, ML + 108, y0 + 4, { width: PW - 112, lineBreak: false });
@@ -697,7 +697,7 @@ function pageQuickRef() {
 
   // ── Title ──────────────────────────────────────────────────────────────────
   vspace(4);
-  doc.fillColor(C.white).font('Courier-Bold').fontSize(20)
+  doc.fillColor(C.white).font('ShareTechMono').fontSize(20)
      .text('SHORTCUT REFERENCE', ML, doc.y, { width: PW, align: 'center', lineBreak: false });
   doc.y += 26;
   const ruleX = W / 2 - 55;
@@ -924,7 +924,7 @@ function pageRadialMenu() {
     const y0 = doc.y;
     const bh = 18;
     if (y0 + bh > H - MB) { newPage('Radial Menu'); }
-    doc.fillColor(C.greenBot).font('Courier-Bold').fontSize(8.5)
+    doc.fillColor(C.greenBot).font('ShareTechMono').fontSize(8.5)
        .text(opt.name, ML + 4, y0 + 3, { width: 68, lineBreak: false });
     doc.fillColor(C.textDim).font('Helvetica').fontSize(7.5)
        .text(opt.dir, ML + 76, y0 + 4, { width: 70, lineBreak: false });
@@ -1043,7 +1043,7 @@ function pageCheats() {
     const pillX = ML + 12;
     const pillY = y0 + 8;
     doc.roundedRect(pillX, pillY, 54, 16, 2.5).fill(hex);
-    doc.fillColor(txt).font('Courier-Bold').fontSize(7)
+    doc.fillColor(txt).font('ShareTechMono').fontSize(7)
        .text(cheat.name, pillX + 2, pillY + 5, { width: 50, align: 'center', lineBreak: false });
 
     doc.fillColor(C.textDim).font('Helvetica').fontSize(8)
@@ -1209,7 +1209,7 @@ function pageSDCard() {
   doc.rect(ML, y0, PW, wH).fill('#280008');
   doc.rect(ML, y0, PW, wH).strokeColor(C.red).lineWidth(1.2).stroke();
   doc.rect(ML, y0, 6, wH).fill(C.red);
-  doc.fillColor(C.red).font('Courier-Bold').fontSize(13)
+  doc.fillColor(C.red).font('ShareTechMono').fontSize(13)
      .text('(!) SD CARD SAVING NOT AVAILABLE', ML + 14, y0 + 10, { width: PW - 20, lineBreak: false });
   doc.fillColor('#FFB0B8').font('Helvetica').fontSize(9.5)
      .text(
@@ -1275,6 +1275,12 @@ function pageSDCard() {
 function main() {
   const outPath = path.join(path.dirname(__dirname), 'sf64_practice_guide.pdf');
   doc = new PDFDocument({ size: 'A4', margin: 0, autoFirstPage: false });
+
+  const fontsDir = path.join(__dirname, 'fonts');
+  doc.registerFont('ShareTechMono', path.join(fontsDir, 'ShareTechMono-Regular.ttf'));
+  doc.registerFont('PressStart2P',  path.join(fontsDir, 'PressStart2P-Regular.ttf'));
+  doc.registerFont('VT323',         path.join(fontsDir, 'VT323-Regular.ttf'));
+
   const stream = fs.createWriteStream(outPath);
   doc.pipe(stream);
 
