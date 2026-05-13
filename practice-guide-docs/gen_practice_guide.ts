@@ -1,11 +1,12 @@
 /**
  * SF64 Practice ROM — User Guide Generator
- * Usage: npm install && npx tsx tools/gen_practice_guide.ts
+ * Usage: npm install && npx tsx practice-guide-docs/gen_practice_guide.ts
  */
 
 import PDFDocument from 'pdfkit';
 import fs from 'fs';
 import path from 'path';
+import { execSync } from 'child_process';
 
 // ─── Color palette ────────────────────────────────────────────────────────────
 const C = {
@@ -1273,7 +1274,11 @@ function pageSDCard() {
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 function main() {
-  const outPath = path.join(path.dirname(__dirname), 'sf64_practice_guide.pdf');
+  const repoRoot  = path.dirname(__dirname);
+  const outDir    = __dirname;
+  const commit    = execSync('git rev-parse --short HEAD', { cwd: repoRoot }).toString().trim();
+  const outPath   = path.join(outDir, `sf64_practice_guide_${commit}.pdf`);
+
   doc = new PDFDocument({ size: 'A4', margin: 0, autoFirstPage: false });
 
   const fontsDir = path.join(__dirname, 'fonts');
