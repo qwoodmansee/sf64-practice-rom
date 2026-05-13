@@ -1,7 +1,8 @@
 import type { BtnToken } from '../widgets/buttons';
 
-export type ShortcutRow  = { btns: BtnToken[]; label: string; note?: string };
-export type ShortcutCol  = { title: string; colorTop: string; colorBot: string; rows: ShortcutRow[] };
+export type ShortcutRow     = { btns: BtnToken[]; label: string; note?: string };
+export type ShortcutSection = { sectionLabel?: string; rows: ShortcutRow[] };
+export type ShortcutCol     = { title: string; colorTop: string; colorBot: string; sections: ShortcutSection[] };
 export type PatternStep  = { btns?: BtnToken[]; text: string; dim?: boolean };
 export type PatternCard  = { title: string; color: string; steps: PatternStep[] };
 
@@ -9,21 +10,35 @@ export const SHORTCUT_COLS: [ShortcutCol, ShortcutCol] = [
   {
     title: 'DURING GAMEPLAY  (menu closed)',
     colorTop: '#0F5E1F', colorBot: '#7FC224',
-    rows: [
-      { btns: ['Z', '+', 'DR'], label: 'Open the practice menu' },
-      { btns: ['DD'],            label: 'Pause / unpause frame advance' },
-      { btns: ['DU'],            label: 'Advance one frame  (paused only)' },
-      { btns: ['DL'],            label: 'Save state' },
-      { btns: ['DR'],            label: 'Load state' },
+    sections: [
+      {
+        sectionLabel: 'ON LEVEL SELECT:',
+        rows: [
+          { btns: ['DU', 'DD', 'DL', 'DR'], label: 'Navigate' },
+          { btns: ['A'],                     label: 'Start level' },
+          { btns: ['START'],                 label: 'Set loadout before starting' },
+        ],
+      },
+      {
+        sectionLabel: 'DURING GAMEPLAY:',
+        rows: [
+          { btns: ['DL'], label: 'Save state' },
+          { btns: ['DR'], label: 'Load state' },
+        ],
+      },
     ],
   },
   {
     title: 'WHILE MENU IS OPEN',
     colorTop: '#0D1848', colorBot: '#3D42A0',
-    rows: [
-      { btns: ['A'],           label: 'Confirm option' },
-      { btns: ['L', '/', 'R'], label: 'Cycle save slot' },
-      { btns: ['START'],       label: 'Return to title  (hold)' },
+    sections: [
+      {
+        rows: [
+          { btns: ['A'],           label: 'Confirm option' },
+          { btns: ['L', '/', 'R'], label: 'Cycle save slot' },
+          { btns: ['START'],       label: 'Return to title  (hold)' },
+        ],
+      },
     ],
   },
 ];
