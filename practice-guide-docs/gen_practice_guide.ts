@@ -29,9 +29,9 @@ const stream = fs.createWriteStream(outPath);
 doc.pipe(stream);
 
 pageCover();
+pageQuickRef();
 pageWelcome();
 pageControls();
-pageQuickRef();
 pageRadialMenu();
 pageSaveStates();
 pageCheats();

@@ -41,9 +41,9 @@ export function pageWelcome() {
   sectionHeader("WHAT'S IN THIS ROM");
 
   for (const { name, desc } of WELCOME_FEATURES) {
-    const y0 = doc.y;
     const bh = 18;
-    if (y0 + bh > H - MB) { newPage('Welcome'); }
+    if (doc.y + bh > H - MB) { newPage('Welcome'); }
+    const y0 = doc.y;
     doc.fillColor(C.greenBot).font(FONTS.mono).fontSize(8.5)
        .text(name, ML + 4, y0 + 4, { width: 100, lineBreak: false });
     doc.fillColor(C.textMain).font('Helvetica').fontSize(8.5)

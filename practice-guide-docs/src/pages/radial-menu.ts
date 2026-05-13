@@ -23,9 +23,9 @@ export function pageRadialMenu() {
   sectionHeader('MENU OPTIONS');
 
   for (const opt of MENU_OPTS) {
-    const y0 = doc.y;
     const bh = 18;
-    if (y0 + bh > H - MB) { newPage('Radial Menu'); }
+    if (doc.y + bh > H - MB) { newPage('Radial Menu'); }
+    const y0 = doc.y;
     doc.fillColor(C.greenBot).font(FONTS.mono).fontSize(8.5)
        .text(opt.name, ML + 4, y0 + 3, { width: 68, lineBreak: false });
     doc.fillColor(C.textDim).font('Helvetica').fontSize(7.5)
