@@ -1,6 +1,6 @@
-"""Bug repro: Corneria music silent when Corneria BGM was previewed on level select.
+"""Regression test: Corneria music must play after BGM preview on level select.
 
-Steps to reproduce manually:
+Steps to reproduce the original bug manually:
   1. Boot to level select (Corneria selected by default)
   2. Press L or R to cycle the BGM preview to Corneria (same level, same song)
   3. Press A to launch Corneria
@@ -21,16 +21,15 @@ Root cause (verified by reading audio engine source):
   dropped at the isWaitingForFonts check in Audio_ProcessSeqCmd. The level runs
   silently.
 
+  Fix: clear isWaitingForFonts before the BGM rescue fires in Practice_Save_Tick.
+
 Test approach:
-  Directly manufacture the stuck state: set isWaitingForFonts=1 for the BGM player
-  and wipe its seqId to SEQ_ID_NONE (simulating the stop). Then queue the BGM rescue
-  and launch Corneria. After 400 gameplay frames the rescue has long since fired, but
-  the AUDIO_PLAY_BGM was dropped — seqId stays SEQ_ID_NONE.
+  Manufacture the stuck state: set isWaitingForFonts=1, wipe seqId to SEQ_ID_NONE,
+  queue the BGM rescue, launch Corneria. After 400 gameplay frames the rescue has
+  long since fired. Assert BGM is playing (seqId == NA_BGM_STAGE_CO).
 
-  Bug confirmed: seqId == SEQ_ID_NONE after rescue.
-  Bug fixed: seqId == NA_BGM_STAGE_CO (0x8002) after rescue.
-
-This test ASSERTS THE BUG IS PRESENT. It will flip to FAIL once the bug is fixed.
+  PASSES = bug fixed (BGM playing after rescue).
+  FAILS  = bug present (isWaitingForFonts stuck, BGM silently dropped).
 """
 
 # RDRAM offsets (addr & 0x1FFFFFFF) — confirmed from map + source
@@ -149,14 +148,14 @@ def run(ctx):
     seq_id_final = _read_u16_hi(h, _SEQ_BGM_SEQ_ID)
     is_waiting_final = (h.read32(_SEQ_BGM_WAIT_FONT) >> 24) & 0xFF
 
-    # --- Step 8: Assert bug is present ---
-    # Rescue fired (gPracticeBgmPending went false after countdown), but AUDIO_PLAY_BGM
-    # was silently dropped by isWaitingForFonts. seqId stays SEQ_ID_NONE = no BGM playing.
+    # --- Step 8: Assert BGM is playing ---
+    # Rescue must have fired (gPracticeBgmPending=0) and BGM must be playing.
+    # If isWaitingForFonts was not cleared before the rescue, AUDIO_PLAY_BGM was
+    # silently dropped and seqId stays SEQ_ID_NONE.
     ctx.assert_eq(bgm_pending, 0,
                   f"Rescue fired (gPracticeBgmPending=0 after 400 frames): {bgm_pending}")
-    ctx.assert_eq(is_waiting_final, 1,
-                  f"isWaitingForFonts still stuck (no real async load to clear it): {is_waiting_final}")
-    ctx.assert_eq(seq_id_final, SEQ_ID_NONE,
-                  f"BGM seqId still SEQ_ID_NONE after rescue — AUDIO_PLAY_BGM was silently "
-                  f"dropped by isWaitingForFonts (bug confirmed, expected 0x{NA_BGM_STAGE_CO:04X}): "
+    ctx.assert_eq(is_waiting_final, 0,
+                  f"isWaitingForFonts must be cleared before rescue fires: {is_waiting_final}")
+    ctx.assert_eq(seq_id_final, NA_BGM_STAGE_CO & 0x7FFF,
+                  f"BGM must be playing after rescue — seqId should be 0x{NA_BGM_STAGE_CO & 0x7FFF:04X}: "
                   f"got 0x{seq_id_final:04X}")

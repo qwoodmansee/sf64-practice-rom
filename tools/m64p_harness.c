@@ -354,10 +354,12 @@ int main(int argc, char **argv) {
     }
 
     /* Attach plugins (must be after ROM_OPEN).
-     * Skip audio plugin — no sound needed for testing. */
+     * Skip audio in headless mode — load it for headed so music is audible. */
     m64p_dynlib_handle h_gfx = NULL;
-    if (g_headed)
+    if (g_headed) {
         h_gfx = load_plugin(M64PLUGIN_GFX, "mupen64plus-video-rice.dylib");
+        load_plugin(M64PLUGIN_AUDIO, "mupen64plus-audio-sdl.dylib");
+    }
     load_plugin(M64PLUGIN_INPUT, "mupen64plus-input-sdl.dylib");
     m64p_dynlib_handle h_rsp = load_plugin(M64PLUGIN_RSP, "mupen64plus-rsp-hle.dylib");
 
@@ -376,8 +378,10 @@ int main(int argc, char **argv) {
     pthread_create(&cmd_tid, NULL, cmd_thread_fn, NULL);
 
     /* Run emulator on main thread (required for macOS Cocoa/SDL video) */
-    int zero = 0;
-    CoreDoCommand(M64CMD_CORE_STATE_SET, M64CORE_SPEED_LIMITER, &zero);
+    if (!g_headed) {
+        int zero = 0;
+        CoreDoCommand(M64CMD_CORE_STATE_SET, M64CORE_SPEED_LIMITER, &zero);
+    }
     CoreDoCommand(M64CMD_EXECUTE, 0, NULL);
 
     /* Emulator stopped — wait for command thread to finish */
