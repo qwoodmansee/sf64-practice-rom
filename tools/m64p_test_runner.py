@@ -114,7 +114,7 @@ class HarnessConnection:
             args,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stderr=None,
             text=True,
         )
         # Wait for READY
