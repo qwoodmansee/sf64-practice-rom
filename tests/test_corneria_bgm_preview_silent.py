@@ -32,20 +32,9 @@ Test approach:
   FAILS  = bug present (isWaitingForFonts stuck, BGM silently dropped).
 """
 
-# RDRAM offsets (addr & 0x1FFFFFFF) — confirmed from map + source
-_GAME_STATE        = 0x00194944  # gGameState (s32)
-_PLAY_STATE        = 0x00194964  # gPlayState (s32)
-_NEXT_LEVEL_WORD   = 0x0017eb40  # gNextLevel(u16,hi16) | gNextGameState(u16,lo16)
-_PRACTICE_SCREEN   = 0x00195b80  # gPracticeScreen (s32)
-_BGM_PENDING       = 0x00195cc4  # gPracticeBgmPending (bool/s32)
-_BGM_PENDING_SEQ   = 0x00195cc8  # gPracticeBgmPendingSeqId (u16 in hi16 of word)
-_BGM_PENDING_DELAY = 0x00195ccc  # gPracticeBgmPendingDelay (s32)
-_BGM_LAST_SPEC     = 0x000ed96c  # sBgmLastSpecPacked (static u16, hi16 of word)
-
-# Audio engine internals — sActiveSequences[SEQ_PLAYER_BGM=0] fields
-# sActiveSequences base: 0x80167ea8; seqId at +0x248, isWaitingForFonts at +0x254
-_SEQ_BGM_SEQ_ID    = 0x001680f0  # sActiveSequences[0].seqId (u16, hi16 of word)
-_SEQ_BGM_WAIT_FONT = 0x001680fc  # sActiveSequences[0].isWaitingForFonts (u8, hi byte of word)
+# sActiveSequences struct offsets (stable; computed from struct layout, not link addr).
+_SEQ_BGM_SEQ_ID_OFF    = 0x248   # sActiveSequences[0].seqId (u16, hi16 of word)
+_SEQ_BGM_WAIT_FONT_OFF = 0x254   # sActiveSequences[0].isWaitingForFonts (u8, hi byte of word)
 
 SEQ_FLAG = 0x8000
 GSTATE_MAP   = 4
@@ -82,9 +71,23 @@ def _write_u16_hi(harness, rdram_addr, value):
 
 def run(ctx):
     h = ctx.harness
+    S = ctx.syms.addrs
+
+    # Resolve symbol addresses from the map file. This keeps the test working
+    # even when BSS shifts (e.g., when practice_level.c data grows).
+    game_state    = S["gGameState"]
+    play_state    = S["gPlayState"]
+    next_level    = S["gNextLevel"]        # u16 (gNextGameState is u16 right after)
+    practice_scr  = S["gPracticeScreen"]
+    bgm_pending   = S["gPracticeBgmPending"]
+    bgm_pend_seq  = S["gPracticeBgmPendingSeqId"]
+    bgm_pend_dly  = S["gPracticeBgmPendingDelay"]
+    seq_bgm       = S["sActiveSequences"]
+    seq_bgm_id    = seq_bgm + _SEQ_BGM_SEQ_ID_OFF
+    seq_bgm_wait  = seq_bgm + _SEQ_BGM_WAIT_FONT_OFF
 
     # --- Step 1: Boot to level select ---
-    ok = h.wait_for(_GAME_STATE, GSTATE_MAP, 60000)
+    ok = h.wait_for(game_state, GSTATE_MAP, 60000)
     ctx.assert_true(ok, "ROM booted to level select (GSTATE_MAP=4)")
     if not ok:
         return
@@ -101,39 +104,42 @@ def run(ctx):
     #   4. isWaitingForFonts is permanently stuck at true
 
     # Set isWaitingForFonts = true for BGM player
-    _write_u8_hi(h, _SEQ_BGM_WAIT_FONT, 1)
+    _write_u8_hi(h, seq_bgm_wait, 1)
 
     # Clear seqId to SEQ_ID_NONE (simulating Audio_StopSequence result)
-    _write_u16_hi(h, _SEQ_BGM_SEQ_ID, SEQ_ID_NONE)
-
-    # Set sBgmLastSpecPacked = Corneria spec (so same-spec check would trigger in
-    # Practice_LaunchLevel if we were going through that path)
-    _write_u16_hi(h, _BGM_LAST_SPEC, CORNERIA_SPEC_PACKED)
+    _write_u16_hi(h, seq_bgm_id, SEQ_ID_NONE)
 
     # Verify our writes
-    is_waiting = (h.read32(_SEQ_BGM_WAIT_FONT) >> 24) & 0xFF
-    seq_id = _read_u16_hi(h, _SEQ_BGM_SEQ_ID)
+    is_waiting = (h.read32(seq_bgm_wait) >> 24) & 0xFF
+    seq_id = _read_u16_hi(h, seq_bgm_id)
     ctx.assert_eq(is_waiting, 1, "isWaitingForFonts set to 1 (blocking BGM)")
     ctx.assert_eq(seq_id, SEQ_ID_NONE, "BGM seqId cleared to SEQ_ID_NONE")
 
     # --- Step 3: Queue the BGM rescue (same as Practice_LaunchLevel would do) ---
     # gPracticeBgmPending (bool/s32) and gPracticeBgmPendingDelay (s32) are full words.
     # gPracticeBgmPendingSeqId (u16) lives in the upper 16 bits of its 4-byte word.
-    h.write32(_BGM_PENDING, 1)                              # gPracticeBgmPending = true
-    _write_u16_hi(h, _BGM_PENDING_SEQ, NA_BGM_STAGE_CO)   # gPracticeBgmPendingSeqId = 0x8002
-    h.write32(_BGM_PENDING_DELAY, 3)                        # gPracticeBgmPendingDelay = 3 frames
+    h.write32(bgm_pending, 1)                              # gPracticeBgmPending = true
+    _write_u16_hi(h, bgm_pend_seq, NA_BGM_STAGE_CO)        # gPracticeBgmPendingSeqId = 0x8002
+    h.write32(bgm_pend_dly, 3)                             # gPracticeBgmPendingDelay = 3 frames
 
     # --- Step 4: Launch Corneria (bypass Practice_LaunchLevel to preserve our stuck state) ---
-    # Pack gNextLevel=0 (hi16) and gNextGameState=GSTATE_PLAY=7 (lo16) into one word.
-    h.write32(_NEXT_LEVEL_WORD, (0 << 16) | GSTATE_PLAY)
-    h.write32(_PRACTICE_SCREEN, PSCREEN_GAMEPLAY)
+    # gNextLevel and gNextGameState are consecutive u16s; pack into one word write at
+    # the 4-byte-aligned base. gNextLevel sits at hi16, gNextGameState at lo16.
+    word_addr = next_level & ~3
+    if (next_level & 3) == 0:
+        h.write32(word_addr, (0 << 16) | GSTATE_PLAY)
+    else:
+        # Defensive — if layout flips, just fall through to a generic byte write.
+        ctx.assert_true(False, "unexpected gNextLevel alignment")
+        return
+    h.write32(practice_scr, PSCREEN_GAMEPLAY)
 
     # --- Step 5: Wait for active gameplay ---
-    ok = h.wait_for(_GAME_STATE, GSTATE_PLAY, 30000)
+    ok = h.wait_for(game_state, GSTATE_PLAY, 30000)
     ctx.assert_true(ok, "Reached GSTATE_PLAY")
     if not ok:
         return
-    ok = h.wait_for(_PLAY_STATE, PLAY_UPDATE, 15000)
+    ok = h.wait_for(play_state, PLAY_UPDATE, 15000)
     ctx.assert_true(ok, "Reached PLAY_UPDATE")
     if not ok:
         return
@@ -146,16 +152,16 @@ def run(ctx):
     h.advance(400)
 
     # --- Step 7: Read final state ---
-    bgm_pending = h.read32(_BGM_PENDING)
-    seq_id_final = _read_u16_hi(h, _SEQ_BGM_SEQ_ID)
-    is_waiting_final = (h.read32(_SEQ_BGM_WAIT_FONT) >> 24) & 0xFF
+    bgm_pending_final = h.read32(bgm_pending)
+    seq_id_final = _read_u16_hi(h, seq_bgm_id)
+    is_waiting_final = (h.read32(seq_bgm_wait) >> 24) & 0xFF
 
     # --- Step 8: Assert BGM is playing ---
     # Rescue must have fired (gPracticeBgmPending=0) and BGM must be playing.
     # If isWaitingForFonts was not cleared before the rescue, AUDIO_PLAY_BGM was
     # silently dropped and seqId stays SEQ_ID_NONE.
-    ctx.assert_eq(bgm_pending, 0,
-                  f"Rescue fired (gPracticeBgmPending=0 after 400 frames): {bgm_pending}")
+    ctx.assert_eq(bgm_pending_final, 0,
+                  f"Rescue fired (gPracticeBgmPending=0 after 400 frames): {bgm_pending_final}")
     ctx.assert_eq(is_waiting_final, 0,
                   f"isWaitingForFonts must be cleared before rescue fires: {is_waiting_final}")
     ctx.assert_eq(seq_id_final, SEQ_ID_CORNERIA,

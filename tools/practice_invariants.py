@@ -1624,6 +1624,61 @@ def check_bgm_rescue_clears_waiting_for_fonts():
         )
 
 
+def check_bgm_jukebox_coverage():
+    """sBgmList[] in practice_level.c must include every category of song.
+
+    Players asked for the level-select BGM picker to cover every song in the
+    game (stages, bosses, multiplayer, menu themes, character themes). This
+    invariant pins a representative entry from each category so a refactor
+    cannot silently shrink the list back to "stages only".
+    """
+    src = read(PRACTICE_LEVEL)
+
+    list_match = re.search(
+        r"static\s+BgmEntry\s+sBgmList\[\]\s*=\s*\{(.*?)\};",
+        src, re.DOTALL,
+    )
+    if not list_match:
+        error(f"{PRACTICE_LEVEL}: could not locate sBgmList[] "
+              "(check_bgm_jukebox_coverage)")
+        return
+
+    body = list_match.group(1)
+
+    # Each entry must be present somewhere in the list. The static check is
+    # name-based; the audio spec/layout columns are not validated here. Boss
+    # themes are deliberately deduplicated by (sequence, soundfont) flavor —
+    # many BOSS_* defines are sequence-aliases that sound near-identical, so
+    # only the ones that bring a distinct flavor are required.
+    required_bgms = [
+        # Stages
+        "NA_BGM_MAP", "NA_BGM_STAGE_CO", "NA_BGM_STAGE_VE1",
+        "NA_BGM_STAGE_ANDROSS", "NA_BGM_STAGE_WZ", "NA_BGM_TRAINING",
+        # Distinct boss / cinematic themes
+        "NA_BGM_BOSS_CO", "NA_BGM_BOSS_ME", "NA_BGM_BOSS_SY",
+        "NA_BGM_BOSS_BO", "NA_BGM_BOSS_ANDROSS", "NA_BGM_ANDROSS_BRAIN",
+        "NA_BGM_BOSS_A_CARRIER", "NA_BGM_DASH_INTO_BASE",
+        "NA_BGM_ALL_CLEAR", "NA_BGM_STARWOLF",
+        # Multiplayer
+        "NA_BGM_BATTLE", "NA_BGM_BATTLE_LAST", "NA_BGM_VS_SELECT",
+        # Menu / cinematic
+        "NA_BGM_TITLE", "NA_BGM_OPENING", "NA_BGM_SELECT",
+        "NA_BGM_STAFF_ROLL",
+        # Character themes
+        "NA_BGM_KATT", "NA_BGM_BILL",
+    ]
+
+    for bgm in required_bgms:
+        # Match as a whole token so NA_BGM_STAGE_CO doesn't satisfy a
+        # NA_BGM_BOSS_CO requirement and vice versa.
+        if not re.search(rf"\b{re.escape(bgm)}\b", body):
+            error(
+                f"{PRACTICE_LEVEL}: sBgmList[] missing {bgm}; the level-select "
+                "BGM picker is expected to cover every song in the game "
+                "(check_bgm_jukebox_coverage)"
+            )
+
+
 def check_owl_logo():
     """owl-400 logo texture is wired into the level-select draw path correctly."""
     owl_c = os.path.join(SRC_PRACTICE, "practice_owl_tex.c")
@@ -2111,6 +2166,7 @@ def main():
     check_audio_spec_for_level_single_source()
     check_deferred_bgm_rescue()
     check_bgm_rescue_clears_waiting_for_fonts()
+    check_bgm_jukebox_coverage()
     check_phase5_state_machine_lifecycle()
     check_phase3_ram_detection()
     check_practice_pool_placement()
