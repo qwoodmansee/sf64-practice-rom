@@ -36,9 +36,10 @@ All checks must pass. Fix any failures before proceeding.
 python3 tools/m64p_test_runner.py
 ```
 
-All tests must pass (exit 0). These tests boot the ROM headless and verify memory
-state — they catch audio bugs, input bugs, and gameplay regressions that static
-analysis cannot find.
+All tests must pass (exit 0). These tests boot the ROM in a headed mupen64plus
+window and verify memory state — they catch audio bugs, input bugs, and gameplay
+regressions that static analysis cannot find. A window will appear on your desktop
+for each test; you can watch and listen to confirm behaviour visually.
 
 **If any test fails:** do not release. File the failure and fix it first. Use the
 `/m64p-repro` skill if you need to add a new repro test for a community-reported bug.
@@ -48,9 +49,6 @@ but BizHawk does not run on macOS. New tests are written in Python until BizHawk
 gains Mac support.
 
 Individual test run: `python3 tools/m64p_test_runner.py <test_name>`
-
-Headed run (window + audio, for manual verification): tests already run headed by
-default. Look for the mupen64plus window on your desktop while the test runs.
 
 ### 4. Patcher validation
 

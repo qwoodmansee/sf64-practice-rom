@@ -1610,7 +1610,13 @@ def check_bgm_rescue_clears_waiting_for_fonts():
             "sActiveSequences[SEQ_PLAYER_BGM].isWaitingForFonts = 0 before "
             "firing AUDIO_PLAY_BGM (check_bgm_rescue_clears_waiting_for_fonts)"
         )
-    elif play_pos >= 0 and clear_pos > play_pos:
+    if play_pos < 0:
+        error(
+            f"{PRACTICE_SAVE_C}: Practice_Save_Tick must call "
+            "AUDIO_PLAY_BGM(gPracticeBgmPendingSeqId) in the rescue path "
+            "(check_bgm_rescue_clears_waiting_for_fonts)"
+        )
+    if clear_pos >= 0 and play_pos >= 0 and clear_pos > play_pos:
         error(
             f"{PRACTICE_SAVE_C}: isWaitingForFonts clear must come BEFORE "
             "AUDIO_PLAY_BGM in Practice_Save_Tick "

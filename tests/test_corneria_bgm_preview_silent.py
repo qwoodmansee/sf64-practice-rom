@@ -56,6 +56,8 @@ PSCREEN_GAMEPLAY = 1
 SEQ_ID_NONE = 0xFFFF
 # NA_BGM_STAGE_CO = SEQ_ID_CORNERIA | SEQ_FLAG = 0x0002 | 0x8000 = 0x8002
 NA_BGM_STAGE_CO = 0x8002
+# The audio engine strips SEQ_FLAG before storing in sActiveSequences[].seqId
+SEQ_ID_CORNERIA = NA_BGM_STAGE_CO & ~SEQ_FLAG  # 0x0002
 CORNERIA_SPEC_PACKED = 0x0000  # (SFX_LAYOUT_DEFAULT<<8)|AUDIOSPEC_CO
 
 
@@ -156,6 +158,6 @@ def run(ctx):
                   f"Rescue fired (gPracticeBgmPending=0 after 400 frames): {bgm_pending}")
     ctx.assert_eq(is_waiting_final, 0,
                   f"isWaitingForFonts must be cleared before rescue fires: {is_waiting_final}")
-    ctx.assert_eq(seq_id_final, NA_BGM_STAGE_CO & 0x7FFF,
-                  f"BGM must be playing after rescue — seqId should be 0x{NA_BGM_STAGE_CO & 0x7FFF:04X}: "
+    ctx.assert_eq(seq_id_final, SEQ_ID_CORNERIA,
+                  f"BGM must be playing after rescue — seqId should be 0x{SEQ_ID_CORNERIA:04X}: "
                   f"got 0x{seq_id_final:04X}")

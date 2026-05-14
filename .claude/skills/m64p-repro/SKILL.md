@@ -258,6 +258,7 @@ only calls `Audio_StopSequence` — `sAudioResetStatus` stays `AUDIORESET_READY`
 1. Filename: `tests/test_<short_bug_name>.py`
 2. Top docstring: manual steps + root cause + "ASSERTS BUG IS PRESENT" note
 3. All RDRAM offsets verified against current map file
-4. Runs in < 90s: `timeout 90 python3 tools/m64p_test_runner.py test_<name>`
+4. Runs in < 90s: `gtimeout 90 python3 tools/m64p_test_runner.py test_<name>`
+   (`gtimeout` from `brew install coreutils`; stock macOS has no `timeout`)
 5. `PASSED` with bug present, `FAILED` after fix
 6. Commit to fix branch, not master

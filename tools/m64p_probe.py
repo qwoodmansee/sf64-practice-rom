@@ -337,7 +337,7 @@ def main():
             bgm_loop = bool(bgm_raw & SEQ_FLAG)
             bgm_name = BGM_NAMES.get(bgm_base, f"SEQ_0x{bgm_base:04X}")
             bgm_display = f"0x{bgm_raw:04X} ({bgm_name}{'+loop' if bgm_loop else ''})"
-            if bgm_base >= 2:
+            if bgm_raw != 0xFFFF and bgm_base >= 2:
                 _ok(f"gBgmSeqId: {bgm_display}")
             else:
                 _fail(f"gBgmSeqId: {bgm_display}  — music not playing!")
