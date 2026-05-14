@@ -30,7 +30,7 @@ python3 tools/practice_invariants.py
 
 All checks must pass. Fix any failures before proceeding.
 
-### 3. Functional tests (mupen64plus)
+### 3. Functional tests (mupen64plus — Mac-compatible)
 
 ```bash
 python3 tools/m64p_test_runner.py
@@ -42,6 +42,10 @@ analysis cannot find.
 
 **If any test fails:** do not release. File the failure and fix it first. Use the
 `/m64p-repro` skill if you need to add a new repro test for a community-reported bug.
+
+Note: BizHawk Lua tests (`tests/test_*.lua`) are the long-term target framework
+but BizHawk does not run on macOS. New tests are written in Python until BizHawk
+gains Mac support.
 
 Individual test run: `python3 tools/m64p_test_runner.py <test_name>`
 

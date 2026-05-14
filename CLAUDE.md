@@ -324,10 +324,13 @@ Run headed (window + audio): same commands — the runner opens a window by defa
 **When adding a config field:**
 - Add a default check in `tests/test_config_defaults.py`
 
-### Legacy functional tests (`tests/test_*.lua`)
+### BizHawk Lua tests (`tests/test_*.lua`)
 
-BizHawk Lua tests still exist for boss-test stages. Do not add new `.lua` tests —
-use the mupen64plus Python framework instead.
+Long-term target framework. BizHawk does not run on macOS, so Lua tests cannot
+be executed on the primary dev machine. Existing `.lua` tests cover boss-test
+stages. New tests should be written in Python (mupen64plus) until BizHawk gains
+Mac support, at which point the two suites can be unified or the Python tests
+ported to Lua.
 
 ## Text rendering
 
