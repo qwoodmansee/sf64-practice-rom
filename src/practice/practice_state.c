@@ -604,7 +604,7 @@ static void StateMenu_DrawLoadout(void) {
     s32 i;
 
     for (i = 0; i < LOPT_MAX; i++) {
-        y = 60 + (i * 14);
+        y = 60 + (i * 12);
 
         if (i == sSelectedOption) {
             Practice_DrawBox(42, y - 1, 230, 12, 255, 255, 255, 60);
@@ -761,7 +761,7 @@ static void StateMenu_DrawVisualizers(void) {
     s32 i;
 
     for (i = 0; i < VOPT_MAX; i++) {
-        y = 60 + (i * 14);
+        y = 60 + (i * 12);
 
         if (i == sSelectedOption) {
             Practice_DrawBox(42, y - 1, 230, 12, 255, 255, 255, 60);

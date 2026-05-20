@@ -2137,6 +2137,92 @@ def check_macro_buf_section():
             )
 
 
+def check_state_menu_layout():
+    """Each enum-driven submenu's last item must fit inside its container box and not overlap help text."""
+    src = read(os.path.join(SRC_PRACTICE, "practice_state.c"))
+
+    BOX_TOP = 40
+    ITEM_HEIGHT = 12
+
+    draw_fn = find_c_function(src, "Practice_StateMenu_Draw")
+    if draw_fn is None:
+        error("Practice_StateMenu_Draw not found (check_state_menu_layout)")
+        return
+
+    case_pattern = re.compile(
+        r"case\s+(PSUBMENU_\w+)\s*:\s*"
+        r"title\s*=\s*\"[^\"]*\"\s*;\s*"
+        r"boxHeight\s*=\s*(\d+)\s*;\s*"
+        r"helpY\s*=\s*(\d+)\s*;",
+        re.DOTALL,
+    )
+    cases = {m.group(1): (int(m.group(2)), int(m.group(3))) for m in case_pattern.finditer(draw_fn)}
+
+    submenu_to_fn = {
+        "PSUBMENU_LOADOUT": "StateMenu_DrawLoadout",
+        "PSUBMENU_DISPLAY": "StateMenu_DrawDisplay",
+        "PSUBMENU_STATS": "StateMenu_DrawStats",
+        "PSUBMENU_VISUALIZERS": "StateMenu_DrawVisualizers",
+        "PSUBMENU_MACRO": "StateMenu_DrawMacro",
+        "PSUBMENU_ENEMY_HEALTH": "StateMenu_DrawEnemyHealth",
+    }
+
+    for submenu, fn_name in submenu_to_fn.items():
+        if submenu not in cases:
+            warning(f"State menu layout: {submenu} has no case in Practice_StateMenu_Draw")
+            continue
+        box_h, help_y = cases[submenu]
+
+        fn = find_c_function(src, fn_name)
+        if fn is None:
+            error(f"State menu layout: {fn_name} not found")
+            continue
+
+        loop_m = re.search(r"i\s*<\s*(\w+_MAX)", fn)
+        step_m = re.search(r"y\s*=\s*60\s*\+\s*\(\s*i\s*\*\s*(\d+)\s*\)", fn)
+        if not loop_m or not step_m:
+            warning(f"State menu layout: could not parse loop in {fn_name}")
+            continue
+
+        max_name = loop_m.group(1)
+        step = int(step_m.group(1))
+
+        enum_m = re.search(
+            rf"typedef\s+enum\s+\w+\s*\{{([^}}]*?){max_name}\s*,?\s*\}}",
+            src,
+        )
+        if not enum_m:
+            error(f"State menu layout: could not find enum containing {max_name}")
+            continue
+
+        body = enum_m.group(1)
+        body = re.sub(r"//[^\n]*", "", body)
+        body = re.sub(r"/\*.*?\*/", "", body, flags=re.DOTALL)
+        entries = [e.strip() for e in body.split(",") if e.strip()]
+        item_count = len(entries)  # entries before the _MAX sentinel
+
+        if item_count <= 0:
+            warning(f"State menu layout: {fn_name} has zero items")
+            continue
+
+        last_top_y = 60 + (item_count - 1) * step
+        last_bottom_y = last_top_y + ITEM_HEIGHT
+        box_bottom_y = BOX_TOP + box_h
+
+        if last_bottom_y > box_bottom_y:
+            error(
+                f"State menu layout: {submenu} last item bottom y={last_bottom_y} "
+                f"exceeds container box bottom y={box_bottom_y} "
+                f"(items={item_count}, step={step}, boxHeight={box_h})"
+            )
+        if last_bottom_y > help_y:
+            error(
+                f"State menu layout: {submenu} last item bottom y={last_bottom_y} "
+                f"overlaps help text at y={help_y} "
+                f"(items={item_count}, step={step})"
+            )
+
+
 def main():
     check_config_inits()
     check_function_definitions()
@@ -2201,6 +2287,7 @@ def main():
     check_enemy_health()
     check_hitbox_shadow_drawn()
     check_enemy_health_hide_models()
+    check_state_menu_layout()
 
     if errors:
         print("Practice ROM invariant check FAILED:")
