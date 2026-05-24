@@ -1,40 +1,33 @@
-"""Bug repro: restarting a level via the practice menu silences all audio.
+"""Regression: restarting a level via the practice menu must NOT silence
+audio.
 
-Steps to reproduce manually:
-  1. Boot ROM, default-select Corneria on level select, press A to launch.
-  2. Play until BGM is fully loaded and audibly playing (~3 sec in-level).
-  3. Hold Z + press D-pad Right to open the practice menu.
-  4. Tilt stick UP to hover the N slice (RESTART) and press A.
-  5. Level restarts. BGM and SFX are completely silent for the rest of
-     the run.
+Steps the test reproduces (matches the original repro):
+  1. Boot, default-select Corneria on level select, press A to launch.
+  2. Once in-level, hold Z + D-pad Right to open the practice menu.
+  3. Tilt stick UP to hover the N slice (RESTART) and press A.
+  4. Level restarts. BGM must remain audible (mainVolume.mod ~= 1.0).
 
-Root cause (verified by harness memory dump):
-  After restart, sActiveSequences[SEQ_PLAYER_BGM].seqId is back to
-  SEQ_ID_CORNERIA (the rescue fired AUDIO_PLAY_BGM) and the audio engine
-  reports healthy (sAudioResetStatus=READY, isWaitingForFonts=0, SEQCMD
-  queue drained). But sActiveSequences[BGM].mainVolume.mod is 0.0f --
-  the player thinks Corneria is active while the main volume is silent.
+Bug history:
+  Practice_LaunchLevel calls Audio_SetAudioSpec(0, samesPec) for a
+  same-spec restart, which only invokes Audio_StopSequence(BGM). The
+  stop fades sActiveSequences[BGM].mainVolume.mod toward 0. The BGM
+  rescue in Practice_Save_Tick fires AUDIO_PLAY_BGM(NA_BGM_STAGE_CO)
+  after a 3-frame delay -- that sets seqId back to SEQ_ID_CORNERIA but
+  does NOT restore mainVolume.mod, so the player claimed to be playing
+  while the main volume sat at 0.0f (totally silent).
 
-  Practice_LaunchLevel calls Audio_SetAudioSpec(0, samesPec) which, for a
-  same-spec restart, only calls Audio_StopSequence(BGM). The stop fades
-  mainVolume.mod toward 0. The BGM rescue (Practice_Save_Tick) then
-  fires AUDIO_PLAY_BGM(NA_BGM_STAGE_CO) after a 3-frame delay -- which
-  sets seqId but does NOT restore mainVolume.mod. Silent playback.
-
-  Fix direction: after the rescue's AUDIO_PLAY_BGM call, restore the BGM
-  player main volume (or use a SEQCMD that resets mainVolume as part of
-  starting playback).
+  Fix: the rescue now also queues SEQCMD_SET_SEQPLAYER_VOLUME with
+  duration=0, volume=0x7F (=1.0) right after AUDIO_PLAY_BGM.
 
 Test approach:
-  Drives the real menu via SDL key injection (KEYDOWN/KEYUP through the
-  pinned mupen64plus-input-sdl config; see tests/test_input_smoke.py for
-  the scancode-vs-keysym workaround). After the restart completes and
-  the rescue would have fired (400 frames post-PLAY_UPDATE), reads
-  sActiveSequences[BGM].mainVolume.mod and asserts it's 0.0f -- proving
-  the wedge.
+  Drives the real menu via SDL key injection (KEYDOWN/KEYUP through
+  the pinned mupen64plus-input-sdl config; see tests/test_input_smoke.py
+  for the scancode-vs-keysym workaround). After the restart completes
+  and the rescue has fired (400 frames post-PLAY_UPDATE), reads
+  sActiveSequences[BGM].mainVolume.mod and asserts it's 1.0f.
 
-  This test ASSERTS THE BUG IS PRESENT. It PASSES when mainVolume stays
-  at 0.0f after restart, and FAILS once the fix restores it.
+  A regression that breaks the volume restore will flip
+  mainVolume.mod back to 0.0f and this test fails.
 """
 
 # sActiveSequences struct offsets (stable; computed from struct layout).
@@ -194,22 +187,23 @@ def run(ctx):
     # --- Step 7: Advance well past the BGM rescue + any font-load latency ---
     h.advance(400)
 
-    # --- Step 8: Assert BUG -- BGM mainVolume.mod stuck at 0.0f ---
+    # --- Step 8: Assert audio is alive post-restart ---
     # sActiveSequences[BGM].mainVolume is at offset 0 (FadeModulation), and
     # FadeModulation.mod is the first f32 field. So sActiveSequences[BGM].mod
     # is at sActiveSequences + 0. A 32-bit read returns the IEEE-754 bits.
     main_volume_mod_bits = h.read32(seq_bgm)
 
-    # Cross-check: seqId should be the Corneria BGM id (proves the rescue
-    # *thinks* it restored playback; it just silently produced no sound).
+    # The rescue should set seqId back to the Corneria BGM id.
     seq_id_after = _read_u16_hi(h, seq_bgm_id)
     ctx.assert_eq(seq_id_after, SEQ_ID_CORNERIA,
-                  f"Sanity: seqId stays SEQ_ID_CORNERIA (got 0x{seq_id_after:04X}) "
-                  f"-- proves the rescue's AUDIO_PLAY_BGM ran")
+                  f"BGM seqId stays SEQ_ID_CORNERIA after restart "
+                  f"(got 0x{seq_id_after:04X})")
 
-    ctx.assert_eq(main_volume_mod_bits, 0x00000000,
-                  f"BUG: BGM mainVolume.mod is 0.0f after restart "
-                  f"(raw bits=0x{main_volume_mod_bits:08X}). Player claims to "
-                  f"be playing seqId=0x{seq_id_after:04X} but main volume is "
-                  f"silent. Audio_StopSequence faded volume to 0; the rescue's "
-                  f"AUDIO_PLAY_BGM set seqId but did not restore mainVolume.")
+    # IEEE-754 bits for 1.0f = 0x3F800000. Anything non-zero would also
+    # indicate the player is producing audio, but the rescue uses
+    # SEQCMD_SET_SEQPLAYER_VOLUME(BGM, 0, 0x7F) which maps to exactly 1.0f.
+    ctx.assert_eq(main_volume_mod_bits, 0x3F800000,
+                  f"BGM mainVolume.mod restored to 1.0f after restart "
+                  f"(raw bits=0x{main_volume_mod_bits:08X}, expected 0x3F800000). "
+                  f"If this is 0x00000000 the same-spec restart fade-out wasn't "
+                  f"restored by the rescue path in Practice_Save_Tick.")

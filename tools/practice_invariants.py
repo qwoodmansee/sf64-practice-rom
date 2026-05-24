@@ -1624,6 +1624,60 @@ def check_bgm_rescue_clears_waiting_for_fonts():
         )
 
 
+def check_bgm_rescue_restores_main_volume():
+    """BGM rescue must restore mainVolume after AUDIO_PLAY_BGM.
+
+    Same-spec Audio_SetAudioSpec on the restart path calls
+    Audio_StopSequence(SEQ_PLAYER_BGM), which fades
+    sActiveSequences[BGM].mainVolume.mod toward 0. AUDIO_PLAY_BGM updates
+    seqId but does NOT reset mainVolume, so without an explicit restore
+    the player thinks it is playing while producing silence (the
+    "restart kills all audio" bug -- see
+    tests/test_restart_kills_audio.py).
+
+    The rescue in Practice_Save_Tick must queue
+    SEQCMD_SET_SEQPLAYER_VOLUME(SEQ_PLAYER_BGM, ...) after AUDIO_PLAY_BGM
+    to restore the BGM main volume to full.
+    """
+    save_src = read(PRACTICE_SAVE_C)
+
+    tick_match = re.search(
+        r"void\s+Practice_Save_Tick\s*\([^)]*\)\s*\{(.*?)^\}",
+        save_src, re.DOTALL | re.MULTILINE,
+    )
+    if not tick_match:
+        error(f"{PRACTICE_SAVE_C}: could not locate Practice_Save_Tick body "
+              "(check_bgm_rescue_restores_main_volume)")
+        return
+
+    tick_body = tick_match.group(1)
+    play_pos = tick_body.find("AUDIO_PLAY_BGM(gPracticeBgmPendingSeqId)")
+    vol_match = re.search(
+        r"SEQCMD_SET_SEQPLAYER_VOLUME\s*\(\s*SEQ_PLAYER_BGM\b",
+        tick_body,
+    )
+    if play_pos < 0:
+        # Caught by check_bgm_rescue_clears_waiting_for_fonts; bail.
+        return
+    if not vol_match:
+        error(
+            f"{PRACTICE_SAVE_C}: BGM rescue must restore mainVolume via "
+            "SEQCMD_SET_SEQPLAYER_VOLUME(SEQ_PLAYER_BGM, ...) after "
+            "AUDIO_PLAY_BGM, otherwise same-spec restart leaves the player "
+            "active at zero volume (silent BGM and SFX). See "
+            "tests/test_restart_kills_audio.py "
+            "(check_bgm_rescue_restores_main_volume)"
+        )
+        return
+    if vol_match.start() < play_pos:
+        error(
+            f"{PRACTICE_SAVE_C}: SEQCMD_SET_SEQPLAYER_VOLUME for BGM must come "
+            "AFTER AUDIO_PLAY_BGM in the rescue path so the volume restore "
+            "applies to the newly-started sequence "
+            "(check_bgm_rescue_restores_main_volume)"
+        )
+
+
 def check_bgm_jukebox_coverage():
     """sBgmList[] in practice_level.c must include every category of song.
 
@@ -2252,6 +2306,7 @@ def main():
     check_audio_spec_for_level_single_source()
     check_deferred_bgm_rescue()
     check_bgm_rescue_clears_waiting_for_fonts()
+    check_bgm_rescue_restores_main_volume()
     check_bgm_jukebox_coverage()
     check_phase5_state_machine_lifecycle()
     check_phase3_ram_detection()
