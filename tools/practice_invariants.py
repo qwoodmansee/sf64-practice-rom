@@ -1652,8 +1652,12 @@ def check_bgm_rescue_restores_main_volume():
 
     tick_body = tick_match.group(1)
     play_pos = tick_body.find("AUDIO_PLAY_BGM(gPracticeBgmPendingSeqId)")
+    # Capture the full three-argument call so we can verify the *volume* arg
+    # actually restores to full (0x7F == 127 == 1.0f). A partial-volume value
+    # like 0x40 or 0 would still leave audio quiet/silent on restart.
     vol_match = re.search(
-        r"SEQCMD_SET_SEQPLAYER_VOLUME\s*\(\s*SEQ_PLAYER_BGM\b",
+        r"SEQCMD_SET_SEQPLAYER_VOLUME\s*\(\s*SEQ_PLAYER_BGM\s*,"
+        r"\s*[^,]+,\s*([^)\s]+)\s*\)",
         tick_body,
     )
     if play_pos < 0:
@@ -1662,9 +1666,9 @@ def check_bgm_rescue_restores_main_volume():
     if not vol_match:
         error(
             f"{PRACTICE_SAVE_C}: BGM rescue must restore mainVolume via "
-            "SEQCMD_SET_SEQPLAYER_VOLUME(SEQ_PLAYER_BGM, ...) after "
-            "AUDIO_PLAY_BGM, otherwise same-spec restart leaves the player "
-            "active at zero volume (silent BGM and SFX). See "
+            "SEQCMD_SET_SEQPLAYER_VOLUME(SEQ_PLAYER_BGM, duration, 0x7F) "
+            "after AUDIO_PLAY_BGM, otherwise same-spec restart leaves the "
+            "player active at zero volume (silent BGM and SFX). See "
             "tests/test_restart_kills_audio.py "
             "(check_bgm_rescue_restores_main_volume)"
         )
@@ -1674,6 +1678,20 @@ def check_bgm_rescue_restores_main_volume():
             f"{PRACTICE_SAVE_C}: SEQCMD_SET_SEQPLAYER_VOLUME for BGM must come "
             "AFTER AUDIO_PLAY_BGM in the rescue path so the volume restore "
             "applies to the newly-started sequence "
+            "(check_bgm_rescue_restores_main_volume)"
+        )
+        return
+    volume_arg = vol_match.group(1).strip()
+    # 0x7F maps to 1.0f (full volume) per include/audioseq_cmd.h. Accept the
+    # hex form, the decimal form (127), or the symbolic name if one is ever
+    # introduced. Anything else (e.g. 0x40, 0, a runtime variable) is a
+    # silent-audio regression.
+    if volume_arg.lower() not in ("0x7f", "127"):
+        error(
+            f"{PRACTICE_SAVE_C}: BGM rescue SEQCMD_SET_SEQPLAYER_VOLUME volume "
+            f"argument must be 0x7F (full); got {volume_arg!r}. A partial or "
+            "zero volume here will leave BGM silent after a same-spec "
+            "restart. See tests/test_restart_kills_audio.py "
             "(check_bgm_rescue_restores_main_volume)"
         )
 

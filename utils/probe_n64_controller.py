@@ -119,9 +119,25 @@ def wait_for_input(js, label):
                     rebaseline_all_axes(js)
                     return f"axis({ev.axis}{sign})"
             if ev.type == pygame.JOYHATMOTION and ev.value != (0, 0):
-                print(f"    -> hat({ev.hat} {ev.value})")
+                # Mupen64Plus expects directional words, e.g. `hat(0 Up)`,
+                # not a Python tuple like `hat(0 (0, 1))`.
+                hat_dir = {
+                    (0, 1):  "Up",
+                    (0, -1): "Down",
+                    (-1, 0): "Left",
+                    (1, 0):  "Right",
+                }.get(ev.value)
+                if hat_dir is None:
+                    # Diagonal — record the dominant axis so the binding still
+                    # loads. Mupen64Plus does not accept diagonals directly.
+                    dx, dy = ev.value
+                    if abs(dx) >= abs(dy):
+                        hat_dir = "Right" if dx > 0 else "Left"
+                    else:
+                        hat_dir = "Up" if dy > 0 else "Down"
+                print(f"    -> hat({ev.hat} {hat_dir})")
                 rebaseline_all_axes(js)
-                return f"hat({ev.hat} {ev.value})"
+                return f"hat({ev.hat} {hat_dir})"
         time.sleep(0.01)
 
 mapping = {}
