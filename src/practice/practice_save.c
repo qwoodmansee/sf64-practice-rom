@@ -1693,6 +1693,13 @@ void Practice_Save_Tick(void) {
              * rescue call unconditionally effective. */
             sActiveSequences[SEQ_PLAYER_BGM].isWaitingForFonts = 0;
             AUDIO_PLAY_BGM(gPracticeBgmPendingSeqId);
+            /* Restore BGM main volume. Same-spec Audio_SetAudioSpec on the
+             * restart path calls Audio_StopSequence(SEQ_PLAYER_BGM), which
+             * fades mainVolume.mod toward 0. AUDIO_PLAY_BGM sets seqId but
+             * does not reset mainVolume, so the player would claim to be
+             * playing while producing silence. 0x7F maps to 1.0 (default
+             * full volume); duration 0 makes it take effect immediately. */
+            SEQCMD_SET_SEQPLAYER_VOLUME(SEQ_PLAYER_BGM, 0, 0x7F);
             gPracticeBgmPending = false;
         }
     }

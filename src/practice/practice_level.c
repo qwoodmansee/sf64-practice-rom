@@ -72,25 +72,66 @@ typedef struct {
     u8 sfxLayout;
 } BgmEntry;
 
+/* Many boss themes are sequence-aliases of just four underlying sequences
+ * (BOSS_CO_1, BOSS_ME, BOSS_SY, BOSS_BO) — see src/audio/audio_tables.c.
+ * They sound distinct in-game only because each level loads a different
+ * soundfont (audio spec). The list below picks one entry per (sequence,
+ * soundfont) flavor that produces a noticeably different vibe, not every
+ * combo. (spec, layout) pairs match the sound test in audio_general.c
+ * where available; the rest use the stage's spec, which is how the engine
+ * itself queues them via gBossBgms[]. */
 static BgmEntry sBgmList[] = {
-    { "MAP",       NA_BGM_MAP,        AUDIOSPEC_MAP, SFX_LAYOUT_MAP },
-    { "CORNERIA",  NA_BGM_STAGE_CO,   AUDIOSPEC_CO,  SFX_LAYOUT_DEFAULT },
-    { "METEO",     NA_BGM_STAGE_ME,   AUDIOSPEC_ME,  SFX_LAYOUT_DEFAULT },
-    { "SECTOR Y",  NA_BGM_STAGE_SY,   AUDIOSPEC_SY,  SFX_LAYOUT_DEFAULT },
-    { "FORTUNA",   NA_BGM_STAGE_FO,   AUDIOSPEC_FO,  SFX_LAYOUT_DEFAULT },
-    { "KATINA",    NA_BGM_STAGE_KA,   AUDIOSPEC_KA,  SFX_LAYOUT_DEFAULT },
-    { "AQUAS",     NA_BGM_STAGE_AQ,   AUDIOSPEC_AQ,  SFX_LAYOUT_DEFAULT },
-    { "SECTOR X",  NA_BGM_STAGE_SX,   AUDIOSPEC_SX,  SFX_LAYOUT_DEFAULT },
-    { "SOLAR",     NA_BGM_STAGE_SO,   AUDIOSPEC_SO,  SFX_LAYOUT_SO },
-    { "ZONESS",    NA_BGM_STAGE_ZO,   AUDIOSPEC_ZO,  SFX_LAYOUT_DEFAULT },
-    { "TITANIA",   NA_BGM_STAGE_TI,   AUDIOSPEC_TI,  SFX_LAYOUT_DEFAULT },
-    { "MACBETH",   NA_BGM_STAGE_MA,   AUDIOSPEC_MA,  SFX_LAYOUT_DEFAULT },
-    { "SECTOR Z",  NA_BGM_STAGE_SZ,   AUDIOSPEC_SZ,  SFX_LAYOUT_DEFAULT },
-    { "BOLSE",     NA_BGM_STAGE_BO,   AUDIOSPEC_BO,  SFX_LAYOUT_DEFAULT },
-    { "AREA 6",    NA_BGM_STAGE_A6,   AUDIOSPEC_A6,  SFX_LAYOUT_DEFAULT },
-    { "VENOM",     NA_BGM_STAGE_VE1,  AUDIOSPEC_VE,  SFX_LAYOUT_DEFAULT },
-    { "STAR WOLF", NA_BGM_STARWOLF,   AUDIOSPEC_FO,  SFX_LAYOUT_DEFAULT },
-    { "TRAINING",  NA_BGM_TRAINING,   AUDIOSPEC_TR,  SFX_LAYOUT_DEFAULT },
+    /* Stage themes — each is unique because each level swaps its soundfont. */
+    { "MAP",            NA_BGM_MAP,            AUDIOSPEC_MAP,     SFX_LAYOUT_MAP },
+    { "CORNERIA",       NA_BGM_STAGE_CO,       AUDIOSPEC_CO,      SFX_LAYOUT_DEFAULT },
+    { "METEO",          NA_BGM_STAGE_ME,       AUDIOSPEC_ME,      SFX_LAYOUT_DEFAULT },
+    { "SECTOR Y",       NA_BGM_STAGE_SY,       AUDIOSPEC_SY,      SFX_LAYOUT_DEFAULT },
+    { "FORTUNA",        NA_BGM_STAGE_FO,       AUDIOSPEC_FO,      SFX_LAYOUT_DEFAULT },
+    { "KATINA",         NA_BGM_STAGE_KA,       AUDIOSPEC_KA,      SFX_LAYOUT_DEFAULT },
+    { "AQUAS",          NA_BGM_STAGE_AQ,       AUDIOSPEC_AQ,      SFX_LAYOUT_DEFAULT },
+    { "SECTOR X",       NA_BGM_STAGE_SX,       AUDIOSPEC_SX,      SFX_LAYOUT_DEFAULT },
+    { "SOLAR",          NA_BGM_STAGE_SO,       AUDIOSPEC_SO,      SFX_LAYOUT_SO },
+    { "ZONESS",         NA_BGM_STAGE_ZO,       AUDIOSPEC_ZO,      SFX_LAYOUT_DEFAULT },
+    { "TITANIA",        NA_BGM_STAGE_TI,       AUDIOSPEC_TI,      SFX_LAYOUT_DEFAULT },
+    { "MACBETH",        NA_BGM_STAGE_MA,       AUDIOSPEC_MA,      SFX_LAYOUT_DEFAULT },
+    { "SECTOR Z",       NA_BGM_STAGE_SZ,       AUDIOSPEC_SZ,      SFX_LAYOUT_DEFAULT },
+    { "BOLSE",          NA_BGM_STAGE_BO,       AUDIOSPEC_BO,      SFX_LAYOUT_DEFAULT },
+    { "AREA 6",         NA_BGM_STAGE_A6,       AUDIOSPEC_A6,      SFX_LAYOUT_DEFAULT },
+    { "VENOM",          NA_BGM_STAGE_VE1,      AUDIOSPEC_VE,      SFX_LAYOUT_DEFAULT },
+    { "ANDROSS LANE",   NA_BGM_STAGE_ANDROSS,  AUDIOSPEC_TITLE,   SFX_LAYOUT_DEFAULT },
+    { "WARP ZONE",      NA_BGM_STAGE_WZ,       AUDIOSPEC_ME,      SFX_LAYOUT_DEFAULT },
+    { "TRAINING",       NA_BGM_TRAINING,       AUDIOSPEC_TR,      SFX_LAYOUT_DEFAULT },
+
+    /* Boss / cinematic themes (one entry per (sequence, soundfont) flavor). */
+    { "BOSS CO",        NA_BGM_BOSS_CO,        AUDIOSPEC_CO,      SFX_LAYOUT_DEFAULT },
+    { "BOSS SX",        NA_BGM_BOSS_SX,        AUDIOSPEC_SX,      SFX_LAYOUT_DEFAULT },
+    { "BOSS ME",        NA_BGM_BOSS_ME,        AUDIOSPEC_ME,      SFX_LAYOUT_DEFAULT },
+    { "BOSS TI",        NA_BGM_BOSS_TI,        AUDIOSPEC_TI,      SFX_LAYOUT_DEFAULT },
+    { "BOSS AQ",        NA_BGM_BOSS_AQ,        AUDIOSPEC_AQ,      SFX_LAYOUT_DEFAULT },
+    { "BOSS BO",        NA_BGM_BOSS_BO,        AUDIOSPEC_BO,      SFX_LAYOUT_DEFAULT },
+    { "BOSS KA",        NA_BGM_BOSS_KA,        AUDIOSPEC_KA,      SFX_LAYOUT_DEFAULT },
+    { "REAL BOSS",      NA_BGM_BOSS_SY,        AUDIOSPEC_SY,      SFX_LAYOUT_DEFAULT },
+    { "CARRIER",        NA_BGM_BOSS_A_CARRIER, AUDIOSPEC_CO,      SFX_LAYOUT_DEFAULT },
+    { "ANDROSS",        NA_BGM_BOSS_ANDROSS,   AUDIOSPEC_VE,      SFX_LAYOUT_DEFAULT },
+    { "ANDROSS BRAIN",  NA_BGM_ANDROSS_BRAIN,  AUDIOSPEC_VE,      SFX_LAYOUT_DEFAULT },
+    { "DASH TO BASE",   NA_BGM_DASH_INTO_BASE, AUDIOSPEC_VE,      SFX_LAYOUT_DEFAULT },
+    { "ALL CLEAR",      NA_BGM_ALL_CLEAR,      AUDIOSPEC_VE,      SFX_LAYOUT_DEFAULT },
+    { "STAR WOLF",      NA_BGM_STARWOLF,       AUDIOSPEC_FO,      SFX_LAYOUT_DEFAULT },
+
+    /* Multiplayer */
+    { "VS BATTLE",      NA_BGM_BATTLE,         AUDIOSPEC_VS,      SFX_LAYOUT_VS },
+    { "VS HURRY",       NA_BGM_BATTLE_LAST,    AUDIOSPEC_VS_LAST, SFX_LAYOUT_VS },
+    { "VS MENU",        NA_BGM_VS_SELECT,      AUDIOSPEC_TITLE,   SFX_LAYOUT_DEFAULT },
+
+    /* Menu / cinematic */
+    { "TITLE",          NA_BGM_TITLE,          AUDIOSPEC_TITLE,   SFX_LAYOUT_DEFAULT },
+    { "OPENING",        NA_BGM_OPENING,        AUDIOSPEC_OPENING, SFX_LAYOUT_DEFAULT },
+    { "MENU SELECT",    NA_BGM_SELECT,         AUDIOSPEC_TITLE,   SFX_LAYOUT_DEFAULT },
+    { "STAFF ROLL",     NA_BGM_STAFF_ROLL,     AUDIOSPEC_ENDING,  SFX_LAYOUT_DEFAULT },
+
+    /* Character themes */
+    { "KATT",           NA_BGM_KATT,           AUDIOSPEC_SZ,      SFX_LAYOUT_DEFAULT },
+    { "BILL",           NA_BGM_BILL,           AUDIOSPEC_KA,      SFX_LAYOUT_DEFAULT },
 };
 
 #define BGM_COUNT (s32)(sizeof(sBgmList) / sizeof(sBgmList[0]))

@@ -1624,6 +1624,133 @@ def check_bgm_rescue_clears_waiting_for_fonts():
         )
 
 
+def check_bgm_rescue_restores_main_volume():
+    """BGM rescue must restore mainVolume after AUDIO_PLAY_BGM.
+
+    Same-spec Audio_SetAudioSpec on the restart path calls
+    Audio_StopSequence(SEQ_PLAYER_BGM), which fades
+    sActiveSequences[BGM].mainVolume.mod toward 0. AUDIO_PLAY_BGM updates
+    seqId but does NOT reset mainVolume, so without an explicit restore
+    the player thinks it is playing while producing silence (the
+    "restart kills all audio" bug -- see
+    tests/test_restart_kills_audio.py).
+
+    The rescue in Practice_Save_Tick must queue
+    SEQCMD_SET_SEQPLAYER_VOLUME(SEQ_PLAYER_BGM, ...) after AUDIO_PLAY_BGM
+    to restore the BGM main volume to full.
+    """
+    save_src = read(PRACTICE_SAVE_C)
+
+    tick_match = re.search(
+        r"void\s+Practice_Save_Tick\s*\([^)]*\)\s*\{(.*?)^\}",
+        save_src, re.DOTALL | re.MULTILINE,
+    )
+    if not tick_match:
+        error(f"{PRACTICE_SAVE_C}: could not locate Practice_Save_Tick body "
+              "(check_bgm_rescue_restores_main_volume)")
+        return
+
+    tick_body = tick_match.group(1)
+    play_pos = tick_body.find("AUDIO_PLAY_BGM(gPracticeBgmPendingSeqId)")
+    # Capture the full three-argument call so we can verify the *volume* arg
+    # actually restores to full (0x7F == 127 == 1.0f). A partial-volume value
+    # like 0x40 or 0 would still leave audio quiet/silent on restart.
+    vol_match = re.search(
+        r"SEQCMD_SET_SEQPLAYER_VOLUME\s*\(\s*SEQ_PLAYER_BGM\s*,"
+        r"\s*[^,]+,\s*([^)\s]+)\s*\)",
+        tick_body,
+    )
+    if play_pos < 0:
+        # Caught by check_bgm_rescue_clears_waiting_for_fonts; bail.
+        return
+    if not vol_match:
+        error(
+            f"{PRACTICE_SAVE_C}: BGM rescue must restore mainVolume via "
+            "SEQCMD_SET_SEQPLAYER_VOLUME(SEQ_PLAYER_BGM, duration, 0x7F) "
+            "after AUDIO_PLAY_BGM, otherwise same-spec restart leaves the "
+            "player active at zero volume (silent BGM and SFX). See "
+            "tests/test_restart_kills_audio.py "
+            "(check_bgm_rescue_restores_main_volume)"
+        )
+        return
+    if vol_match.start() < play_pos:
+        error(
+            f"{PRACTICE_SAVE_C}: SEQCMD_SET_SEQPLAYER_VOLUME for BGM must come "
+            "AFTER AUDIO_PLAY_BGM in the rescue path so the volume restore "
+            "applies to the newly-started sequence "
+            "(check_bgm_rescue_restores_main_volume)"
+        )
+        return
+    volume_arg = vol_match.group(1).strip()
+    # 0x7F maps to 1.0f (full volume) per include/audioseq_cmd.h. Accept the
+    # hex form, the decimal form (127), or the symbolic name if one is ever
+    # introduced. Anything else (e.g. 0x40, 0, a runtime variable) is a
+    # silent-audio regression.
+    if volume_arg.lower() not in ("0x7f", "127"):
+        error(
+            f"{PRACTICE_SAVE_C}: BGM rescue SEQCMD_SET_SEQPLAYER_VOLUME volume "
+            f"argument must be 0x7F (full); got {volume_arg!r}. A partial or "
+            "zero volume here will leave BGM silent after a same-spec "
+            "restart. See tests/test_restart_kills_audio.py "
+            "(check_bgm_rescue_restores_main_volume)"
+        )
+
+
+def check_bgm_jukebox_coverage():
+    """sBgmList[] in practice_level.c must include every category of song.
+
+    Players asked for the level-select BGM picker to cover every song in the
+    game (stages, bosses, multiplayer, menu themes, character themes). This
+    invariant pins a representative entry from each category so a refactor
+    cannot silently shrink the list back to "stages only".
+    """
+    src = read(PRACTICE_LEVEL)
+
+    list_match = re.search(
+        r"static\s+BgmEntry\s+sBgmList\[\]\s*=\s*\{(.*?)\};",
+        src, re.DOTALL,
+    )
+    if not list_match:
+        error(f"{PRACTICE_LEVEL}: could not locate sBgmList[] "
+              "(check_bgm_jukebox_coverage)")
+        return
+
+    body = list_match.group(1)
+
+    # Each entry must be present somewhere in the list. The static check is
+    # name-based; the audio spec/layout columns are not validated here. Boss
+    # themes are deliberately deduplicated by (sequence, soundfont) flavor —
+    # many BOSS_* defines are sequence-aliases that sound near-identical, so
+    # only the ones that bring a distinct flavor are required.
+    required_bgms = [
+        # Stages
+        "NA_BGM_MAP", "NA_BGM_STAGE_CO", "NA_BGM_STAGE_VE1",
+        "NA_BGM_STAGE_ANDROSS", "NA_BGM_STAGE_WZ", "NA_BGM_TRAINING",
+        # Distinct boss / cinematic themes
+        "NA_BGM_BOSS_CO", "NA_BGM_BOSS_ME", "NA_BGM_BOSS_SY",
+        "NA_BGM_BOSS_BO", "NA_BGM_BOSS_ANDROSS", "NA_BGM_ANDROSS_BRAIN",
+        "NA_BGM_BOSS_A_CARRIER", "NA_BGM_DASH_INTO_BASE",
+        "NA_BGM_ALL_CLEAR", "NA_BGM_STARWOLF",
+        # Multiplayer
+        "NA_BGM_BATTLE", "NA_BGM_BATTLE_LAST", "NA_BGM_VS_SELECT",
+        # Menu / cinematic
+        "NA_BGM_TITLE", "NA_BGM_OPENING", "NA_BGM_SELECT",
+        "NA_BGM_STAFF_ROLL",
+        # Character themes
+        "NA_BGM_KATT", "NA_BGM_BILL",
+    ]
+
+    for bgm in required_bgms:
+        # Match as a whole token so NA_BGM_STAGE_CO doesn't satisfy a
+        # NA_BGM_BOSS_CO requirement and vice versa.
+        if not re.search(rf"\b{re.escape(bgm)}\b", body):
+            error(
+                f"{PRACTICE_LEVEL}: sBgmList[] missing {bgm}; the level-select "
+                "BGM picker is expected to cover every song in the game "
+                "(check_bgm_jukebox_coverage)"
+            )
+
+
 def check_owl_logo():
     """owl-400 logo texture is wired into the level-select draw path correctly."""
     owl_c = os.path.join(SRC_PRACTICE, "practice_owl_tex.c")
@@ -2082,6 +2209,92 @@ def check_macro_buf_section():
             )
 
 
+def check_state_menu_layout():
+    """Each enum-driven submenu's last item must fit inside its container box and not overlap help text."""
+    src = read(os.path.join(SRC_PRACTICE, "practice_state.c"))
+
+    BOX_TOP = 40
+    ITEM_HEIGHT = 12
+
+    draw_fn = find_c_function(src, "Practice_StateMenu_Draw")
+    if draw_fn is None:
+        error("Practice_StateMenu_Draw not found (check_state_menu_layout)")
+        return
+
+    case_pattern = re.compile(
+        r"case\s+(PSUBMENU_\w+)\s*:\s*"
+        r"title\s*=\s*\"[^\"]*\"\s*;\s*"
+        r"boxHeight\s*=\s*(\d+)\s*;\s*"
+        r"helpY\s*=\s*(\d+)\s*;",
+        re.DOTALL,
+    )
+    cases = {m.group(1): (int(m.group(2)), int(m.group(3))) for m in case_pattern.finditer(draw_fn)}
+
+    submenu_to_fn = {
+        "PSUBMENU_LOADOUT": "StateMenu_DrawLoadout",
+        "PSUBMENU_DISPLAY": "StateMenu_DrawDisplay",
+        "PSUBMENU_STATS": "StateMenu_DrawStats",
+        "PSUBMENU_VISUALIZERS": "StateMenu_DrawVisualizers",
+        "PSUBMENU_MACRO": "StateMenu_DrawMacro",
+        "PSUBMENU_ENEMY_HEALTH": "StateMenu_DrawEnemyHealth",
+    }
+
+    for submenu, fn_name in submenu_to_fn.items():
+        if submenu not in cases:
+            warning(f"State menu layout: {submenu} has no case in Practice_StateMenu_Draw")
+            continue
+        box_h, help_y = cases[submenu]
+
+        fn = find_c_function(src, fn_name)
+        if fn is None:
+            error(f"State menu layout: {fn_name} not found")
+            continue
+
+        loop_m = re.search(r"i\s*<\s*(\w+_MAX)", fn)
+        step_m = re.search(r"y\s*=\s*60\s*\+\s*\(\s*i\s*\*\s*(\d+)\s*\)", fn)
+        if not loop_m or not step_m:
+            warning(f"State menu layout: could not parse loop in {fn_name}")
+            continue
+
+        max_name = loop_m.group(1)
+        step = int(step_m.group(1))
+
+        enum_m = re.search(
+            rf"typedef\s+enum\s+\w+\s*\{{([^}}]*?){max_name}\s*,?\s*\}}",
+            src,
+        )
+        if not enum_m:
+            error(f"State menu layout: could not find enum containing {max_name}")
+            continue
+
+        body = enum_m.group(1)
+        body = re.sub(r"//[^\n]*", "", body)
+        body = re.sub(r"/\*.*?\*/", "", body, flags=re.DOTALL)
+        entries = [e.strip() for e in body.split(",") if e.strip()]
+        item_count = len(entries)  # entries before the _MAX sentinel
+
+        if item_count <= 0:
+            warning(f"State menu layout: {fn_name} has zero items")
+            continue
+
+        last_top_y = 60 + (item_count - 1) * step
+        last_bottom_y = last_top_y + ITEM_HEIGHT
+        box_bottom_y = BOX_TOP + box_h
+
+        if last_bottom_y > box_bottom_y:
+            error(
+                f"State menu layout: {submenu} last item bottom y={last_bottom_y} "
+                f"exceeds container box bottom y={box_bottom_y} "
+                f"(items={item_count}, step={step}, boxHeight={box_h})"
+            )
+        if last_bottom_y > help_y:
+            error(
+                f"State menu layout: {submenu} last item bottom y={last_bottom_y} "
+                f"overlaps help text at y={help_y} "
+                f"(items={item_count}, step={step})"
+            )
+
+
 def main():
     check_config_inits()
     check_function_definitions()
@@ -2111,6 +2324,8 @@ def main():
     check_audio_spec_for_level_single_source()
     check_deferred_bgm_rescue()
     check_bgm_rescue_clears_waiting_for_fonts()
+    check_bgm_rescue_restores_main_volume()
+    check_bgm_jukebox_coverage()
     check_phase5_state_machine_lifecycle()
     check_phase3_ram_detection()
     check_practice_pool_placement()
@@ -2145,6 +2360,7 @@ def main():
     check_enemy_health()
     check_hitbox_shadow_drawn()
     check_enemy_health_hide_models()
+    check_state_menu_layout()
 
     if errors:
         print("Practice ROM invariant check FAILED:")
