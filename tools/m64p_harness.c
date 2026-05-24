@@ -18,6 +18,8 @@
  *   READ32 <rdram_addr>            -> VAL <hex>
  *   WRITE32 <rdram_addr> <hex_val> -> OK
  *   SLEEP <ms>                     -> OK
+ *   KEYDOWN <sdl_keycode>          -> OK   (send SDL key-down to input plugin)
+ *   KEYUP   <sdl_keycode>          -> OK   (send SDL key-up   to input plugin)
  *   QUIT                           -> BYE
  */
 #include <dlfcn.h>
@@ -125,6 +127,63 @@ static unsigned int rdram_read32(unsigned int addr) {
 static void rdram_write32(unsigned int addr, unsigned int val) {
     addr &= 0x1FFFFFFF;
     *(unsigned int *)(g_rdram + addr) = val;
+}
+
+/* Write a deterministic mupen64plus.cfg so the SDL input plugin uses keyboard
+ * mode (mode=0) with known keycodes for every button. Without this the plugin
+ * may auto-detect a connected joystick and ignore our KEYDOWN/KEYUP events. */
+static void write_input_config(void) {
+    char path[512];
+    snprintf(path, sizeof(path), "%s/mupen64plus.cfg", CONFIG_DIR);
+    FILE *f = fopen(path, "w");
+    if (!f) {
+        fprintf(stderr, "warn: could not write %s\n", path);
+        return;
+    }
+    /* SDL keycodes (from <SDL_keycode.h>):
+     *   RETURN=13, x=120, c=99, z=122, w=119, a=97, s=115, d=100 */
+    fprintf(f,
+        "[Core]\n"
+        "Version = 1.010000\n"
+        "OnScreenDisplay = False\n"
+        "\n"
+        "[Input-SDL-Control1]\n"
+        "Version = 2.000000\n"
+        "mode = 0\n"
+        "device = -2\n"
+        "name = \"Keyboard\"\n"
+        "plugged = True\n"
+        "plugin = 2\n"
+        "mouse = False\n"
+        "AnalogDeadzone = \"4096,4096\"\n"
+        "AnalogPeak = \"32768,32768\"\n"
+        "DPad R = \"key(100)\"\n"
+        "DPad L = \"key(97)\"\n"
+        "DPad D = \"key(115)\"\n"
+        "DPad U = \"key(119)\"\n"
+        "Start = \"key(13)\"\n"
+        "Z Trig = \"key(122)\"\n"
+        "B Button = \"key(99)\"\n"
+        "A Button = \"key(120)\"\n"
+        "C Button R = \"key(108)\"\n"
+        "C Button L = \"key(106)\"\n"
+        "C Button D = \"key(107)\"\n"
+        "C Button U = \"key(105)\"\n"
+        "R Trig = \"key(101)\"\n"
+        "L Trig = \"key(113)\"\n"
+        "Mempak switch = \"key(44)\"\n"
+        "Rumblepak switch = \"key(46)\"\n"
+        "X Axis = \"key(97,100)\"\n"
+        "Y Axis = \"key(115,119)\"\n"
+        );
+    /* Note on X/Y Axis: mupen64plus syntax is key(neg, pos).
+     *   X: 'a'=97 left (-), 'd'=100 right (+).
+     *   Y: 's'=115 down (-), 'w'=119 up (+).  N64 stick_y is positive=up.
+     * Mapping is intentionally shared with D-pad: M64CMD_SEND_SDL_KEYDOWN
+     * masks the keysym to 16 bits, so SDL2 arrow keys (>0xFFFF) can't be
+     * sent at all. WASD covers both D-pad and stick from the same keys --
+     * acceptable for menu-driven tests. */
+    fclose(f);
 }
 
 /* --- Plugin loading --- */
@@ -285,6 +344,15 @@ static void *cmd_thread_fn(void *arg) {
             else
                 printf("TIMEOUT 0x%08X\n", rdram_read32(addr));
         }
+        else if (strncmp(line, "KEYDOWN ", 8) == 0 || strncmp(line, "KEYUP ", 6) == 0) {
+            int is_down = (line[3] == 'D');
+            const char *arg = line + (is_down ? 8 : 6);
+            unsigned int keysym = (unsigned int)strtoul(arg, NULL, 0);
+            int payload = (int)(keysym & 0xFFFF);
+            CoreDoCommand(is_down ? M64CMD_SEND_SDL_KEYDOWN : M64CMD_SEND_SDL_KEYUP,
+                          payload, NULL);
+            printf("OK\n");
+        }
         else if (strcmp(line, "QUIT") == 0) {
             break;
         }
@@ -317,8 +385,11 @@ int main(int argc, char **argv) {
 
     setvbuf(stdout, NULL, _IOLBF, 0);
     mkdir(CONFIG_DIR, 0755);
+    write_input_config();
 
-    SDL_Init(g_headed ? SDL_INIT_VIDEO : 0);
+    /* SDL must be initialized for the input plugin's keyboard tracking to work,
+     * even in headless mode -- mupen64plus-input-sdl uses SDL event state. */
+    SDL_Init(SDL_INIT_VIDEO);
 
     m64p_error err = CoreStartup(FRONTEND_API_VERSION,
                                   CONFIG_DIR, DATA_DIR,

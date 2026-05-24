@@ -149,6 +149,12 @@ class HarnessConnection:
         resp = self.send(f"WAIT {addr:x} {value:x} {timeout_ms}")
         return resp == "OK"
 
+    def key_down(self, sdl_keycode):
+        return self.send(f"KEYDOWN {sdl_keycode}") == "OK"
+
+    def key_up(self, sdl_keycode):
+        return self.send(f"KEYUP {sdl_keycode}") == "OK"
+
     def quit(self):
         try:
             self.proc.stdin.write("QUIT\n")
