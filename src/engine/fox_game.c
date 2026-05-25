@@ -540,17 +540,11 @@ void Game_Update(void) {
                  * each call, so it MUST run at most once per tick. Drive both
                  * the macro pre-play hook and the Play_Main gate from a single
                  * call. While frozen, neither runs (macro head stays put,
-                 * gameplay holds). When unfrozen and not armed, both run.
-                 * PMENU_OPEN_FROZEN falls through (game stays frozen while the
-                 * radial menu or state submenu is visible). */
-                if (gPracticeMenuState == PMENU_OPEN) {
-                    Play_Main();
-                } else if (gPracticeMenuState == PMENU_CLOSED) {
-                    if (!Practice_FrameAdvance_IsFrozen()) {
-                        Practice_Macro_PrePlay();
-                        if (!Practice_Macro_IsArmed()) {
-                            Play_Main();
-                        }
+                 * gameplay holds). When unfrozen and not armed, both run. */
+                if (!Practice_FrameAdvance_IsFrozen()) {
+                    Practice_Macro_PrePlay();
+                    if (!Practice_Macro_IsArmed()) {
+                        Play_Main();
                     }
                 }
 #else
@@ -568,7 +562,7 @@ void Game_Update(void) {
                 break;
         }
 #ifdef PRACTICE_ROM
-        if (!Practice_StateMenuIsOpen()) {
+        if (gPracticeMenuState != PMENU_OPEN) {
             Game_Draw(0);
         }
 #else
