@@ -28,7 +28,7 @@ void Practice_Init(void) {
     gPracticeConfig.peppyAlive = true;
     gPracticeConfig.showInputDisplay = true;
     gPracticeConfig.skipCutscenes = true;
-    gPracticeConfig.showHudOverlay = true;
+    gPracticeConfig.showHudOverlay = false;
     gPracticeConfig.showLagFrames = true;
     gPracticeConfig.showSpeed = true;
     gPracticeConfig.showChargeTiming = false;

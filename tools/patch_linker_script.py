@@ -58,7 +58,13 @@ LIB_IODEV_OBJS = []
 # Phase 1: every lib/* (not under lib/iodev/) file moved into
 # .practice_late_core via PRACTICE_LATE_CORE_LIB_OBJS below. Empty for
 # the same reason as LIB_IODEV_OBJS.
-LIB_TOP_OBJS = []
+# NOTE: slot_manager and crc32 must stay in main ROM (not .practice_late_core)
+# because they're called during gameplay and .practice_late_core is not
+# accessible from gameplay on real hardware (regression fix from #17).
+LIB_TOP_OBJS = [
+    "slot_manager",  # Must stay in main ROM; called during gameplay save/load
+    "crc32",         # Used by slot_manager and practice code during gameplay
+]
 
 # Phase 1: lib/sd_host/sd_host.o moved into .practice_late_core via
 # PRACTICE_LATE_CORE_SD_HOST_OBJS below. Empty for the same reason as
@@ -102,8 +108,6 @@ PRACTICE_LATE_CORE_IODEV_OBJS = [
 PRACTICE_LATE_CORE_LIB_OBJS = [
     "sd_crc",
     "serial",
-    "slot_manager",
-    "crc32",
 ]
 PRACTICE_LATE_CORE_SD_HOST_OBJS = [
     "sd_host",
