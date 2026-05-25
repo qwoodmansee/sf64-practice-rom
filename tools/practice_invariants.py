@@ -1632,19 +1632,20 @@ def check_bgm_rescue_clears_waiting_for_fonts():
 
 
 def check_bgm_rescue_restores_main_volume():
-    """BGM rescue must restore mainVolume after AUDIO_PLAY_BGM.
+    """Rescue must restore mainVolume on ALL FOUR sequence players.
 
-    Same-spec Audio_SetAudioSpec on the restart path calls
-    Audio_StopSequence(SEQ_PLAYER_BGM), which fades
-    sActiveSequences[BGM].mainVolume.mod toward 0. AUDIO_PLAY_BGM updates
-    seqId but does NOT reset mainVolume, so without an explicit restore
-    the player thinks it is playing while producing silence (the
-    "restart kills all audio" bug -- see
-    tests/test_restart_kills_audio.py).
+    Every level transition (same-spec or cross-spec) runs through
+    Game_SetGameState, which calls Audio_FadeOutAll(1) -- that targets
+    mainVolume=0 for SEQ_PLAYER_BGM/FANFARE/SFX/VOICE. On cross-spec
+    launches Audio_RestartSeqPlayers restores SFX and VOICE later, but
+    same-spec launches never trigger that path, so without an explicit
+    restore on every player here SFX (lasers, hits) and VOICE (radio
+    chatter) stay silent even though BGM is audible.
 
     The rescue in Practice_Save_Tick must queue
-    SEQCMD_SET_SEQPLAYER_VOLUME(SEQ_PLAYER_BGM, ...) after AUDIO_PLAY_BGM
-    to restore the BGM main volume to full.
+    SEQCMD_SET_SEQPLAYER_VOLUME(<player>, duration, 0x7F) for all four
+    players after AUDIO_PLAY_BGM. See tests/test_restart_kills_audio.py
+    which asserts mainVolume.mod = 1.0f on every player post-restart.
     """
     save_src = read(PRACTICE_SAVE_C)
 
@@ -1659,48 +1660,49 @@ def check_bgm_rescue_restores_main_volume():
 
     tick_body = tick_match.group(1)
     play_pos = tick_body.find("AUDIO_PLAY_BGM(gPracticeBgmPendingSeqId)")
-    # Capture the full three-argument call so we can verify the *volume* arg
-    # actually restores to full (0x7F == 127 == 1.0f). A partial-volume value
-    # like 0x40 or 0 would still leave audio quiet/silent on restart.
-    vol_match = re.search(
-        r"SEQCMD_SET_SEQPLAYER_VOLUME\s*\(\s*SEQ_PLAYER_BGM\s*,"
-        r"\s*[^,]+,\s*([^)\s]+)\s*\)",
-        tick_body,
-    )
     if play_pos < 0:
         # Caught by check_bgm_rescue_clears_waiting_for_fonts; bail.
         return
-    if not vol_match:
-        error(
-            f"{PRACTICE_SAVE_C}: BGM rescue must restore mainVolume via "
-            "SEQCMD_SET_SEQPLAYER_VOLUME(SEQ_PLAYER_BGM, duration, 0x7F) "
-            "after AUDIO_PLAY_BGM, otherwise same-spec restart leaves the "
-            "player active at zero volume (silent BGM and SFX). See "
-            "tests/test_restart_kills_audio.py "
-            "(check_bgm_rescue_restores_main_volume)"
+
+    required_players = ("SEQ_PLAYER_BGM", "SEQ_PLAYER_FANFARE",
+                        "SEQ_PLAYER_SFX", "SEQ_PLAYER_VOICE")
+    for player in required_players:
+        # Capture the full three-argument call so we can verify the *volume*
+        # arg actually restores to full (0x7F == 127 == 1.0f). A partial value
+        # like 0x40 or 0 would still leave audio quiet/silent on restart.
+        vol_match = re.search(
+            r"SEQCMD_SET_SEQPLAYER_VOLUME\s*\(\s*" + re.escape(player) +
+            r"\s*,\s*[^,]+,\s*([^)\s]+)\s*\)",
+            tick_body,
         )
-        return
-    if vol_match.start() < play_pos:
-        error(
-            f"{PRACTICE_SAVE_C}: SEQCMD_SET_SEQPLAYER_VOLUME for BGM must come "
-            "AFTER AUDIO_PLAY_BGM in the rescue path so the volume restore "
-            "applies to the newly-started sequence "
-            "(check_bgm_rescue_restores_main_volume)"
-        )
-        return
-    volume_arg = vol_match.group(1).strip()
-    # 0x7F maps to 1.0f (full volume) per include/audioseq_cmd.h. Accept the
-    # hex form, the decimal form (127), or the symbolic name if one is ever
-    # introduced. Anything else (e.g. 0x40, 0, a runtime variable) is a
-    # silent-audio regression.
-    if volume_arg.lower() not in ("0x7f", "127"):
-        error(
-            f"{PRACTICE_SAVE_C}: BGM rescue SEQCMD_SET_SEQPLAYER_VOLUME volume "
-            f"argument must be 0x7F (full); got {volume_arg!r}. A partial or "
-            "zero volume here will leave BGM silent after a same-spec "
-            "restart. See tests/test_restart_kills_audio.py "
-            "(check_bgm_rescue_restores_main_volume)"
-        )
+        if not vol_match:
+            error(
+                f"{PRACTICE_SAVE_C}: rescue must restore mainVolume via "
+                f"SEQCMD_SET_SEQPLAYER_VOLUME({player}, duration, 0x7F) "
+                "after AUDIO_PLAY_BGM, otherwise same-spec restart leaves "
+                f"{player} silent. See tests/test_restart_kills_audio.py "
+                "(check_bgm_rescue_restores_main_volume)"
+            )
+            continue
+        if vol_match.start() < play_pos:
+            error(
+                f"{PRACTICE_SAVE_C}: SEQCMD_SET_SEQPLAYER_VOLUME for {player} "
+                "must come AFTER AUDIO_PLAY_BGM in the rescue path so the "
+                "volume restore applies to the newly-started sequence "
+                "(check_bgm_rescue_restores_main_volume)"
+            )
+            continue
+        volume_arg = vol_match.group(1).strip()
+        # 0x7F maps to 1.0f (full volume) per include/audioseq_cmd.h.
+        if volume_arg.lower() not in ("0x7f", "127"):
+            error(
+                f"{PRACTICE_SAVE_C}: rescue SEQCMD_SET_SEQPLAYER_VOLUME "
+                f"volume arg for {player} must be 0x7F (full); got "
+                f"{volume_arg!r}. A partial or zero volume here will leave "
+                f"{player} silent after a same-spec restart. See "
+                "tests/test_restart_kills_audio.py "
+                "(check_bgm_rescue_restores_main_volume)"
+            )
 
 
 def check_bgm_jukebox_coverage():
@@ -1926,12 +1928,14 @@ def check_frame_advance_hook():
             "GSTATE_PLAY block of Game_Update in fox_game.c (check_frame_advance_hook)"
         )
 
-    # IsFrozen must only apply when PMENU_CLOSED — PMENU_OPEN must always
-    # let Play_Main tick so that frame advance doesn't freeze menu navigation.
-    if "PMENU_OPEN" not in block:
+    # Play_Main must be reachable from the IsFrozen() branch (not gated on
+    # PMENU_CLOSED) so that PMENU_OPEN and PMENU_OPEN_FROZEN both flow through
+    # the same freeze-check path.  A PMENU_CLOSED-only gate would silently
+    # skip Play_Main when gPracticeMenuState == PMENU_OPEN_FROZEN.
+    if "Play_Main" not in block:
         error(
-            "GSTATE_PLAY block in fox_game.c must gate IsFrozen() on PMENU_CLOSED "
-            "so that PMENU_OPEN always runs Play_Main (check_frame_advance_hook)"
+            "GSTATE_PLAY block in fox_game.c must call Play_Main() inside the "
+            "Practice_FrameAdvance_IsFrozen() branch (check_frame_advance_hook)"
         )
 
 
@@ -2216,6 +2220,103 @@ def check_macro_buf_section():
             )
 
 
+def check_loadout_live_apply_gated():
+    """StateMenu_ApplyLoadoutLive must only be called inside a button-press branch,
+    never unconditionally at the bottom of StateMenu_UpdateLoadout.
+
+    Calling it every frame while gPracticeMenuState==PMENU_OPEN caused a Meteo
+    crash (gGameFrameCount froze) when the game was live after ~180 frames.
+
+    Also verifies the PMENU_OPEN_FROZEN -> PMENU_OPEN transition in
+    Practice_StateMenu_Open and the refreeze in Practice_StateMenu_Close.
+    """
+    src = read(os.path.join(SRC_PRACTICE, "practice_state.c"))
+
+    # --- StateMenu_UpdateLoadout must not call ApplyLoadoutLive unconditionally ---
+    fn = find_c_function(src, "StateMenu_UpdateLoadout")
+    if fn is None:
+        error("check_loadout_live_apply_gated: StateMenu_UpdateLoadout not found")
+        return
+
+    # The unconditional pattern: ApplyLoadoutLive at function-body indentation (4 sp),
+    # meaning it's outside any if-block.  Inside a button-press branch it sits at 8+
+    # spaces of indentation.
+    if re.search(r"^    StateMenu_ApplyLoadoutLive\s*\(\s*\)\s*;", fn, re.MULTILINE):
+        error(
+            "check_loadout_live_apply_gated: StateMenu_ApplyLoadoutLive() is called "
+            "unconditionally in StateMenu_UpdateLoadout — it must only be called "
+            "inside a button-press branch (R/A or L) to avoid a Meteo live-apply crash"
+        )
+
+    # Verify it IS called inside both button branches
+    if "StateMenu_ApplyLoadoutLive" not in fn:
+        error(
+            "check_loadout_live_apply_gated: StateMenu_ApplyLoadoutLive not called "
+            "anywhere in StateMenu_UpdateLoadout — loadout changes won't take effect"
+        )
+
+    # --- Practice_StateMenu_Open must transition PMENU_OPEN_FROZEN -> PMENU_OPEN ---
+    open_fn = find_c_function(src, "Practice_StateMenu_Open")
+    if open_fn is None:
+        error("check_loadout_live_apply_gated: Practice_StateMenu_Open not found")
+        return
+    if "PMENU_OPEN_FROZEN" not in open_fn or "PMENU_OPEN" not in open_fn:
+        error(
+            "check_loadout_live_apply_gated: Practice_StateMenu_Open must transition "
+            "gPracticeMenuState from PMENU_OPEN_FROZEN to PMENU_OPEN so Play_Main "
+            "runs while the state menu is active"
+        )
+
+    # --- Practice_StateMenu_Close must restore PMENU_OPEN_FROZEN ---
+    close_fn = find_c_function(src, "Practice_StateMenu_Close")
+    if close_fn is None:
+        error("check_loadout_live_apply_gated: Practice_StateMenu_Close not found")
+        return
+    if "PMENU_OPEN_FROZEN" not in close_fn:
+        error(
+            "check_loadout_live_apply_gated: Practice_StateMenu_Close must restore "
+            "gPracticeMenuState = PMENU_OPEN_FROZEN when returning from a live submenu"
+        )
+
+    # --- sStateMenuJustOpened guard prevents masterDL overflow on opening frame ---
+    # Practice_StateMenu_Draw() emits many DL commands. On the frame the state menu
+    # first opens, Game_Draw already consumed most of masterDL[0x1380]; the combined
+    # draw overflows into unkDL2, creating a circular RSP display list that hangs the
+    # game thread indefinitely. Skipping Draw on the just-opened frame avoids this.
+    if "sStateMenuJustOpened" not in src:
+        error(
+            "check_loadout_live_apply_gated: sStateMenuJustOpened not declared — "
+            "Practice_StateMenu_Draw must skip its first draw to prevent masterDL overflow"
+        )
+
+    draw_fn = find_c_function(src, "Practice_StateMenu_Draw")
+    if draw_fn is None:
+        error("check_loadout_live_apply_gated: Practice_StateMenu_Draw not found")
+        return
+    if "sStateMenuJustOpened" not in draw_fn:
+        error(
+            "check_loadout_live_apply_gated: Practice_StateMenu_Draw must check "
+            "sStateMenuJustOpened and return early on the opening frame to prevent "
+            "masterDL overflow (RSP circular display list hang)"
+        )
+
+    # --- Practice_StateMenu_Open must set sStateMenuJustOpened ---
+    if "sStateMenuJustOpened" not in open_fn:
+        error(
+            "check_loadout_live_apply_gated: Practice_StateMenu_Open must set "
+            "sStateMenuJustOpened = true so Practice_StateMenu_Draw skips frame N"
+        )
+
+    # --- Game_Draw must be suppressed while PMENU_OPEN (fox_game.c) ---
+    game_src = read(os.path.join("src", "engine", "fox_game.c"))
+    if "gPracticeMenuState != PMENU_OPEN" not in game_src or "Game_Draw(0)" not in game_src:
+        error(
+            "check_loadout_live_apply_gated: fox_game.c must guard Game_Draw(0) with "
+            "'if (gPracticeMenuState != PMENU_OPEN)' to prevent masterDL overflow "
+            "on frames N+1 and beyond when the state menu is active"
+        )
+
+
 def check_state_menu_layout():
     """Each enum-driven submenu's last item must fit inside its container box and not overlap help text."""
     src = read(os.path.join(SRC_PRACTICE, "practice_state.c"))
@@ -2367,6 +2468,7 @@ def main():
     check_enemy_health()
     check_hitbox_shadow_drawn()
     check_enemy_health_hide_models()
+    check_loadout_live_apply_gated()
     check_state_menu_layout()
 
     if errors:

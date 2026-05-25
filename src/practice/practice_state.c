@@ -82,6 +82,8 @@ typedef enum EnemyHealthOption {
 
 static s32 sSelectedOption = 0;
 static bool sStateMenuOpen = false;
+static bool sRefreezeOnClose = false;
+static bool sStateMenuJustOpened = false;
 static PracticeSubMenu sActiveSubMenu;
 static bool sConfirmOverwrite = false;
 
@@ -101,13 +103,23 @@ bool Practice_StateMenuIsOpen(void) {
 }
 
 void Practice_StateMenu_Open(PracticeSubMenu subMenu) {
+    if (gPracticeMenuState == PMENU_OPEN_FROZEN) {
+        gPracticeMenuState = PMENU_OPEN;
+        sRefreezeOnClose = true;
+    }
     sStateMenuOpen = true;
+    sStateMenuJustOpened = true;
     sSelectedOption = 0;
     sActiveSubMenu = subMenu;
 }
 
 void Practice_StateMenu_Close(void) {
     sStateMenuOpen = false;
+    sStateMenuJustOpened = false;
+    if (sRefreezeOnClose) {
+        gPracticeMenuState = PMENU_OPEN_FROZEN;
+        sRefreezeOnClose = false;
+    }
 }
 
 static s32 StateMenu_GetOptionCount(void) {
@@ -218,6 +230,7 @@ static void StateMenu_UpdateLoadout(u16 buttons) {
                 }
                 break;
         }
+        StateMenu_ApplyLoadoutLive();
     }
 
     if (buttons & L_JPAD) {
@@ -284,9 +297,8 @@ static void StateMenu_UpdateLoadout(u16 buttons) {
                 }
                 break;
         }
+        StateMenu_ApplyLoadoutLive();
     }
-
-    StateMenu_ApplyLoadoutLive();
 }
 
 static void StateMenu_UpdateDisplay(u16 buttons) {
@@ -983,6 +995,11 @@ void Practice_StateMenu_Draw(void) {
     const char* title;
     s32 boxHeight;
     s32 helpY;
+
+    if (sStateMenuJustOpened) {
+        sStateMenuJustOpened = false;
+        return;
+    }
 
     switch (sActiveSubMenu) {
         case PSUBMENU_LOADOUT:
