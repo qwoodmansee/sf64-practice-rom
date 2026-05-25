@@ -161,6 +161,7 @@ static void StateMenu_ApplyLoadoutLive(void) {
 }
 
 static void StateMenu_UpdateLoadout(u16 buttons) {
+    bool loadoutChanged = false;
     if ((buttons & R_JPAD) || (buttons & A_BUTTON)) {
         switch (sSelectedOption) {
             case LOPT_LASERS:
@@ -221,7 +222,7 @@ static void StateMenu_UpdateLoadout(u16 buttons) {
                 }
                 break;
         }
-        StateMenu_ApplyLoadoutLive();
+        loadoutChanged = true;
     }
 
     if (buttons & L_JPAD) {
@@ -288,6 +289,10 @@ static void StateMenu_UpdateLoadout(u16 buttons) {
                 }
                 break;
         }
+        loadoutChanged = true;
+    }
+
+    if (loadoutChanged) {
         StateMenu_ApplyLoadoutLive();
     }
 }
