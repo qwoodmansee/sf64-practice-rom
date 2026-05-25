@@ -1506,13 +1506,11 @@ void Practice_SaveStateSlot(s32 slot) {
 #endif
 
     if (gPracticeSaveDisabled) {
-        osSyncPrintf("[save] disabled: no Expansion Pak (stock 4MB)\n");
         Practice_Hud_ShowStatus("SAVE DIS", 255, 120, 80);
         return;
     }
 
     if ((slot < 0) || (slot >= gPracticeRamSlotCount)) {
-        osSyncPrintf("[save] refuse: bad slot=%d\n", slot);
         Practice_Hud_ShowStatus("BAD SLOT", 255, 120, 80);
         return;
     }
@@ -1520,8 +1518,6 @@ void Practice_SaveStateSlot(s32 slot) {
     Practice_SaveTrace_CanSaveFields();
     if (!Practice_CanSaveHere()) {
         gPracticeLastSaveResult = SLOT_MANAGER_ERR_INVALID_SLOT;
-        osSyncPrintf("[save] refuse: not saveable (level=%d play=%d menu=%d)\n", (s32)gCurrentLevel,
-                     (s32)gPlayState, (s32)gPracticeMenuState);
         Practice_Hud_ShowStatus("SAVE REF", 255, 120, 80);
         return;
     }

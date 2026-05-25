@@ -1260,9 +1260,15 @@ def check_boot_main_rom_budget():
 
 
 def check_late_segment_addresses():
-    """The .practice_late_core segment must land at the spec's chosen
-    RAM address. Catches accidental relocations from manual .ld edits
-    or address-picker mistakes in the patcher."""
+    """The .practice_late_core segment must land in the Pak-only region.
+    Was originally at 0x801F4000, but that sits inside the ramPtr window
+    that Load_SceneFiles (fox_load.c) uses for level overlay + assets.
+    Worst-case asset top across all 44 scenes is sOvli5_Titania setup#5
+    at 0x802951F0 -- well above any safe sub-Pak address. The segment
+    now lives at 0x80720000 (Pak region, above the existing pak pools at
+    0x80711940, below the 0x80800000 Pak ceiling). On stock 4MB carts
+    Practice_Late_Init skips the DMA and callers must gate by osMemSize.
+    """
     map_path = "build/starfox64.us.rev1.map"
     if not os.path.isfile(map_path):
         return
@@ -1275,7 +1281,7 @@ def check_late_segment_addresses():
         )
         return
     vram = int(match.group(1), 16)
-    expected = 0x801F4000
+    expected = 0x80720000
     if vram != expected:
         error(
             f"{map_path}: practice_late_core_VRAM = 0x{vram:08X} (expected "
@@ -1285,12 +1291,14 @@ def check_late_segment_addresses():
 
 
 def check_late_segment_ram_caps():
-    """The .practice_late_core BSS extent must stay below 0x80274000 to
-    preserve the 52 KB cushion before .buffers at 0x80281000. ROM size
-    alone (check_late_segment_rom_budgets) is insufficient because
-    NOLOAD BSS doesn't appear in ROM but does claim RAM. This is the
-    same failure class as the f165d0e Aquas crash -- a large BSS
-    silently punching through into adjacent live regions."""
+    """The .practice_late_core BSS extent must stay below the 0x80800000
+    Pak ceiling. With the segment now at 0x80720000 (Pak region), the
+    available extent is 0x80800000 - 0x80720000 = 0xE0000 (896 KB). NOLOAD
+    BSS doesn't appear in ROM but does claim RAM, so a separate cap is
+    needed (the ROM-size budget is enforced by
+    check_late_segment_rom_budgets). This is the same failure class as the
+    f165d0e Aquas crash -- a large BSS silently punching through into
+    adjacent live regions."""
     map_path = "build/starfox64.us.rev1.map"
     if not os.path.isfile(map_path):
         return
@@ -1303,14 +1311,13 @@ def check_late_segment_ram_caps():
         )
         return
     bss_end = int(match.group(1), 16)
-    cap = 0x80274000
+    cap = 0x80800000
     if bss_end >= cap:
         error(
             f"{map_path}: practice_late_core_BSS_END = 0x{bss_end:08X} "
-            f"reached/exceeded RAM cap 0x{cap:08X}; "
-            "the cushion before .buffers at 0x80281000 is gone. Shrink the "
-            "core segment's BSS or move some objects to _pak in Phase 2 "
-            "(check_late_segment_ram_caps)"
+            f"reached/exceeded Pak ceiling 0x{cap:08X}; "
+            "shrink the core segment's BSS or split into a second Pak "
+            "segment (check_late_segment_ram_caps)"
         )
 
 
