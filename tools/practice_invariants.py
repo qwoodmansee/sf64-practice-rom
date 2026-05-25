@@ -1922,21 +1922,65 @@ def check_frame_advance_hook():
         return
 
     block = gstate_play_match.group(1)
+
+    # Three-way structure required:
+    #   PMENU_OPEN       → Play_Main() unconditionally
+    #   PMENU_CLOSED     → Play_Main() gated by Practice_FrameAdvance_IsFrozen()
+    #   PMENU_OPEN_FROZEN → fall-through (no Play_Main; game stays paused)
+    #
+    # A unified IsFrozen()-only gate is wrong: IsFrozen() clears sIsPaused
+    # whenever the menu is open, so PMENU_OPEN_FROZEN would unfreeze too.
+    # A PMENU_CLOSED-only gate is wrong: PMENU_OPEN would also go unhandled.
     if "Practice_FrameAdvance_IsFrozen" not in block:
         error(
             "Practice_FrameAdvance_IsFrozen() must guard Play_Main in the "
             "GSTATE_PLAY block of Game_Update in fox_game.c (check_frame_advance_hook)"
         )
 
-    # PMENU_OPEN must run Play_Main unconditionally; PMENU_OPEN_FROZEN must fall
-    # through without calling Play_Main (game frozen while radial/state menu is
-    # visible). A unified IsFrozen()-only gate would incorrectly unfreeze
-    # PMENU_OPEN_FROZEN because IsFrozen() clears sIsPaused when the menu is open.
     if "PMENU_OPEN" not in block:
         error(
-            "GSTATE_PLAY block in fox_game.c must gate IsFrozen() on PMENU_CLOSED "
-            "so that PMENU_OPEN always runs Play_Main (check_frame_advance_hook)"
+            "GSTATE_PLAY block in fox_game.c must have an explicit PMENU_OPEN branch "
+            "that runs Play_Main() unconditionally (check_frame_advance_hook)"
         )
+
+    if "PMENU_CLOSED" not in block:
+        error(
+            "GSTATE_PLAY block in fox_game.c must have an explicit PMENU_CLOSED branch "
+            "that gates Play_Main() behind Practice_FrameAdvance_IsFrozen() "
+            "(check_frame_advance_hook)"
+        )
+
+    block_no_comments = re.sub(r"/\*.*?\*/", "", block, flags=re.DOTALL)
+    if "PMENU_OPEN_FROZEN" in block_no_comments:
+        error(
+            "GSTATE_PLAY block in fox_game.c must NOT handle PMENU_OPEN_FROZEN — "
+            "it must fall through so Play_Main() is never called while the game is "
+            "frozen under the radial or state menu (check_frame_advance_hook)"
+        )
+
+    # Verify structural wiring: PMENU_OPEN branch must contain Play_Main(),
+    # and PMENU_CLOSED branch must contain both IsFrozen and Play_Main().
+    pmenu_open_branch = re.search(
+        r"gPracticeMenuState\s*==\s*PMENU_OPEN\s*\)\s*\{([^}]*)\}",
+        block,
+    )
+    if pmenu_open_branch and "Play_Main" not in pmenu_open_branch.group(1):
+        error(
+            "PMENU_OPEN branch in GSTATE_PLAY must call Play_Main() directly "
+            "(check_frame_advance_hook)"
+        )
+
+    pmenu_closed_branch = re.search(
+        r"gPracticeMenuState\s*==\s*PMENU_CLOSED\s*\)(.*?)(?=else\s+if|$)",
+        block, re.DOTALL,
+    )
+    if pmenu_closed_branch:
+        closed_body = pmenu_closed_branch.group(1)
+        if "Practice_FrameAdvance_IsFrozen" not in closed_body:
+            error(
+                "PMENU_CLOSED branch in GSTATE_PLAY must gate Play_Main() behind "
+                "Practice_FrameAdvance_IsFrozen() (check_frame_advance_hook)"
+            )
 
 
 def check_frame_advance_clears_on_menu():
@@ -2232,23 +2276,44 @@ def check_loadout_live_apply_gated():
     """
     src = read(os.path.join(SRC_PRACTICE, "practice_state.c"))
 
-    # --- StateMenu_UpdateLoadout must not call ApplyLoadoutLive unconditionally ---
+    # --- StateMenu_UpdateLoadout must call ApplyLoadoutLive exactly once per frame ---
+    #
+    # Two historical anti-patterns to guard against:
+    #   1. Truly unconditional call (4-space / function-body level) — every frame,
+    #      even with no input.  Originally caused the Meteo masterDL overflow crash.
+    #   2. Per-branch calls — once inside the R/A branch AND once inside the L branch.
+    #      When both are pressed (e.g. A+L) ApplyLoadoutLive fires twice with
+    #      intermediate config values: side effects (shield refill, wing restore) occur
+    #      even if the net config value is unchanged.
+    #
+    # Correct pattern: a `loadoutChanged` flag set in each branch; a single
+    # `if (loadoutChanged) { StateMenu_ApplyLoadoutLive(); }` after both branches.
     fn = find_c_function(src, "StateMenu_UpdateLoadout")
     if fn is None:
         error("check_loadout_live_apply_gated: StateMenu_UpdateLoadout not found")
         return
 
-    # The unconditional pattern: ApplyLoadoutLive at function-body indentation (4 sp),
-    # meaning it's outside any if-block.  Inside a button-press branch it sits at 8+
-    # spaces of indentation.
+    # Anti-pattern 1: unconditional call at function-body indentation (4 spaces).
     if re.search(r"^    StateMenu_ApplyLoadoutLive\s*\(\s*\)\s*;", fn, re.MULTILINE):
         error(
             "check_loadout_live_apply_gated: StateMenu_ApplyLoadoutLive() is called "
-            "unconditionally in StateMenu_UpdateLoadout — it must only be called "
-            "inside a button-press branch (R/A or L) to avoid a Meteo live-apply crash"
+            "unconditionally in StateMenu_UpdateLoadout — use a loadoutChanged flag "
+            "and call it once after both branches to avoid per-frame crashes and "
+            "intermediate side effects"
         )
 
-    # Verify it IS called inside both button branches
+    # Anti-pattern 2: more than one call site — fires multiple times when A+L or R+L
+    # are held simultaneously, applying intermediate config state as side effects.
+    apply_calls = re.findall(r"StateMenu_ApplyLoadoutLive\s*\(\s*\)", fn)
+    if len(apply_calls) > 1:
+        error(
+            f"check_loadout_live_apply_gated: StateMenu_ApplyLoadoutLive() is called "
+            f"{len(apply_calls)} times in StateMenu_UpdateLoadout — must be called "
+            "exactly once (via a loadoutChanged flag after all branches) to prevent "
+            "double-application when multiple button bits are set in one frame (A+L, R+L)"
+        )
+
+    # Verify it IS still called somewhere (omission would silently break live apply).
     if "StateMenu_ApplyLoadoutLive" not in fn:
         error(
             "check_loadout_live_apply_gated: StateMenu_ApplyLoadoutLive not called "
@@ -2302,16 +2367,25 @@ def check_loadout_live_apply_gated():
             "the state submenu is visible"
         )
 
-    # --- Game_Draw must be suppressed while the state menu is open (fox_game.c) ---
-    # Use Practice_StateMenuIsOpen() rather than a PMENU_OPEN check so the guard covers
-    # both PMENU_OPEN_FROZEN (normal path) and PMENU_OPEN (live-gameplay path).
+    # --- Game_Draw must be structurally wrapped by !Practice_StateMenuIsOpen() ---
+    # Token-presence checks alone are insufficient: both names can appear in the file
+    # without Game_Draw(0) actually being inside the guard.  Verify the wrapping.
     game_src = read(os.path.join("src", "engine", "fox_game.c"))
-    if "Practice_StateMenuIsOpen" not in game_src or "Game_Draw(0)" not in game_src:
-        error(
-            "check_loadout_live_apply_gated: fox_game.c must guard Game_Draw(0) with "
-            "'if (!Practice_StateMenuIsOpen())' to prevent masterDL overflow when the "
-            "state submenu is open (overflow causes circular RSP display list hang)"
+    game_update_fn = find_c_function(game_src, "Game_Update")
+    if game_update_fn is None:
+        error("check_loadout_live_apply_gated: Game_Update not found in fox_game.c")
+    else:
+        draw_guard = re.search(
+            r"if\s*\(\s*!\s*Practice_StateMenuIsOpen\s*\(\s*\)\s*\)"
+            r"\s*\{[^}]*Game_Draw\s*\(\s*0\s*\)",
+            game_update_fn, re.DOTALL,
         )
+        if not draw_guard:
+            error(
+                "check_loadout_live_apply_gated: Game_Update in fox_game.c must wrap "
+                "Game_Draw(0) inside 'if (!Practice_StateMenuIsOpen())' — token "
+                "presence alone does not guarantee the guard is structurally correct"
+            )
 
 
 def check_state_menu_layout():
