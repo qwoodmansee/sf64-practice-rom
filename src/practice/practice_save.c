@@ -1689,13 +1689,24 @@ void Practice_Save_Tick(void) {
              * rescue call unconditionally effective. */
             sActiveSequences[SEQ_PLAYER_BGM].isWaitingForFonts = 0;
             AUDIO_PLAY_BGM(gPracticeBgmPendingSeqId);
-            /* Restore BGM main volume. Same-spec Audio_SetAudioSpec on the
-             * restart path calls Audio_StopSequence(SEQ_PLAYER_BGM), which
-             * fades mainVolume.mod toward 0. AUDIO_PLAY_BGM sets seqId but
-             * does not reset mainVolume, so the player would claim to be
-             * playing while producing silence. 0x7F maps to 1.0 (default
-             * full volume); duration 0 makes it take effect immediately. */
+            /* Restore main volume on ALL four sequence players. Every level
+             * transition (including same-spec restart) runs through
+             * Game_SetGameState, which calls Audio_FadeOutAll(1) -- that
+             * queues SEQCMD_SET_SEQPLAYER_VOLUME(player, 1, 0) for BGM,
+             * FANFARE, SFX, and VOICE. On a normal cross-spec launch the
+             * later Audio_RestartSeqPlayers brings SFX/VOICE back to 127.
+             * Same-spec launches never trigger that restart, so without an
+             * explicit restore here SFX (lasers, hits) and VOICE (radio
+             * chatter) stay silent even though BGM is audible.
+             *
+             * 0x7F maps to 1.0 (full volume); duration 0 takes effect
+             * immediately. FANFARE restore is defense-in-depth -- no
+             * fanfare is active during gameplay, but a stuck mod=0 would
+             * silence the next event jingle. */
             SEQCMD_SET_SEQPLAYER_VOLUME(SEQ_PLAYER_BGM, 0, 0x7F);
+            SEQCMD_SET_SEQPLAYER_VOLUME(SEQ_PLAYER_FANFARE, 0, 0x7F);
+            SEQCMD_SET_SEQPLAYER_VOLUME(SEQ_PLAYER_SFX, 0, 0x7F);
+            SEQCMD_SET_SEQPLAYER_VOLUME(SEQ_PLAYER_VOICE, 0, 0x7F);
             gPracticeBgmPending = false;
         }
     }
