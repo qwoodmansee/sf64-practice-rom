@@ -5,7 +5,8 @@ Steps the test reproduces (matches the original repro):
   1. Boot, default-select Corneria on level select, press A to launch.
   2. Once in-level, hold Z + D-pad Right to open the practice menu.
   3. Tilt stick UP to hover the N slice (RESTART) and press A.
-  4. Level restarts. BGM must remain audible (mainVolume.mod ~= 1.0).
+  4. Level restarts. ALL audio players must remain audible
+     (mainVolume.mod ~= 1.0 for BGM, FANFARE, SFX, VOICE).
 
 Bug history:
   Practice_LaunchLevel calls Audio_SetAudioSpec(0, samesPec) for a
@@ -16,23 +17,38 @@ Bug history:
   does NOT restore mainVolume.mod, so the player claimed to be playing
   while the main volume sat at 0.0f (totally silent).
 
-  Fix: the rescue now also queues SEQCMD_SET_SEQPLAYER_VOLUME with
-  duration=0, volume=0x7F (=1.0) right after AUDIO_PLAY_BGM.
+  Original fix restored BGM mainVolume only. Player reported that SFX
+  (lasers, hits) and VOICE (radio chatter) were also silent post-restart
+  even though BGM was audible. This test now asserts on all four
+  sequence players to catch any non-BGM silence regression.
 
 Test approach:
   Drives the real menu via SDL key injection (KEYDOWN/KEYUP through
   the pinned mupen64plus-input-sdl config; see tests/test_input_smoke.py
   for the scancode-vs-keysym workaround). After the restart completes
   and the rescue has fired (400 frames post-PLAY_UPDATE), reads
-  sActiveSequences[BGM].mainVolume.mod and asserts it's 1.0f.
+  sActiveSequences[player].mainVolume.mod for each of the four players
+  and asserts each is 1.0f.
 
   A regression that breaks the volume restore will flip
   mainVolume.mod back to 0.0f and this test fails.
 """
 
 # sActiveSequences struct offsets (stable; computed from struct layout).
+# ActiveSequence (sf64audio.h:984) is size 0x258. mainVolume.mod is the first
+# f32 (offset 0). seqId is at 0x248, isWaitingForFonts at 0x254. The 4 players
+# (BGM/FANFARE/SFX/VOICE = 0/1/2/3) live back-to-back, so the stride between
+# them is sizeof(ActiveSequence) = 0x258.
+_ACTIVE_SEQ_STRIDE     = 0x258
 _SEQ_BGM_SEQ_ID_OFF    = 0x248
 _SEQ_BGM_WAIT_FONT_OFF = 0x254
+
+# Sequence player indices (audioseq_cmd.h:9-12).
+_SP_BGM     = 0
+_SP_FANFARE = 1
+_SP_SFX     = 2
+_SP_VOICE   = 3
+_SP_NAMES   = {0: "BGM", 1: "FANFARE", 2: "SFX", 3: "VOICE"}
 
 # mupen64plus-input-sdl quirk (see tests/test_input_smoke.py): the plugin
 # stores myKeyState[keysym] in SDL_KeyDown but doSdlKeys reads
@@ -188,10 +204,9 @@ def run(ctx):
     h.advance(400)
 
     # --- Step 8: Assert audio is alive post-restart ---
-    # sActiveSequences[BGM].mainVolume is at offset 0 (FadeModulation), and
-    # FadeModulation.mod is the first f32 field. So sActiveSequences[BGM].mod
-    # is at sActiveSequences + 0. A 32-bit read returns the IEEE-754 bits.
-    main_volume_mod_bits = h.read32(seq_bgm)
+    # sActiveSequences[player].mainVolume is at offset 0 (FadeModulation), and
+    # FadeModulation.mod is the first f32 field. A 32-bit read returns the
+    # IEEE-754 bits.
 
     # The rescue should set seqId back to the Corneria BGM id.
     seq_id_after = _read_u16_hi(h, seq_bgm_id)
@@ -199,11 +214,20 @@ def run(ctx):
                   f"BGM seqId stays SEQ_ID_CORNERIA after restart "
                   f"(got 0x{seq_id_after:04X})")
 
-    # IEEE-754 bits for 1.0f = 0x3F800000. Anything non-zero would also
-    # indicate the player is producing audio, but the rescue uses
-    # SEQCMD_SET_SEQPLAYER_VOLUME(BGM, 0, 0x7F) which maps to exactly 1.0f.
-    ctx.assert_eq(main_volume_mod_bits, 0x3F800000,
-                  f"BGM mainVolume.mod restored to 1.0f after restart "
-                  f"(raw bits=0x{main_volume_mod_bits:08X}, expected 0x3F800000). "
-                  f"If this is 0x00000000 the same-spec restart fade-out wasn't "
-                  f"restored by the rescue path in Practice_Save_Tick.")
+    # Assert mainVolume.mod is restored on EVERY player. Player reported SFX
+    # and VOICE were silent even though BGM was audible -- the bug is broader
+    # than just BGM. IEEE-754 bits for 1.0f = 0x3F800000.
+    #
+    # If a player's mod is 0x00000000, the same-spec restart path silenced it
+    # and the rescue did not restore it. If non-zero but not 1.0f, the player
+    # is mid-fade and needs duration=0 in SEQCMD_SET_SEQPLAYER_VOLUME.
+    for sp in (_SP_BGM, _SP_FANFARE, _SP_SFX, _SP_VOICE):
+        addr = seq_bgm + sp * _ACTIVE_SEQ_STRIDE
+        bits = h.read32(addr)
+        name = _SP_NAMES[sp]
+        ctx.assert_eq(bits, 0x3F800000,
+                      f"{name} mainVolume.mod restored to 1.0f after restart "
+                      f"(raw bits=0x{bits:08X}, expected 0x3F800000). "
+                      f"If this is 0x00000000 the same-spec restart fade-out "
+                      f"wasn't restored on player {sp} ({name}). "
+                      f"BGM-only rescue in Practice_Save_Tick misses {name}.")
