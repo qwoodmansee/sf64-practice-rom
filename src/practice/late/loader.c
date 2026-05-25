@@ -2,6 +2,7 @@
 
 #include "sys.h"
 #include "sf64dma.h"
+#include "PR/os.h"
 #include "practice_late.h"
 
 #ifdef PRACTICE_LATE_PROBE
@@ -17,6 +18,12 @@ static void LoadCoreSegment(void) {
 }
 
 void Practice_Late_Init(void) {
+    /* practice_late_core lives at 0x80720000 (Pak region). On stock 4MB carts
+     * that VRAM is unmapped; Lib_DmaRead would fault. Skip the load entirely
+     * and rely on callers to gate late_core symbols by osMemSize before use. */
+    if (osMemSize < 0x800000U) {
+        return;
+    }
     LoadCoreSegment();
 
 #ifdef PRACTICE_LATE_PROBE

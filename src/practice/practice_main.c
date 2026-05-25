@@ -71,18 +71,31 @@ void Practice_Init(void) {
 
     osSyncPrintf("=== PRACTICE ROM boot @ %s %s ===\n", __DATE__, __TIME__);
 
-    {
+    /* iodev_* live in .practice_late_core, which is loaded only when an
+     * Expansion Pak is present (RAM 0x80720000 is unmapped on stock 4MB).
+     * Skip the cart-detect diagnostic on stock carts; SD-backed features
+     * are already disabled there. */
+    if (osMemSize >= 0x800000U) {
         iodev_id_t cart = iodev_detect();
         iodev_result_t sd = iodev_sd_init();
         osSyncPrintf("[iodev] cart=%d sd_init=%d\n", (int)cart, (int)sd);
+    } else {
+        osSyncPrintf("[iodev] skipped (stock 4MB, no Expansion Pak)\n");
     }
 
     osSyncPrintf("[init] Practice_Save_Init enter\n");
     Practice_Save_Init();
     osSyncPrintf("[init] Practice_Save_Init exit\n");
-    osSyncPrintf("[init] Practice_Sd_Init enter\n");
-    Practice_Sd_Init();
-    osSyncPrintf("[init] Practice_Sd_Init exit\n");
+    /* Practice_Sd_Init touches several .practice_late_core symbols
+     * (iodev_*, slot_manager_set_sd_scratch) and Practice_Save_ScratchBase()
+     * which lives in the Pak-only slot pool. Skip on stock 4MB. */
+    if (osMemSize >= 0x800000U) {
+        osSyncPrintf("[init] Practice_Sd_Init enter\n");
+        Practice_Sd_Init();
+        osSyncPrintf("[init] Practice_Sd_Init exit\n");
+    } else {
+        osSyncPrintf("[init] Practice_Sd_Init skipped (stock 4MB)\n");
+    }
     osSyncPrintf("[init] practice_overlay_prime_build_ids enter\n");
     practice_overlay_prime_build_ids();
     osSyncPrintf("[init] practice_overlay_prime_build_ids exit\n");
