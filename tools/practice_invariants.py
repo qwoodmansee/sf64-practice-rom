@@ -1293,10 +1293,12 @@ def check_late_segment_addresses():
 def check_late_segment_ram_caps():
     """The .practice_late_core BSS extent must stay below the 0x80800000
     Pak ceiling. With the segment now at 0x80720000 (Pak region), the
-    available extent is 0x800000 - 0x720000 = 0x80000 (512 KB). NOLOAD
+    available extent is 0x80800000 - 0x80720000 = 0xE0000 (896 KB). NOLOAD
     BSS doesn't appear in ROM but does claim RAM, so a separate cap is
-    needed. This is the same failure class as the f165d0e Aquas crash --
-    a large BSS silently punching through into adjacent live regions."""
+    needed (the ROM-size budget is enforced by
+    check_late_segment_rom_budgets). This is the same failure class as the
+    f165d0e Aquas crash -- a large BSS silently punching through into
+    adjacent live regions."""
     map_path = "build/starfox64.us.rev1.map"
     if not os.path.isfile(map_path):
         return
