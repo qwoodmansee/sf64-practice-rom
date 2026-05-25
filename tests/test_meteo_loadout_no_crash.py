@@ -65,7 +65,7 @@ def run(ctx):
     game_state  = S["gGameState"]
     play_state  = S["gPlayState"]
     menu_state  = S["gPracticeMenuState"]
-    frame_count = S["gGameFrameCount"]
+    frame_count = S["gSysFrameCount"]   # always increments every VI frame, even frozen
     ctrl_hold   = S["gControllerHold"]  # gControllerHold[0] (gMainController=0)
 
     # --- Step 1: Boot to level select ---
@@ -156,19 +156,23 @@ def run(ctx):
     # Record frame count right after the safe frame (emulator is now paused).
     frames_before = h.read32(frame_count)
 
-    # --- Step 8: Sleep 2 s (wall-clock) and check gGameFrameCount ---
+    # --- Step 8: Sleep 2 s (wall-clock) and check gSysFrameCount ---
     # IMPORTANT: use h.sleep() NOT h.advance() here.
     #
-    # h.advance() waits for VI frame callbacks.  When the N64 crashes (MIPS
-    # exception with EXL=1), VI interrupts are masked and mupen64plus stops
-    # generating frame callbacks — h.advance() would block forever.
+    # h.advance() waits for VI frame callbacks.  When the N64 crashes (RSP hang
+    # from a circular display list), VI interrupts are masked and mupen64plus
+    # stops generating frame callbacks — h.advance() would block forever.
     #
     # h.sleep() uses usleep() (wall-clock), so it always completes in ~2 s.
-    # During those 2 s the emulator resumes:
-    #   Bug present — frame N+1: StateMenu_UpdateLoadout calls
-    #     StateMenu_ApplyLoadoutLive which crashes; gGameFrameCount stops.
+    # We check gSysFrameCount (not gGameFrameCount) because gGameFrameCount only
+    # increments inside Play_Main, which is frozen while PMENU_OPEN_FROZEN — it
+    # would be 0 for a healthy frozen game too.  gSysFrameCount increments every
+    # VI frame unconditionally, so a frozen N64 (RSP hang) stops it while a
+    # frozen-but-alive game keeps it moving.
+    #
+    #   Bug present — RSP hangs, VI interrupts masked; gSysFrameCount stops.
     #     delta will be near 0-2 after 2 s.
-    #   Bug absent — ~120 frames execute normally; delta will be ~120.
+    #   Bug absent — VI frames continue normally; delta will be ~60 per second.
     h.sleep(2000)
     frames_after = h.read32(frame_count)
     frame_delta = frames_after - frames_before
@@ -176,7 +180,7 @@ def run(ctx):
     ctx.assert_true(
         frame_delta >= 30,
         f"Game stayed alive after opening Loadout on Meteo "
-        f"(gGameFrameCount: {frames_before} -> {frames_after}, "
+        f"(gSysFrameCount: {frames_before} -> {frames_after}, "
         f"delta={frame_delta}; expected >=30 for ~2 s at any normal emulation speed). "
         f"A near-zero delta means the N64 froze on frame N+1 -- "
         f"masterDL overflow caused a circular RSP display list that hung the game thread."
