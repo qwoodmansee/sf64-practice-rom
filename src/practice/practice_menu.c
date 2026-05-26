@@ -309,6 +309,7 @@ void Practice_Menu_Update(void) {
             switch (sHovered[0]) {
                 case RSLICE_RESTART:
                     Practice_Menu_Close();
+                    Practice_InputGrace_Start();
                     Practice_LaunchLevel(gCurrentLevel, gLevelPhase, 0.0f);
                     break;
                 case RSLICE_SAVE:
@@ -316,6 +317,7 @@ void Practice_Menu_Update(void) {
                     break;
                 case RSLICE_LOAD:
                     Practice_Menu_Close();
+                    Practice_InputGrace_Start();
                     Practice_LoadState();
                     break;
                 case RSLICE_LEVELS:

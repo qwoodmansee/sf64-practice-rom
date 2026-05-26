@@ -5,7 +5,7 @@ verifies gPathProgress is set to the checkpoint position rather than 0.
 """
 
 def run(ctx):
-    S = ctx.syms
+    S = ctx.syms.addrs
 
     ok = ctx.wait_for_level_select()
     ctx.assert_true(ok, "Booted to level select")
@@ -18,7 +18,7 @@ def run(ctx):
     ok = ctx.select_and_launch_level(0, press_only=True)
     ctx.assert_true(ok, "Launched with checkpoint phase")
 
-    ok = ctx.wait_for_gameplay(600)
+    ok = ctx.wait_for_gameplay(10000)
     ctx.assert_true(ok, "Gameplay became active")
 
     # gPathProgress should be at the checkpoint position (~93610 + 2750 = ~96360)

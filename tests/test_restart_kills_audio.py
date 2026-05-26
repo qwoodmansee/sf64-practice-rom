@@ -66,7 +66,7 @@ _SP_NAMES   = {0: "BGM", 1: "FANFARE", 2: "SFX", 3: "VOICE"}
 #   inverts to N64 convention. Net result: pressing 's' pushes N64
 #   stick UP (which is what the radial-menu N slice RSLICE_RESTART needs).
 SC_A_BUTTON = 27
-SC_Z_TRIG   = 29
+SC_C_RIGHT  = 15   # C Button Right ('l')
 SC_DPAD_R   = 7
 SC_STICK_UP = 22   # 's' -- counter-intuitive but correct for mupen64plus
 SC_START    = 40
@@ -137,12 +137,12 @@ def run(ctx):
                   f"BGM is playing pre-restart "
                   f"(seqId=0x{seq_id_before:04X} expected 0x{SEQ_ID_CORNERIA:04X})")
 
-    # --- Step 4: Open the practice menu (Z + D-pad Right chord) ---
-    h.key_down(SC_Z_TRIG)
-    h.key_down(SC_DPAD_R)
+    # --- Step 4: Open the practice menu (C-Right + Start chord) ---
+    h.key_down(SC_C_RIGHT)
+    h.key_down(SC_START)
     h.advance(4)
-    h.key_up(SC_Z_TRIG)
-    h.key_up(SC_DPAD_R)
+    h.key_up(SC_C_RIGHT)
+    h.key_up(SC_START)
     h.advance(3)
 
     menu = h.read32(menu_state)

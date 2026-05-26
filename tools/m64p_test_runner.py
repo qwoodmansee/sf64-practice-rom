@@ -67,7 +67,13 @@ def parse_symbols():
                 name = m.group(2)
                 syms[name] = addr
 
-    # Parse PracticeConfig field offsets from practice.h
+    # Parse PracticeConfig field offsets from practice.h with correct sizes.
+    # bool=s32 (4B), enums=4B, u8/s8=1B, u16/s16=2B, everything else=4B.
+    # MIPS struct alignment: each field aligns to min(sizeof, 4).
+    _TYPE_SZ = {'u8': 1, 's8': 1, 'u16': 2, 's16': 2}
+    def _fsz(t): return _TYPE_SZ.get(t, 4)
+    def _align(off, a): return (off + a - 1) & ~(a - 1)
+
     practice_h = "include/practice.h"
     if os.path.isfile(practice_h):
         with open(practice_h) as f:
@@ -81,20 +87,24 @@ def parse_symbols():
                 if in_config:
                     if "}" in line:
                         break
-                    m = re.match(r"\s+(?:s32|u32|bool|f32)\s+(\w+)", line)
+                    m = re.match(r"\s+(\w+)\s+(\w+);", line)
                     if m:
-                        config_fields.append((m.group(1), offset))
-                        offset += 4
+                        sz = _fsz(m.group(1))
+                        al = min(sz, 4)
+                        offset = _align(offset, al)
+                        config_fields.append((m.group(2), offset))
+                        offset += sz
 
     config_offsets = {name: off for name, off in config_fields}
 
-    # Constants
+    # Constants — must match enums in sf64thread.h and practice.h
     constants = {}
     for name, val in [
         ("GSTATE_BOOT", 0), ("GSTATE_LOGO", 1), ("GSTATE_TITLE", 2),
-        ("GSTATE_MAP", 5), ("GSTATE_PLAY", 4),
+        ("GSTATE_MAP", 4), ("GSTATE_PLAY", 7),
         ("PLAY_INIT", 0), ("PLAY_UPDATE", 2),
-        ("PSCREEN_LEVEL_SELECT", 2), ("PSCREEN_GAMEPLAY", 0),
+        ("PSCREEN_LEVEL_SELECT", 0), ("PSCREEN_GAMEPLAY", 1),
+        ("PLAYERSTATE_LEVEL_INTRO", 2), ("PLAYERSTATE_ACTIVE", 3),
     ]:
         constants[name] = val
 
@@ -145,7 +155,7 @@ class HarnessConnection:
     def write32(self, addr, val):
         self.send(f"WRITE32 {addr:x} {val:x}")
 
-    def wait_for(self, addr, value, timeout_ms=30000):
+    def wait_for(self, addr, value, timeout_ms=10000):
         resp = self.send(f"WAIT {addr:x} {value:x} {timeout_ms}")
         return resp == "OK"
 
@@ -190,11 +200,32 @@ class TestContext:
             val += 0x100000000
         self.harness.write32(addr, val)
 
+    def read_float(self, addr):
+        raw = self.harness.read32(addr)
+        return struct.unpack('>f', raw.to_bytes(4, 'big'))[0]
+
     def game_state(self):
         return self.read_s32(self.syms.addrs["gGameState"])
 
     def play_state(self):
         return self.read_s32(self.syms.addrs["gPlayState"])
+
+    def practice_screen(self):
+        return self.read_s32(self.syms.addrs["gPracticeScreen"])
+
+    def cs_was_not_skipped(self):
+        return self.read_s32(self.syms.addrs["gCsWasNotSkipped"])
+
+    def player_state(self):
+        ptr = self.harness.read32(self.syms.addrs["gPlayer"])
+        if ptr == 0:
+            return 0
+        return self.read_s32((ptr & 0x1FFFFFFF) + 0x1C8)
+
+    def press_right(self, hold_frames=3):
+        self.harness.key_down(7)   # SC_DPAD_R
+        self.advance(hold_frames)
+        self.harness.key_up(7)
 
     def config_field(self, name):
         base = self.syms.addrs["gPracticeConfig"]
@@ -206,16 +237,17 @@ class TestContext:
         offset = self.syms.config[name]
         self.write_s32(base + offset, val)
 
-    def wait_for_level_select(self, timeout_ms=30000):
-        addr = self.syms.addrs.get("gPracticeScreen", 0)
+    def wait_for_level_select(self, timeout_ms=10000):
+        # Wait for GSTATE_MAP (4) — non-zero so BSS false-fire can't happen
+        addr = self.syms.addrs.get("gGameState", 0)
         if addr:
             return self.harness.wait_for(
-                addr, self.syms.const["PSCREEN_LEVEL_SELECT"], timeout_ms
+                addr, self.syms.const["GSTATE_MAP"], timeout_ms
             )
-        self.sleep(15000)
+        self.sleep(10000)
         return True
 
-    def wait_for_gameplay(self, timeout_ms=30000):
+    def wait_for_gameplay(self, timeout_ms=10000):
         addr = self.syms.addrs.get("gGameState", 0)
         if addr:
             return self.harness.wait_for(
@@ -223,18 +255,24 @@ class TestContext:
             )
         return False
 
-    def select_and_launch_level(self, level_index):
+    def wait_for_play_update(self, timeout_ms=10000):
+        """Wait until gPlayState==PLAY_UPDATE (gPlayer is allocated)."""
+        addr = self.syms.addrs.get("gPlayState", 0)
+        if addr:
+            return self.harness.wait_for(
+                addr, self.syms.const["PLAY_UPDATE"], timeout_ms
+            )
+        return False
+
+    def select_and_launch_level(self, level_index, press_only=False):
         if not self.wait_for_level_select():
             return False
-        addrs = self.syms.addrs
-        if "gNextLevel" in addrs and "gNextGameState" in addrs:
-            self.write_s32(addrs["gNextLevel"], level_index)
-            self.write_s32(addrs["gNextGameState"], self.syms.const["GSTATE_PLAY"])
-            if "gPracticeScreen" in addrs:
-                self.write_s32(addrs["gPracticeScreen"], self.syms.const["PSCREEN_GAMEPLAY"])
-            self.sleep(2000)
-            return True
-        return False
+        # Use keyboard A press — avoids write_s32 to u16 gNextGameState (big-endian issue)
+        self.harness.key_down(27)  # SC_A_BUTTON
+        self.advance(4)
+        self.harness.key_up(27)
+        self.sleep(2000)
+        return True
 
     def assert_eq(self, actual, expected, msg=""):
         if actual == expected:

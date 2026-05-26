@@ -33,8 +33,9 @@ PMENU_CLOSED = 0
 #
 #   DPad D   = key(115)='s'   -> SDL_SCANCODE_S = 22
 #   DPad R   = key(100)='d'   -> SDL_SCANCODE_D = 7
-#   Z Trig   = key(122)='z'   -> SDL_SCANCODE_Z = 29
 #   A Button = key(120)='x'   -> SDL_SCANCODE_X = 27
+#   C Button R = key(108)='l' -> SDL_SCANCODE_L = 15
+#   Start    = key(13)=Return -> SDL_SCANCODE_RETURN = 40
 #
 # Stick axes use key(neg_keysym, pos_keysym).  The Y axis is inverted for N64:
 #   X Axis = key(97,100)   -> 'a'=LEFT(-x),  'd'=RIGHT(+x)   [direct]
@@ -45,7 +46,8 @@ PMENU_CLOSED = 0
 #   Stick DOWN  (y<0): 'w' -> SDL_SCANCODE_W = 26  [counter-intuitive; see above]
 SC_DPAD_D    = 22   # D-pad Down ('s') — also moves N64 stick UP (no-op on level select)
 SC_DPAD_R    = 7    # D-pad Right ('d')
-SC_Z_TRIG    = 29   # Z trigger ('z')
+SC_C_RIGHT   = 15   # C Button Right ('l')
+SC_START     = 40   # Start (Return)
 SC_A_BUTTON  = 27   # A button ('x')
 SC_STICK_L   = 4    # 'a' -> N64 stick LEFT  (x<0)
 SC_STICK_DOWN = 26  # 'w' -> N64 stick DOWN  (y<0) — counter-intuitive, see Y Axis note
@@ -99,17 +101,17 @@ def run(ctx):
     # The bug requires a few seconds of play before opening Loadout.
     h.advance(180)
 
-    # --- Step 5: Open the practice radial menu (Z + D-pad Right chord) ---
-    h.key_down(SC_Z_TRIG)
-    h.key_down(SC_DPAD_R)
+    # --- Step 5: Open the practice radial menu (C-Right + Start chord) ---
+    h.key_down(SC_C_RIGHT)
+    h.key_down(SC_START)
     h.advance(4)
-    h.key_up(SC_Z_TRIG)
-    h.key_up(SC_DPAD_R)
+    h.key_up(SC_C_RIGHT)
+    h.key_up(SC_START)
     h.advance(3)
 
     menu = h.read32(menu_state)
     ctx.assert_neq(menu, PMENU_CLOSED,
-                   f"Practice menu opened after Z+DPad-Right (state={menu})")
+                   f"Practice menu opened after C-Right+Start (state={menu})")
     if menu == PMENU_CLOSED:
         return
 
