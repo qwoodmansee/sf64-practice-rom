@@ -356,6 +356,10 @@ void Practice_LevelSelect_Draw(void) {
 
     Practice_DrawText(20, 168, "BGM:");
     Practice_DrawTextColor(52, 168, sBgmList[sBgmIndex].name, 100, 200, 255);
+    if (sBgmMuted) {
+        s32 nameW = Graphics_GetSmallTextWidth((char*) sBgmList[sBgmIndex].name);
+        Practice_DrawButtonPill(52 + nameW + 2, 167, 10, "M", 255, 80, 0);
+    }
 
     if (IsBossTestEntry(sSelectedLevel)) {
         Practice_DrawText(20, 180, "BOSS:");
@@ -397,7 +401,8 @@ void Practice_LevelSelect_Draw(void) {
     Practice_DrawTextColor( 136, 216, ":LOAD  ",  150, 150, 150);
     Practice_DrawButtonPill(222, 215, 10, "L",     100, 100, 100);
     Practice_DrawButtonPill(234, 215, 10, "R",     100, 100, 100);
-    Practice_DrawTextColor( 246, 216, ":BGM",     150, 150, 150);
+    Practice_DrawButtonPill(246, 215, 10, "Z",     100, 100, 100);
+    Practice_DrawTextColor( 258, 216, ":BGM",     150, 150, 150);
 
     if (Practice_StateMenuIsOpen()) {
         Practice_StateMenu_Draw();
