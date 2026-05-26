@@ -228,6 +228,28 @@ def check_cutscene_skip_hook():
             "Without this, Play_Setup() resets it to true and intro cutscenes play."
         )
 
+def check_hit_count_cap_raised():
+    """Display_Update must raise the per-level hit-count cap to 999 in the practice
+    ROM. Vanilla 1.1 clamps gHitCount to 511 every frame, which is below the 1.0
+    cart limit and surprises score-runners. The practice ROM raises this to 999.
+    """
+    src = read(FOX_DISPLAY)
+    display_update = re.search(
+        r"void\s+Display_Update\b.*?^}",
+        src, re.DOTALL | re.MULTILINE
+    )
+    if not display_update:
+        error("Could not find Display_Update() in fox_display.c for hit-count cap check")
+        return
+
+    body = display_update.group(0)
+    if "#ifdef PRACTICE_ROM" not in body or "gHitCount > 999" not in body or "gHitCount = 999" not in body:
+        error(
+            "Display_Update must clamp gHitCount to 999 inside a #ifdef PRACTICE_ROM "
+            "guard. The vanilla 511 cap is too low for the practice ROM (it should "
+            "match the 1.0 cart limit of 999)."
+        )
+
 def check_release_patch_workflow():
     """Release patch workflow must build a compressed practice ROM and never ship ROM bytes."""
     makefile = read(MAKEFILE)
@@ -2481,6 +2503,7 @@ def main():
     check_engine_hooks()
     check_score_stats_hooks()
     check_cutscene_skip_hook()
+    check_hit_count_cap_raised()
     check_isviewer_sc64()
     check_iodev_sc64()
     check_iodev_ed64()
