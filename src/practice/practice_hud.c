@@ -83,7 +83,7 @@ void Practice_Hud_Update(void) {
             if (sz_actor->obj.id != OBJ_ACTOR_SZ_SPACE_JUNK) { continue; }
             if (j >= (s32)ARRAY_COUNT(gRadarMarks)) { continue; }
             gRadarMarks[j].enabled = true;
-            gRadarMarks[j].type = AI360_ENEMY;
+            gRadarMarks[j].type = AI360_KATT;
             gRadarMarks[j].pos.x = sz_actor->obj.pos.x;
             gRadarMarks[j].pos.y = sz_actor->obj.pos.y;
             gRadarMarks[j].pos.z = sz_actor->obj.pos.z;
