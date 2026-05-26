@@ -4,6 +4,24 @@
 
 #define HITBOX_DRAW_RANGE_SQ 25000000.0f
 
+/* Per-frame ceiling on total boxes Practice_Hitbox_Draw will emit.
+ *
+ * Each box pushes ~10 Gfx commands (PipeSync, SetPrimColor, gSPMatrix, gSPVertex,
+ * 6x gSP2Triangles) into gMasterDisp. The masterDL pool is 0x1380 (4992) slots
+ * shared with the rest of the 3D scene. Dense rendering (carrier boss fight on
+ * Corneria spawns CARRIER + LEFT + UPPER + BOTTOM at once -- 15 boss hitboxes
+ * before any actors, scenery, or items) plus an unbounded hitbox-viewer load
+ * can overflow masterDL on real hardware (mupen64plus tolerates it). When that
+ * happens the RSP follows a corrupted display list and hangs the game thread.
+ * See commit 4bf1b92 for the related Meteo-LOADOUT masterDL precedent.
+ *
+ * 96 boxes * ~10 cmds = ~960 cmds, leaving generous headroom even when the
+ * carrier fight is already consuming most of the pool.
+ */
+#define HITBOX_BUDGET_PER_FRAME 96
+
+static s32 sBoxesDrawnThisFrame;
+
 static Vtx sUnitCubeVtx[8] = {
     { { { -1, -1, -1 }, 0, { 0, 0 }, { 255, 255, 255, 255 } } },
     { { {  1, -1, -1 }, 0, { 0, 0 }, { 255, 255, 255, 255 } } },
@@ -30,6 +48,11 @@ static void Hitbox_DrawBox(f32 posX, f32 posY, f32 posZ,
                            bool hasHitRot,
                            f32 offZ, f32 sizeZ, f32 offY, f32 sizeY, f32 offX, f32 sizeX,
                            u8 r, u8 g, u8 b, u8 a) {
+    if (sBoxesDrawnThisFrame >= HITBOX_BUDGET_PER_FRAME) {
+        return;
+    }
+    sBoxesDrawnThisFrame++;
+
     gDPPipeSync(gMasterDisp++);
     gDPSetPrimColor(gMasterDisp++, 0, 0, r, g, b, a);
 
@@ -220,6 +243,7 @@ void Practice_Hitbox_Draw(void) {
 
     player = &gPlayer[0];
 
+    sBoxesDrawnThisFrame = 0;
     Hitbox_SetupRCP();
 
     if (gPracticeConfig.showHitboxes) {
@@ -241,6 +265,17 @@ void Practice_Hitbox_Draw(void) {
 
         for (i = 0; i < 4; i++) {
             if (gBosses[i].obj.status == OBJ_FREE) {
+                continue;
+            }
+            /* Bosses were previously drawn unconditionally. Apply the same
+             * distance filter the actor loop uses so multi-slot bosses
+             * (e.g. Corneria Carrier = 4 boss objects, 15 hitboxes) cannot
+             * dominate the masterDL budget once they're behind the player. */
+            dx = gBosses[i].obj.pos.x - player->pos.x;
+            dy = gBosses[i].obj.pos.y - player->pos.y;
+            dz = gBosses[i].obj.pos.z - player->trueZpos;
+            distSq = (dx * dx) + (dy * dy) + (dz * dz);
+            if (distSq > HITBOX_DRAW_RANGE_SQ) {
                 continue;
             }
             Hitbox_DrawObjectHitboxes(&gBosses[i].obj, gBosses[i].info.hitbox,
