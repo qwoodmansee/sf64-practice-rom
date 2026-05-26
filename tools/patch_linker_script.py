@@ -14,6 +14,7 @@ Algorithm:
     obj if it's the first entry). This is N-state agnostic: appending
     new lib files to the list "just works" without code changes here.
 """
+import re
 import sys
 
 LINKER_SCRIPT = "linker_scripts/us/rev1/starfox64.ld"
@@ -647,6 +648,28 @@ def patch():
     #   .practice_macro_pak -> .practice_macro_snap_pak -> .buffers
     # which keeps the location counter (`.`) moving monotonically through the
     # LOAD segment before the NOLOAD Pak segments jump it to 0x80400000+.
+    #
+    # Self-heal: if a stale .practice_late_core block exists (e.g. from an
+    # earlier patcher version that used the 0x801F4000 VRAM), excise it so
+    # the fresh block at 0x80720000 can be reinjected. The block runs from
+    # the `/* practice_late_core:` comment through the next
+    # `practice_late_core_VRAM_END = .;` line.
+    PRACTICE_LATE_CORE_EXPECTED_VRAM = "practice_late_core_VRAM = 0x80720000;"
+    if (".practice_late_core" in content
+            and PRACTICE_LATE_CORE_EXPECTED_VRAM not in content):
+        stale_block = re.compile(
+            r"[ \t]*/\* practice_late_core:.*?practice_late_core_VRAM_END = \.;\n",
+            re.DOTALL,
+        )
+        new_content, n = stale_block.subn("", content, count=1)
+        if n != 1:
+            raise RuntimeError(
+                "Linker patcher: stale .practice_late_core block detected but "
+                "could not be excised (missing comment marker or VRAM_END "
+                "anchor). Manual repair required."
+            )
+        content = new_content
+
     if ".practice_late_core" not in content:
         anchor_line = "    dma_table_VRAM_END = .;"
         needle = anchor_line + "\n"
