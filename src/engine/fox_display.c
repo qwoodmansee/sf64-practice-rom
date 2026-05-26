@@ -1690,10 +1690,18 @@ void Display_Update(void) {
     Player* camPlayer = &gPlayer[gPlayerNum];
     sDrawCockpit = false;
 
+#ifdef PRACTICE_ROM
+    // Practice ROM raises the per-level hit-count cap from 511 (1.1 vanilla)
+    // to 999, matching the 1.0 cart limit.
+    if (gHitCount > 999) {
+        gHitCount = 999;
+    }
+#else
     // 511 hit count cap
     if (gHitCount > 511) {
         gHitCount = 511;
     }
+#endif
 
     Matrix_Push(&gGfxMatrix);
 
