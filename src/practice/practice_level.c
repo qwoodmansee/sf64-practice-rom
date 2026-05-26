@@ -1,6 +1,7 @@
 #include "practice.h"
 #include "practice_build_info.h"
 #include "assets/ast_arwing.h"
+#include "sf64audio_external.h"
 
 #ifdef PRACTICE_ROM
 
@@ -142,6 +143,7 @@ static s32 sBgmIndex = 0;
 static bool sBgmPlaying = false;
 static bool sBgmAudioDirty = false;
 static bool sBgmPlayPending = false;
+static bool sBgmMuted = false;
 static u16 sBgmLastSpecPacked = 0xFFFF;
 
 f32 gPracticeCheckpointProgress = 0.0f;
@@ -228,6 +230,11 @@ void Practice_LevelSelect_Update(void) {
             sBgmIndex = 0;
         }
         sBgmAudioDirty = true;
+    }
+
+    if (press->button & Z_TRIG) {
+        sBgmMuted = !sBgmMuted;
+        SEQCMD_SET_SEQPLAYER_VOLUME(SEQ_PLAYER_BGM, 0, sBgmMuted ? 0 : 0x7F);
     }
 
     if (press->button & U_JPAD) {
@@ -487,6 +494,7 @@ void Practice_LaunchLevel(LevelId levelId, s32 phase, f32 checkpointProgress) {
 
     sBgmPlaying = false;
     sBgmPlayPending = false;
+    sBgmMuted = false;
 
     gNextLevel = levelId;
     gNextLevelPhase = phase;
