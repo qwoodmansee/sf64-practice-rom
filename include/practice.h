@@ -211,6 +211,10 @@ void Practice_Logo_Draw(f32 x, f32 y);
 /* practice_owl_tex.c */
 void Practice_Owl_Draw(f32 x, f32 y);
 
+/* practice_icon_tex.c */
+void Practice_DrawBombIcon(f32 x, f32 y);
+void Practice_DrawArwingLifeIcon(f32 x, f32 y);
+
 /* practice_hud.c */
 void Practice_Hud_Reset(void);
 void Practice_Hud_ShowStatus(const char* text, u8 r, u8 g, u8 b);

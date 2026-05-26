@@ -38,6 +38,7 @@ PRACTICE_OBJS = [
     "practice_freecam",
     "practice_logo_tex",
     "practice_owl_tex",
+    "practice_icon_tex",
     "practice_test_fatfs",  # Phase 2: gated by IODEV_DIAG_FATFS, otherwise empty .o
     "practice_sd",          # Phase 6: OSK + file browser rendering and glue
     "practice_frame_advance",  # Frame advance / pause feature
