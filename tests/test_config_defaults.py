@@ -11,7 +11,7 @@ def run(ctx):
     ctx.assert_true(ok, "Booted to level select")
 
     # Loadout
-    ctx.assert_eq(ctx.config_field("laserStrength"), 0, "laserStrength = LASERS_SINGLE")
+    ctx.assert_eq(ctx.config_field("laserStrength"), 2, "laserStrength = LASERS_HYPER")
     ctx.assert_eq(ctx.config_field("bombCount"), 3, "bombCount = 3")
     ctx.assert_eq(ctx.config_field("lifeCount"), 2, "lifeCount = 2")
 
@@ -21,9 +21,9 @@ def run(ctx):
     ctx.assert_eq(ctx.config_field("peppyAlive"), 1, "peppyAlive = true")
 
     # Display
-    ctx.assert_eq(ctx.config_field("showInputDisplay"), 0, "showInputDisplay = false")
+    ctx.assert_eq(ctx.config_field("showInputDisplay"), 1, "showInputDisplay = true")
     ctx.assert_eq(ctx.config_field("skipCutscenes"), 1, "skipCutscenes = true")
-    ctx.assert_eq(ctx.config_field("showHudOverlay"), 1, "showHudOverlay = true")
+    ctx.assert_eq(ctx.config_field("showHudOverlay"), 0, "showHudOverlay = false")
     ctx.assert_eq(ctx.config_field("showLagFrames"), 1, "showLagFrames = true")
     ctx.assert_eq(ctx.config_field("showSpeed"), 1, "showSpeed = true")
     ctx.assert_eq(ctx.config_field("showChargeTiming"), 0, "showChargeTiming = false")

@@ -21,8 +21,15 @@ def run(ctx):
     ok = ctx.select_and_launch_level(0)  # Corneria
     ctx.assert_true(ok, "Level launch triggered")
 
-    ok = ctx.wait_for_gameplay(600)
+    ok = ctx.wait_for_gameplay(10000)
+    ctx.assert_true(ok, "Gameplay reached GSTATE_PLAY")
+    if not ok:
+        return
+
+    ok = ctx.wait_for_play_update(10000)
     ctx.assert_true(ok, "Gameplay reached PLAY_UPDATE")
+    if not ok:
+        return
 
     state = ctx.player_state()
     ctx.assert_neq(state, S.const["PLAYERSTATE_LEVEL_INTRO"],

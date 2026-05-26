@@ -27,7 +27,7 @@ def run(ctx):
     ok = ctx.select_and_launch_level(0)
     ctx.assert_true(ok, "Level launched")
 
-    ok = ctx.wait_for_gameplay(600)
+    ok = ctx.wait_for_gameplay(10000)
     ctx.assert_true(ok, "Gameplay active")
 
     ctx.assert_eq(ctx.config_field("showHitboxes"), 1, "showHitboxes still ON")

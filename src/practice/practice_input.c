@@ -7,10 +7,12 @@ typedef struct PracticeBinding {
     u16 button;
 } PracticeBinding;
 
+static s32 sInputGraceTimer = 0;
+
 static PracticeBinding sPracticeBindings[PACTION_MAX] = {
-    { Z_TRIG, R_JPAD },  /* PACTION_OPEN_MENU:   Z + D-Pad Right */
-    { L_TRIG, L_JPAD },  /* PACTION_SAVE_POS:    L + D-Pad Left */
-    { L_TRIG, R_JPAD },  /* PACTION_RESTORE_POS: L + D-Pad Right */
+    { R_CBUTTONS, START_BUTTON },  /* PACTION_OPEN_MENU:   C-Right + Start */
+    { L_TRIG,     L_JPAD },  /* PACTION_SAVE_POS:    L + D-Pad Left */
+    { L_TRIG,     R_JPAD },  /* PACTION_RESTORE_POS: L + D-Pad Right */
 };
 
 static const char* sPracticeActionNames[PACTION_MAX] = {
@@ -44,6 +46,25 @@ void Practice_SetBinding(PracticeAction action, u16 button) {
 
 const char* Practice_GetActionName(PracticeAction action) {
     return sPracticeActionNames[action];
+}
+
+void Practice_InputGrace_Start(void) {
+    sInputGraceTimer = 15;
+}
+
+void Practice_InputGrace_Tick(void) {
+    OSContPad* press = &gControllerPress[gMainController];
+    OSContPad* hold  = &gControllerHold[gMainController];
+    if (sInputGraceTimer <= 0) {
+        return;
+    }
+    press->button  = 0;
+    press->stick_x = 0;
+    press->stick_y = 0;
+    hold->button   = 0;
+    hold->stick_x  = 0;
+    hold->stick_y  = 0;
+    sInputGraceTimer--;
 }
 
 const char* Practice_GetDPadName(u16 button) {

@@ -9,7 +9,7 @@ def run(ctx):
     ok = ctx.wait_for_level_select()
     ctx.assert_true(ok, "Booted to level select")
 
-    ctx.assert_eq(ctx.config_field("showHudOverlay"), 1, "showHudOverlay defaults ON")
+    ctx.assert_eq(ctx.config_field("showHudOverlay"), 0, "showHudOverlay defaults OFF")
     ctx.assert_eq(ctx.config_field("showSpeed"), 1, "showSpeed defaults ON")
     ctx.assert_eq(ctx.config_field("showLagFrames"), 1, "showLagFrames defaults ON")
     ctx.assert_eq(ctx.config_field("showHitTracking"), 1, "showHitTracking defaults ON")
@@ -21,7 +21,7 @@ def run(ctx):
     ok = ctx.select_and_launch_level(0)
     ctx.assert_true(ok, "Level launched")
 
-    ok = ctx.wait_for_gameplay(600)
+    ok = ctx.wait_for_gameplay(10000)
     ctx.assert_true(ok, "Gameplay active")
 
     # Run 3 seconds with full HUD

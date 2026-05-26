@@ -1,6 +1,19 @@
 #!/usr/bin/env python3
 """E2E tests for SF64 practice ROM levels."""
 
+
+def run(ctx):
+    """Harness entry point: verify ROM boots and reaches level select."""
+    ok = ctx.wait_for_level_select()
+    ctx.assert_true(ok, "ROM boots to level select")
+    if not ok:
+        return
+    ok = ctx.select_and_launch_level(0)
+    ctx.assert_true(ok, "Corneria launched")
+    ok = ctx.wait_for_gameplay(10000)
+    ctx.assert_true(ok, "Reached GSTATE_PLAY")
+
+
 import subprocess
 import sys
 import time

@@ -547,6 +547,7 @@ void Game_Update(void) {
                     Play_Main();
                 } else if (gPracticeMenuState == PMENU_CLOSED) {
                     if (!Practice_FrameAdvance_IsFrozen()) {
+                        Practice_InputGrace_Tick();
                         Practice_Macro_PrePlay();
                         if (!Practice_Macro_IsArmed()) {
                             Play_Main();

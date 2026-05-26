@@ -164,6 +164,8 @@ u16 Practice_GetBinding(PracticeAction action);
 void Practice_SetBinding(PracticeAction action, u16 button);
 const char* Practice_GetActionName(PracticeAction action);
 const char* Practice_GetDPadName(u16 button);
+void Practice_InputGrace_Start(void);
+void Practice_InputGrace_Tick(void);
 
 /* practice_boss_test.c */
 extern bool gPracticeForceCarrier;
