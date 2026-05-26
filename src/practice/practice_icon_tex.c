@@ -37,14 +37,14 @@ static u16 sArwingLifeIconTLUT[8] = {
 
 void Practice_DrawBombIcon(f32 x, f32 y) {
     gDPPipeSync(gMasterDisp++);
-    RCP_SetupDL(&gMasterDisp, SETUPDL_76);
+    RCP_SetupDL(&gMasterDisp, SETUPDL_78);
     gDPSetPrimColor(gMasterDisp++, 0, 0, 255, 255, 255, 255);
     Lib_TextureRect_CI4(&gMasterDisp, sBombIconTex, sBombIconTLUT, 16, 16, x, y, 1.0f, 1.0f);
 }
 
 void Practice_DrawArwingLifeIcon(f32 x, f32 y) {
     gDPPipeSync(gMasterDisp++);
-    RCP_SetupDL(&gMasterDisp, SETUPDL_76);
+    RCP_SetupDL(&gMasterDisp, SETUPDL_78);
     gDPSetPrimColor(gMasterDisp++, 0, 0, 255, 255, 255, 255);
     Lib_TextureRect_CI4(&gMasterDisp, sArwingLifeIconTex, sArwingLifeIconTLUT, 16, 16, x, y, 1.0f, 1.0f);
 }
