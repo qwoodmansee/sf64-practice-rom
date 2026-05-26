@@ -115,10 +115,14 @@ void Practice_Minimap_Draw(void) {
     Practice_DrawBox(MMAP_CX - 12, MMAP_CY, 25, 1, 40, 40, 60, 140);
     Practice_DrawBox(MMAP_CX, MMAP_CY - 12, 1, 25, 40, 40, 60, 140);
 
-    /* Actors: OBJ_ACTOR_ALLRANGE only */
+    /* Actors: OBJ_ACTOR_ALLRANGE (combatants), plus OBJ_ACTOR_SZ_SPACE_JUNK on Sector Z. */
     for (i = 0, actor = &gActors[0]; i < ARRAY_COUNT(gActors); i++, actor++) {
+        bool isSzJunk;
+
         if (actor->obj.status != OBJ_ACTIVE) continue;
-        if (actor->obj.id != OBJ_ACTOR_ALLRANGE) continue;
+        isSzJunk = (gCurrentLevel == LEVEL_SECTOR_Z) &&
+                   (actor->obj.id == OBJ_ACTOR_SZ_SPACE_JUNK);
+        if ((actor->obj.id != OBJ_ACTOR_ALLRANGE) && !isSzJunk) continue;
         if (!Minimap_FloatValid(&actor->obj.pos.x)) continue;
         if (!Minimap_FloatValid(&actor->obj.pos.z)) continue;
         if (!Minimap_FloatValid(&actor->obj.rot.y)) continue;
@@ -127,6 +131,11 @@ void Practice_Minimap_Draw(void) {
 
         sx = Minimap_ToScreenX(actor->obj.pos.x, halfSize);
         sy = Minimap_ToScreenZ(actor->obj.pos.z, halfSize);
+
+        if (isSzJunk) {
+            Practice_DrawBox(sx - 1, sy - 1, 3, 3, 255, 100, 200, 220);
+            continue;
+        }
 
         switch (actor->aiType) {
             case AI360_FALCO:  Minimap_DrawTriangle(sx, sy, actor->obj.rot.y,  60, 120, 255); break;

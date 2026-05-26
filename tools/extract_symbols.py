@@ -155,6 +155,7 @@ CONFIG_OFFSETS = {
     "enemyHealthBossOnly":   0xA4,
     "enemyHealthHideModels": 0xA8,
     "hitCount":              0xAC,
+    "showLevelTimers":       0xB0,
 }
 
 # PracticeStats field offsets (include/practice.h, all s32).

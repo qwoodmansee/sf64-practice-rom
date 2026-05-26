@@ -62,6 +62,7 @@ void Practice_Init(void) {
     gPracticeConfig.enemyHealthBossOnly = false;
     gPracticeConfig.enemyHealthHideModels = false;
     gPracticeConfig.hitCount = 0;
+    gPracticeConfig.showLevelTimers = true;
 
     /* Boss-test override flag: runtime-only, reset on every boot.
      * Per-launch resets happen in Practice_LevelSelect_Update's non-boss

@@ -50,6 +50,7 @@ typedef enum StatsOption {
     SOPT_CHARGE_TIMING,
     SOPT_MISSED_INPUTS,
     SOPT_HIT_TRACKING,
+    SOPT_LEVEL_TIMERS,
     SOPT_BACK,
     SOPT_MAX,
 } StatsOption;
@@ -333,6 +334,9 @@ static void StateMenu_UpdateStats(u16 buttons) {
                 break;
             case SOPT_HIT_TRACKING:
                 gPracticeConfig.showHitTracking ^= true;
+                break;
+            case SOPT_LEVEL_TIMERS:
+                gPracticeConfig.showLevelTimers ^= true;
                 break;
         }
     }
@@ -757,6 +761,10 @@ static void StateMenu_DrawStats(void) {
                 Practice_DrawText(54, y, "  HITS:");
                 DrawToggleValue(120, y, gPracticeConfig.showHitTracking);
                 break;
+            case SOPT_LEVEL_TIMERS:
+                Practice_DrawText(54, y, "  LVL TIMERS:");
+                DrawToggleValue(120, y, gPracticeConfig.showLevelTimers);
+                break;
             case SOPT_BACK:
                 Practice_DrawTextColor(54, y, "BACK", 150, 150, 150);
                 break;
@@ -1010,8 +1018,8 @@ void Practice_StateMenu_Draw(void) {
             break;
         case PSUBMENU_STATS:
             title = "STATS";
-            boxHeight = 124;
-            helpY = 156;
+            boxHeight = 138;
+            helpY = 170;
             break;
         case PSUBMENU_VISUALIZERS:
             title = "VISUALIZERS";
