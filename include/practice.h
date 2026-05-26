@@ -3,7 +3,7 @@
 
 #ifdef PRACTICE_ROM
 
-#define PRACTICE_VERSION "V0.4.0"
+#define PRACTICE_VERSION "V0.6.0"
 
 #include "global.h"
 
