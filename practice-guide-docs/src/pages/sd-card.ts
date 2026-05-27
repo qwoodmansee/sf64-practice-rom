@@ -14,9 +14,10 @@ export function pageSDCard() {
      .text('(!) SD CARD SAVING NOT AVAILABLE', ML + 14, y0 + 10, { width: PW - 20, lineBreak: false });
   doc.fillColor('#FFB0B8').font('Helvetica').fontSize(9.5)
      .text(
-       'SD card save states are in active development and DO NOT work on EverDrive hardware. ' +
-       'The SD CARD option appears in the menu, but any save or load will silently fail. ' +
-       'Do not rely on SD card saves for practice sessions.',
+       'SD card save states are in active development and DO NOT work on any cart hardware ' +
+       'at this time, including SummerCart64 and EverDrive. The SD CARD option appears in ' +
+       'the menu, but any save or load will silently fail. Do not rely on SD card saves for ' +
+       'practice sessions.',
        ML + 14, y0 + 30, { width: PW - 22 }
      );
   doc.y = y0 + wH + 10;
@@ -24,6 +25,7 @@ export function pageSDCard() {
   sectionHeader('CURRENT STATUS');
   bullet([
     'SD card interface: implemented and visible in the menu',
+    'SummerCart64 support: not working at this time',
     'EverDrive X7 / X8 support: written but UNVERIFIED on real hardware',
     'Status: not safe to use -- data loss or crash possible',
     'RAM save states are fully functional -- use those instead (cleared on power-off)',
@@ -32,7 +34,7 @@ export function pageSDCard() {
   vspace(6);
   sectionHeader('WHAT SD SAVES WILL DO (WHEN READY)');
   bullet([
-    'Save states to the SD card inside your EverDrive -- no Controller Pak needed',
+    'Save states to the SD card inside your cart (SummerCart64 / EverDrive) -- no Controller Pak needed',
     'States persist across power cycles',
     'Multiple save files per game, browsable from the menu',
     'Shareable save files -- copy to PC and share with other runners',

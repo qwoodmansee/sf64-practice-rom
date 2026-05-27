@@ -32,8 +32,9 @@ export function pageWelcome() {
   vspace(4);
 
   callout(
-    '(!) SD card save states do NOT work on EverDrive hardware yet. All other features ' +
-    '-- RAM save states, frame advance, cheats, HUD overlays, macros, level select -- work normally.',
+    '(!) SD card save states do NOT work on any cart hardware yet (SummerCart64 or ' +
+    'EverDrive). All other features -- RAM save states, frame advance, cheats, HUD ' +
+    'overlays, macros, level select -- work normally.',
     'warning'
   );
 
