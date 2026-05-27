@@ -173,6 +173,8 @@ ifeq ($(IODEV_DIAG_FATFS),1)
     BUILD_DEFINES   += -DIODEV_DIAG_FATFS=1
 endif
 
+
+
 # Phase 1 architectural probe for the practice late-segment dispatch model.
 # Build with PRACTICE_LATE_PROBE=1 to enable a cross-segment function-pointer
 # call from .rodata in main into iodev_detect (which post-Wave-4 lives in

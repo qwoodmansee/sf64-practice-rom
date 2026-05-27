@@ -16,6 +16,7 @@
  */
 
 #include "PR/rcp.h"
+#include "PR/os_internal.h"     /* __osDisableInt / __osRestoreInt */
 #include "libultra/ultra64.h"  /* OSIoMesg, OSMesgQueue, osPiStartDma, osCreateMesgQueue,
                                 * osRecvMesg, osInvalDCache, osWritebackDCache.
                                 * Path matches the project convention (see src/sys/sys.h). */
@@ -84,10 +85,24 @@ static iodev_result_t sc64_execute_cmd(uint8_t cmd_id,
                                        uint32_t *rsp0_out, uint32_t *rsp1_out) {
     int retries;
     uint32_t sr;
+    uint32_t saved_int_mask;
 
+    /* Atomic command-issue dance from the SC64 firmware's POV. Same class
+     * of bug as the isviewer rp/wp race fixed in commit 47bc3f9: a timer/
+     * AI/SP IRQ landing between these three PI_WRITE_FLUSHes lets the
+     * audio thread's PI activity tear the firmware's view of the command
+     * setup. Empirically this wedges the SD command interface on first
+     * f_mkdir during cold boot (v0.6.0+, after iodev_sd_init was added),
+     * stranding the SC64 with its red LED stuck on. Spin-poll stays
+     * OUTSIDE the guard since worst-case SC64_CMD_TIMEOUT_RETRIES runs
+     * for several seconds; we only need atomicity across the three setup
+     * writes. __osDisableInt is a no-op pre-osInitialize, so this is
+     * safe from any context. */
+    saved_int_mask = __osDisableInt();
     PI_WRITE_FLUSH(SC64_REG_DATA0, arg0);
     PI_WRITE_FLUSH(SC64_REG_DATA1, arg1);
     PI_WRITE_FLUSH(SC64_REG_SCR, (uint32_t)cmd_id);
+    __osRestoreInt(saved_int_mask);
 
     /* Spin until CPU_BUSY clears. */
     retries = SC64_CMD_TIMEOUT_RETRIES;
@@ -112,10 +127,20 @@ static iodev_result_t sc64_execute_cmd(uint8_t cmd_id,
 
 static iodev_id_t sc64_detect(void) {
     uint32_t ident;
+    uint32_t saved_int_mask;
+
+    /* Same atomicity requirement as sc64_execute_cmd: the SC64 firmware
+     * watches the KEY register for the unlock sequence (RESET → UNLOCK_1 →
+     * UNLOCK_2). An IRQ landing between any two of these writes lets the
+     * audio thread's PI activity tear the firmware's view of the sequence.
+     * Practice_Sd_Init re-calls iodev_detect() in its error branch on cold
+     * boot, which is when this race manifests. */
+    saved_int_mask = __osDisableInt();
     PI_WRITE_FLUSH(SC64_REG_KEY, SC64_KEY_RESET);
     PI_WRITE_FLUSH(SC64_REG_KEY, SC64_KEY_UNLOCK_1);
     PI_WRITE_FLUSH(SC64_REG_KEY, SC64_KEY_UNLOCK_2);
     ident = IO_READ(SC64_REG_IDENT);
+    __osRestoreInt(saved_int_mask);
     if (ident == SC64_V2_IDENTIFIER) {
         return IODEV_SC64;
     }

@@ -11,6 +11,8 @@ PracticeMenuState gPracticeMenuState;
 
 void Practice_Init(void) {
     Practice_Late_Init();
+    /* P1 BLUE (royal): Practice_Late_Init returned. */
+    Lib_DebugFillScreen(0x003F);
 
     gPracticeScreen = PSCREEN_LEVEL_SELECT;
     Practice_LevelSelect_OnEnter();
@@ -77,16 +79,28 @@ void Practice_Init(void) {
      * Skip the cart-detect diagnostic on stock carts; SD-backed features
      * are already disabled there. */
     if (osMemSize >= 0x800000U) {
+        /* Cart detect only — iodev_sd_init() is DEFERRED to first save
+         * (see lib/fatfs/diskio.c disk_initialize). Calling iodev_sd_init
+         * at boot wedges the SC64 firmware on cold boot: the SD_OP_INIT
+         * command issued while audio thread's first PI DMAs are still
+         * in flight races for the PI bus, even with __osDisableInt
+         * guards on our command-issue dance. Deferring to runtime (when
+         * audio thread is in steady-state and PI traffic is quiet) avoids
+         * the race. UX tradeoff: first save attempt may stall up to 6s
+         * on a failing SD card (previously absorbed at boot). */
         iodev_id_t cart = iodev_detect();
-        iodev_result_t sd = iodev_sd_init();
-        osSyncPrintf("[iodev] cart=%d sd_init=%d\n", (int)cart, (int)sd);
+        osSyncPrintf("[iodev] cart=%d sd_init=DEFERRED to first use\n", (int)cart);
     } else {
         osSyncPrintf("[iodev] skipped (stock 4MB, no Expansion Pak)\n");
     }
+    /* P2 PURPLE: iodev_detect + iodev_sd_init returned. */
+    Lib_DebugFillScreen(0x803F);
 
     osSyncPrintf("[init] Practice_Save_Init enter\n");
     Practice_Save_Init();
     osSyncPrintf("[init] Practice_Save_Init exit\n");
+    /* P3 MAGENTA: Practice_Save_Init returned. */
+    Lib_DebugFillScreen(0xF83F);
     /* Practice_Sd_Init touches several .practice_late_core symbols
      * (iodev_*, slot_manager_set_sd_scratch) and Practice_Save_ScratchBase()
      * which lives in the Pak-only slot pool. Skip on stock 4MB. */
@@ -97,6 +111,8 @@ void Practice_Init(void) {
     } else {
         osSyncPrintf("[init] Practice_Sd_Init skipped (stock 4MB)\n");
     }
+    /* P4 TURQUOISE: Practice_Sd_Init returned. */
+    Lib_DebugFillScreen(0x07DF);
     osSyncPrintf("[init] practice_overlay_prime_build_ids enter\n");
     practice_overlay_prime_build_ids();
     osSyncPrintf("[init] practice_overlay_prime_build_ids exit\n");

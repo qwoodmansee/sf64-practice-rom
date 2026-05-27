@@ -453,7 +453,11 @@ void Game_Update(void) {
                 gNextGameState = MODS_BOOT_STATE;
 #endif
 #ifdef PRACTICE_ROM
+                /* B5 CYAN: state machine reached GSTATE_INIT, about to call Practice_Init. */
+                Lib_DebugFillScreen(0x07FF);
                 Practice_Init();
+                /* B6 GRAY: Practice_Init completed (final breadcrumb in normal boot). */
+                Lib_DebugFillScreen(0x8421);
                 gNextGameState = GSTATE_MAP;
 #endif
                 for (i = 0; i < 4; i++) {
