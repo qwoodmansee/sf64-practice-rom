@@ -156,6 +156,10 @@ static void on_load_canceled(void *ud) {
 
 void Practice_Sd_Init(void) {
     FRESULT r;
+#ifdef PRACTICE_BOOT_BREADCRUMBS
+    /* SD1 PINK: Practice_Sd_Init entered. */
+    Lib_DebugFillScreen(0xFB1F);
+#endif
     osSyncPrintf("[sd_init] osk_close enter\n");
     osk_close();
     osSyncPrintf("[sd_init] osk_close exit; file_browser_close enter\n");
@@ -163,6 +167,10 @@ void Practice_Sd_Init(void) {
     osSyncPrintf("[sd_init] file_browser_close exit; iodev_sd_was_ok enter\n");
     sSdAvailable = iodev_sd_was_ok();
     osSyncPrintf("[sd_init] iodev_sd_was_ok=%d\n", (s32) sSdAvailable);
+#ifdef PRACTICE_BOOT_BREADCRUMBS
+    /* SD2 WHITE: early closes + sSdAvailable check done. */
+    Lib_DebugFillScreen(0xFFFF);
+#endif
     if (!sSdAvailable) {
         iodev_id_t cart = iodev_detect();
         int res = iodev_sd_init_result();
@@ -188,8 +196,16 @@ void Practice_Sd_Init(void) {
         osSyncPrintf("[sd_init] sd_op_begin (f_mount) enter\n");
         sd_op_begin();
         osSyncPrintf("[sd_init] sd_op_begin exit; f_mkdir SD_ROOT enter\n");
+#ifdef PRACTICE_BOOT_BREADCRUMBS
+        /* SD3 BROWN: sd_op_begin (f_mount) returned. */
+        Lib_DebugFillScreen(0x8001);
+#endif
         r = f_mkdir(SD_ROOT);
         osSyncPrintf("[sd_init] f_mkdir SD_ROOT r=%d; f_mkdir SD_APP enter\n", (s32) r);
+#ifdef PRACTICE_BOOT_BREADCRUMBS
+        /* SD4 OLIVE: first f_mkdir(SD_ROOT) returned. */
+        Lib_DebugFillScreen(0x8401);
+#endif
         r = f_mkdir(SD_APP);
         osSyncPrintf("[sd_init] f_mkdir SD_APP r=%d; f_mkdir SD_DIR enter\n", (s32) r);
         r = f_mkdir(SD_DIR);

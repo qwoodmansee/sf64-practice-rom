@@ -71,9 +71,15 @@ DSTATUS disk_initialize(BYTE pdrv) {
     if (pdrv != VOL_SD) return STA_NOINIT | STA_NODISK;
     if (sFatfsDiskInited) return 0;
 
-    /* Use the cached result from Practice_Init's iodev_sd_init() call.
-     * Avoids re-issuing SC64_CMD_SD_CARD_OP / SD_OP_INIT on every f_open,
-     * which can stall the game thread for up to 6 seconds on a failing card. */
+    /* Lazy SD init. iodev_sd_init() is no longer called at boot (it wedges
+     * the SC64 firmware on cold boot when audio thread's first PI DMAs
+     * race for the bus). Instead, we attempt it once here on first f_open.
+     * iodev_sd_init_result() == -99 means "never attempted"; after the
+     * attempt, the result is cached and we don't re-issue SD_OP_INIT on
+     * subsequent f_opens (which would stall up to 6s on a failing card). */
+    if (iodev_sd_init_result() == -99) {
+        (void)iodev_sd_init();
+    }
     if (!iodev_sd_was_ok()) {
         return STA_NOINIT;
     }
