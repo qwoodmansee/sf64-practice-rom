@@ -142,7 +142,6 @@ void Lib_FillScreen(u8 setFill) {
     }
 }
 
-#ifdef PRACTICE_BOOT_BREADCRUMBS
 /* Diagnostic-only progressive breadcrumb. Paints a colored vertical stripe
  * in gFillBuffer's repeat-row at the next cursor slot, leaving prior
  * stripes intact. With osViRepeatLine(true) the row spans full screen
@@ -160,26 +159,15 @@ static u8 sDebugBcCursor = 0;
 
 void Lib_DebugFillScreen(u16 color) {
     s32 i;
-    s32 slot_x;
+    u16 *slot;
 
-    color |= 1;
-    gFillScreenColor = color;
-
-    /* First call: paint all 3 rows of gFillBuffer with the navy background.
-     * Subsequent calls preserve the buffer so prior stripes remain visible. */
-    if (sDebugBcCursor == 0) {
-        for (i = 0; i < 3 * SCREEN_WIDTH; i++) {
-            gFillBuffer[i] = DEBUG_BC_BG_COLOR;
-        }
-    }
-
+    /* gFillBuffer is zero-initialized BSS = black background. Paint a
+     * colored stripe at the next slot in the middle row (the one
+     * osViRepeatLine repeats for all 240 lines). */
     if (sDebugBcCursor < DEBUG_BC_SLOTS) {
-        /* osViSwapBuffer targets &gFillBuffer[SCREEN_WIDTH] (the middle row),
-         * which osViRepeatLine then repeats for all 240 lines. Paint the
-         * stripe in that middle row. */
-        slot_x = sDebugBcCursor * DEBUG_BC_SLOT_W;
+        slot = &gFillBuffer[SCREEN_WIDTH + sDebugBcCursor * DEBUG_BC_SLOT_W];
         for (i = 0; i < DEBUG_BC_SLOT_W; i++) {
-            gFillBuffer[SCREEN_WIDTH + slot_x + i] = color;
+            slot[i] = color | 1;
         }
     }
     sDebugBcCursor++;
@@ -189,4 +177,3 @@ void Lib_DebugFillScreen(u16 color) {
     osViRepeatLine(true);
     gFillScreen = true;
 }
-#endif

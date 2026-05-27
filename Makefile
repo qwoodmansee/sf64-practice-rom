@@ -173,13 +173,6 @@ ifeq ($(IODEV_DIAG_FATFS),1)
     BUILD_DEFINES   += -DIODEV_DIAG_FATFS=1
 endif
 
-# Cold-boot diagnostic breadcrumbs. Build with PRACTICE_BOOT_BREADCRUMBS=1
-# to paint distinct fill-screen colors at boot waypoints when osSyncPrintf
-# is silent (ISViewer disabled on cold boot). DIAGNOSTIC-ONLY — must not
-# ship in normal release builds.
-ifeq ($(PRACTICE_BOOT_BREADCRUMBS),1)
-    BUILD_DEFINES   += -DPRACTICE_BOOT_BREADCRUMBS=1
-endif
 
 
 # Phase 1 architectural probe for the practice late-segment dispatch model.

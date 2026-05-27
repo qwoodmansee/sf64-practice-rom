@@ -11,10 +11,8 @@ PracticeMenuState gPracticeMenuState;
 
 void Practice_Init(void) {
     Practice_Late_Init();
-#ifdef PRACTICE_BOOT_BREADCRUMBS
     /* P1 BLUE (royal): Practice_Late_Init returned. */
     Lib_DebugFillScreen(0x003F);
-#endif
 
     gPracticeScreen = PSCREEN_LEVEL_SELECT;
     Practice_LevelSelect_OnEnter();
@@ -95,18 +93,14 @@ void Practice_Init(void) {
     } else {
         osSyncPrintf("[iodev] skipped (stock 4MB, no Expansion Pak)\n");
     }
-#ifdef PRACTICE_BOOT_BREADCRUMBS
     /* P2 PURPLE: iodev_detect + iodev_sd_init returned. */
     Lib_DebugFillScreen(0x803F);
-#endif
 
     osSyncPrintf("[init] Practice_Save_Init enter\n");
     Practice_Save_Init();
     osSyncPrintf("[init] Practice_Save_Init exit\n");
-#ifdef PRACTICE_BOOT_BREADCRUMBS
     /* P3 MAGENTA: Practice_Save_Init returned. */
     Lib_DebugFillScreen(0xF83F);
-#endif
     /* Practice_Sd_Init touches several .practice_late_core symbols
      * (iodev_*, slot_manager_set_sd_scratch) and Practice_Save_ScratchBase()
      * which lives in the Pak-only slot pool. Skip on stock 4MB. */
@@ -117,10 +111,8 @@ void Practice_Init(void) {
     } else {
         osSyncPrintf("[init] Practice_Sd_Init skipped (stock 4MB)\n");
     }
-#ifdef PRACTICE_BOOT_BREADCRUMBS
     /* P4 TURQUOISE: Practice_Sd_Init returned. */
     Lib_DebugFillScreen(0x07DF);
-#endif
     osSyncPrintf("[init] practice_overlay_prime_build_ids enter\n");
     practice_overlay_prime_build_ids();
     osSyncPrintf("[init] practice_overlay_prime_build_ids exit\n");

@@ -244,17 +244,13 @@ void Graphics_ThreadEntry(void* arg0) {
     u8 validVIsPerFrame;
 
     osSyncPrintf("[boot] 30 graphics thread entry\n");
-#ifdef PRACTICE_BOOT_BREADCRUMBS
     /* B3 YELLOW: graphics thread entry. */
     Lib_DebugFillScreen(0xFFC1);
-#endif
     osSyncPrintf("[boot] 31 Game_Initialize enter (Practice_Init runs deeper inside game state machine)\n");
     Game_Initialize();
     osSyncPrintf("[boot] 32 Game_Initialize exit\n");
-#ifdef PRACTICE_BOOT_BREADCRUMBS
     /* B4 GREEN: Game_Initialize returned cleanly. */
     Lib_DebugFillScreen(0x07C1);
-#endif
     osSendMesg(&gSerialThreadMesgQueue, (OSMesg) SI_READ_CONTROLLER, OS_MESG_NOBLOCK);
     osSyncPrintf("[boot] 33 first frame: Graphics_InitializeTask + Game_Update enter\n");
     Graphics_InitializeTask(gSysFrameCount);
@@ -470,10 +466,8 @@ void Main_ThreadEntry(void* arg0) {
                    gSerialThreadStack + sizeof(gSerialThreadStack), 20);
     osStartThread(&gSerialThread);
 
-#ifdef PRACTICE_BOOT_BREADCRUMBS
     /* B2 ORANGE: main thread spawned sub-threads (audio/graphics/timer/serial). */
     Lib_DebugFillScreen(0xFD01);
-#endif
     osSyncPrintf("[boot] 28 Main_InitMesgQueues enter\n");
     Main_InitMesgQueues();
     osSyncPrintf("[boot] 29 Main_InitMesgQueues exit (entering main thread loop)\n");
@@ -515,10 +509,8 @@ void Idle_ThreadEntry(void* arg0) {
     osSyncPrintf("[boot] 15 Lib_FillScreen(1) enter (color=0x%04x)\n", gFillScreenColor);
     Lib_FillScreen(1);
     osSyncPrintf("[boot] 16 Lib_FillScreen(1) exit (screen now visible)\n");
-#ifdef PRACTICE_BOOT_BREADCRUMBS
     /* B1 RED: passed Lib_FillScreen. */
     Lib_DebugFillScreen(0xF801);
-#endif
     osSyncPrintf("[boot] 17 osCreatePiManager enter\n");
     osCreatePiManager(OS_PRIORITY_PIMGR, &gPiMgrCmdQueue, sPiMgrCmdBuff, ARRAY_COUNT(sPiMgrCmdBuff));
     osSyncPrintf("[boot] 18 osCreatePiManager exit\n");

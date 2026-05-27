@@ -156,10 +156,8 @@ static void on_load_canceled(void *ud) {
 
 void Practice_Sd_Init(void) {
     FRESULT r;
-#ifdef PRACTICE_BOOT_BREADCRUMBS
     /* SD1 PINK: Practice_Sd_Init entered. */
     Lib_DebugFillScreen(0xFB1F);
-#endif
     osSyncPrintf("[sd_init] osk_close enter\n");
     osk_close();
     osSyncPrintf("[sd_init] osk_close exit; file_browser_close enter\n");
@@ -167,10 +165,8 @@ void Practice_Sd_Init(void) {
     osSyncPrintf("[sd_init] file_browser_close exit; iodev_sd_was_ok enter\n");
     sSdAvailable = iodev_sd_was_ok();
     osSyncPrintf("[sd_init] iodev_sd_was_ok=%d\n", (s32) sSdAvailable);
-#ifdef PRACTICE_BOOT_BREADCRUMBS
     /* SD2 WHITE: early closes + sSdAvailable check done. */
     Lib_DebugFillScreen(0xFFFF);
-#endif
     if (!sSdAvailable) {
         iodev_id_t cart = iodev_detect();
         int res = iodev_sd_init_result();
@@ -196,16 +192,8 @@ void Practice_Sd_Init(void) {
         osSyncPrintf("[sd_init] sd_op_begin (f_mount) enter\n");
         sd_op_begin();
         osSyncPrintf("[sd_init] sd_op_begin exit; f_mkdir SD_ROOT enter\n");
-#ifdef PRACTICE_BOOT_BREADCRUMBS
-        /* SD3 BROWN: sd_op_begin (f_mount) returned. */
-        Lib_DebugFillScreen(0x8001);
-#endif
         r = f_mkdir(SD_ROOT);
         osSyncPrintf("[sd_init] f_mkdir SD_ROOT r=%d; f_mkdir SD_APP enter\n", (s32) r);
-#ifdef PRACTICE_BOOT_BREADCRUMBS
-        /* SD4 OLIVE: first f_mkdir(SD_ROOT) returned. */
-        Lib_DebugFillScreen(0x8401);
-#endif
         r = f_mkdir(SD_APP);
         osSyncPrintf("[sd_init] f_mkdir SD_APP r=%d; f_mkdir SD_DIR enter\n", (s32) r);
         r = f_mkdir(SD_DIR);
@@ -222,7 +210,34 @@ bool Practice_Sd_IsActive(void) {
     return osk_is_open() || file_browser_is_open();
 }
 
+/* Lazy SD init for first-use. iodev_sd_init() is deferred from boot to here
+ * to avoid the cold-boot SC64 firmware wedge — calling it at boot races
+ * with the audio thread's first soundbank DMAs and wedges the SC64
+ * firmware (red LED stuck on). By the time the user manually triggers a
+ * save/load, PI traffic is quiet and the race is gone. Idempotent: returns
+ * immediately if iodev_sd_init has been attempted before (cached result
+ * via sIodevSdInitResult sentinel). On success creates the SD_ROOT /
+ * SD_APP / SD_DIR directory tree (previously done at boot). On failure
+ * leaves sNoSdMsg as Practice_Sd_Init's boot-time error message. */
+static void Practice_Sd_LazyInit(void) {
+    FRESULT r;
+    if (sSdAvailable || iodev_sd_init_result() != -99) {
+        return;
+    }
+    (void)iodev_sd_init();
+    sSdAvailable = iodev_sd_was_ok();
+    if (sSdAvailable) {
+        sd_op_begin();
+        (void)f_mkdir(SD_ROOT);
+        (void)f_mkdir(SD_APP);
+        r = f_mkdir(SD_DIR);
+        (void)r;
+        sd_op_end();
+    }
+}
+
 void Practice_Sd_StartSave(void) {
+    Practice_Sd_LazyInit();
     if (!sSdAvailable || gPracticeSaveDisabled) {
         Practice_Hud_ShowStatus(sNoSdMsg, 255, 180, 80);
         return;
@@ -233,6 +248,7 @@ void Practice_Sd_StartSave(void) {
 
 void Practice_Sd_StartLoad(void) {
     int r;
+    Practice_Sd_LazyInit();
     if (!sSdAvailable || gPracticeSaveDisabled) {
         Practice_Hud_ShowStatus(sNoSdMsg, 255, 180, 80);
         return;
