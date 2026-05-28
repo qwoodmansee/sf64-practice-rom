@@ -12,8 +12,8 @@ export const MENU_CONTROLS = [
   { btns: ['A']              as BtnToken[], val: 'Confirm the highlighted option' },
   { btns: ['START']          as BtnToken[], val: 'Return to the title screen  (hold)' },
   { btns: ['L', '/', 'R']   as BtnToken[], val: 'Cycle the active save slot (shown in HUD)' },
-  { btns: ['Z']              as BtnToken[], val: 'Save to SD card',    note: '(!) NOT WORKING ON EVERDRIVE' },
-  { btns: ['Z', '+', 'B']   as BtnToken[], val: 'Load from SD card',  note: '(!) NOT WORKING ON EVERDRIVE' },
+  { btns: ['Z']              as BtnToken[], val: 'Save to SD card',    note: '(!) NOT WORKING ON ANY CART' },
+  { btns: ['Z', '+', 'B']   as BtnToken[], val: 'Load from SD card',  note: '(!) NOT WORKING ON ANY CART' },
 ];
 
 export const SUBMENU_NAV = [

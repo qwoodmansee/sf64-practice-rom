@@ -97,7 +97,7 @@ export const PATTERN_CARDS: PatternCard[] = [
       { btns: ['Z', '+', 'DR'],  text: 'Open menu' },
       { btns: ['Z'],             text: 'Save state to SD' },
       { btns: ['Z', '+', 'B'],   text: 'Load state from SD' },
-      { dim: true,               text: '(!) NOT WORKING ON EVERDRIVE' },
+      { dim: true,               text: '(!) NOT WORKING ON ANY CART' },
     ],
   },
 ];

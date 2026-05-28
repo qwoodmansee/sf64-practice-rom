@@ -19,5 +19,5 @@ export const MENU_OPTS = [
   { name: 'LEVELS',  dir: 'stick down',  desc: 'Warp to any level or checkpoint.' },
   { name: 'LOADOUT', dir: 'down-left',   desc: 'Change laser, bombs, lives, rings, health bar, wings, and wingman status.' },
   { name: 'CHEATS',  dir: 'stick left',  desc: 'Toggle cheats: INF HP, INF BOMBS, INF LIVES, INF BOOST, auto charge-shot.' },
-  { name: 'SD CARD', dir: 'up-left',     desc: '(!) NOT WORKING ON EVERDRIVE -- SD card save state I/O (in development).' },
+  { name: 'SD CARD', dir: 'up-left',     desc: '(!) NOT WORKING ON ANY CART -- SD card save state I/O (in development).' },
 ];

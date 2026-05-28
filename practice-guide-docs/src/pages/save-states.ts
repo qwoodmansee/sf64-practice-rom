@@ -57,7 +57,7 @@ export function pageSaveStates() {
   vspace(6);
   sectionHeader('SD CARD SAVES  (!)');
   callout(
-    '(!) SD card saving is NOT functional on EverDrive hardware. ' +
+    '(!) SD card saving is NOT functional on any cart hardware (SummerCart64 or EverDrive). ' +
     'The SD CARD option is visible in the menu but saving/loading to SD will silently fail. ' +
     'Use RAM save slots instead -- they work on all hardware but are cleared on power-off.',
     'warning'
