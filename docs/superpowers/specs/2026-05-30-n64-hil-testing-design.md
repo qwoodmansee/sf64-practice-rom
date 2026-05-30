@@ -41,6 +41,15 @@ The harness exposes the same `def run(ctx): ...` test shape as the mupen
 runner, so test authors keep their muscle memory. Tests live alongside
 existing tests at `sf64-practice-rom/tests/hil/test_*.py`.
 
+**Operability requirement (v1, hard):** the user is starting from a
+vibe-coded Pi that is currently unplugged. The harness must (a) detect
+every realistic setup failure in the chain — Pi off, network gone, token
+missing, sc64-api not running, deployer subprocess dead, cart unplugged,
+camera dead — and (b) for each, surface a single, unambiguous next-step
+with the exact command to run. The user should never be left wondering
+"why isn't this working." Cold-start to first-green-test must be
+trivially scriptable from `tests/hil/SETUP.md`.
+
 ## 3. Non-goals (v1, explicit)
 
 - **Controller input emulation.** The N64 joybus protocol requires
@@ -101,7 +110,7 @@ the cross-process coordination problem.
 │  Endpoints (all bearer-token auth    │
 │  except /health):                    │
 │    GET  /health                      │
-│    GET  /status                      │
+│    GET  /status (enriched, see §4.4) │
 │    POST /upload                      │
 │    GET  /logs?since=&until=&limit=   │
 │    GET  /camera/snapshot             │
@@ -129,19 +138,102 @@ snapshots through `GET /camera/snapshot` so callers have a single
 authenticated surface; the camera-stream `:8080` MJPEG remains available
 for live monitoring.
 
+#### 4.1.1 Enriched `/status` for preflight diagnostics
+
+`GET /status` returns enough state for the Mac-side `hil doctor` and
+inline preflight to diagnose every setup failure in one round trip:
+
+```json
+{
+  "ok": true,
+  "version": "0.2.0",
+  "sc64_server": "localhost:9064",
+  "upload_busy": false,
+  "user_id": null,
+
+  "debug_consumer": {
+    "running": true,
+    "pid": 1234,
+    "started_at_ms": 1716800000000,
+    "consecutive_failures": 0,
+    "last_line_ts_ms": 1716800015234,
+    "last_line_preview": "ISViewer init OK"
+  },
+
+  "ring_buffer": {
+    "in_memory_lines": 1287,
+    "in_memory_max": 50000,
+    "file_path": "/var/lib/sc64-api/logs/isv-2026-05-30.log.gz",
+    "file_bytes": 14387
+  },
+
+  "deployer": {
+    "binary": "/nix/store/.../bin/sc64deployer",
+    "version_string": "2.20.0",
+    "version_checked_at_ms": 1716800000000,
+    "has_qw_local_flush_patch": true,
+    "probe_ok": true,
+    "probe_last_run_ms": 1716800015000,
+    "probe_last_error": null
+  },
+
+  "tokens_file": {
+    "path": "/etc/sc64-api/tokens",
+    "owner": "root",
+    "group": "sc64api",
+    "mode": "0640",
+    "exists": true
+  },
+
+  "cart": {
+    "ftdi_present": true,
+    "ftdi_serial": "SC649T0HH2",
+    "ftdi_checked_at_ms": 1716800015234
+  },
+
+  "camera": {
+    "stream_reachable": true,
+    "last_snapshot_ms": 1716800010000
+  }
+}
+```
+
+Each field maps 1:1 to a doctor probe (§10). Notes:
+
+- `cart.ftdi_present` is derived from `/sys/bus/usb/devices/` lookup
+  of VID 0x0403 / PID 0x6014, run on every `/status` call (cheap).
+- `tokens_file.{owner,group,mode}` is read via `os.stat` on every
+  `/status` call.
+- `deployer.version_string` is captured by running
+  `sc64deployer --version` once at sc64-api boot AND refreshed every
+  60s by a background task — covers the case where the deployer is
+  rebuilt out from under sc64-api. `version_checked_at_ms` exposes
+  freshness so doctor can warn if stale.
+- `deployer.has_qw_local_flush_patch` is computed at boot from the
+  version string's known marker (falls back to "unknown" if the binary
+  changes shape).
+- `deployer.probe_ok` is the result of the most recent `sc64deployer
+  -r localhost:9064 info` invocation (run every 30s by a background
+  task) — this is what catches "FTDI device present but sc64-server
+  can't open it" failure modes that lsusb-level checks miss.
+
 ### 4.2 Mac-side test runner (`sf64-practice-rom`)
 
 ```
 sf64-practice-rom/
 ├── tools/
-│   ├── hil_test_runner.py     # mirrors m64p_test_runner.py shape
+│   ├── hil_test_runner.py     # mirrors m64p_test_runner.py shape;
+│   │                          #   subcommands: run (default), doctor
 │   └── hil/
 │       ├── __init__.py
 │       ├── ctx.py             # TestContext primitives
 │       ├── client.py          # httpx wrapper for sc64-api
+│       ├── doctor.py          # preflight probes + actionable diagnostics
 │       └── banner.py          # cart-wedged banner rendering
 ├── tests/
 │   └── hil/
+│       ├── SETUP.md           # cold-start: "I have a Pi" → "test is green"
+│       ├── README.md          # test-author docs (mirrors tests/README.md)
 │       ├── _artifacts/        # gitignored, per-run output dir
 │       ├── _fixtures/         # broken-ROM fixture etc.
 │       ├── _unit/             # local unit tests for ctx itself
@@ -173,6 +265,17 @@ def run(ctx):
 | `assert_log_contains(pattern)` | Records pass/fail in `ctx.passes`/`ctx.failures`. Queries `/logs` over `[upload_complete_ts, now]`. |
 | `assert_log_not_contains(pattern)` | Inverse; useful for "no PANIC line emitted". |
 | `assert_true(cond, msg)` / `assert_eq(a, b, msg)` | General-purpose, identical to mupen `ctx`. |
+
+**Inline preflight runs automatically before every test session** — the
+runner calls `doctor.probe_all()` first; if any probe fails, the session
+aborts with the doctor's actionable output rather than letting the test
+fail in a misleading way. To skip (e.g. when iterating on the doctor
+itself): `--skip-preflight`.
+
+**Standalone subcommand**: `python3 tools/hil_test_runner.py doctor`
+runs the same probes and prints a check-by-check report with fix
+commands. Intended for ad-hoc diagnostics: "is my Pi healthy right now?"
+See §10 for the full UX walkthrough.
 
 Auth: bearer token loaded from `SC64_API_TOKEN` env var, falling back to
 `~/.sc64-api-token` file (mode 600). Runner fails fast with a clear
@@ -311,18 +414,39 @@ real-hardware feedback given Pi is reachable):**
 
 ## 8. Implementation order
 
-Front-load the real-hardware round trip; defer mock infrastructure.
+Front-load: (a) the cold-start UX, because the Pi is currently
+unplugged and the user must be able to bring it back from nothing, and
+(b) the real-hardware round trip. Defer mock infrastructure and MCP.
 
-1. **Round-trip MVP** — Pi-side: add `DebugConsumer` + `LogRing` + `/logs`
+1. **Pi bring-up automation** — `pi-sc64/scripts/build-sd-image.sh`
+   (bakes SSH key into image; optional WiFi) and
+   `pi-sc64/scripts/bootstrap-pi.sh` (full / token-only / deployer
+   modes). Both must be idempotent against repeat runs. The
+   `nixos-rebuild --target-host` step depends on SSH being available,
+   which is why SD image build comes first. `tests/hil/SETUP.md`
+   ships at the END of this milestone (not in parallel) — written
+   after the bootstrap script has been dogfooded once against a real
+   cold-start, so SETUP.md describes what actually works rather than
+   what was planned.
+2. **Enriched `/status` + `hil doctor`** — implement the enriched
+   `/status` endpoint per §4.1.1, then build `tools/hil/doctor.py` with
+   all probes from §10. `doctor` must produce useful output even when
+   the Pi is completely unreachable (network probe is the first check
+   and has a meaningful "fix" line). Doctor is built BEFORE the test
+   primitives because preflight is the entry point to every test run.
+3. **Round-trip MVP** — Pi-side: `DebugConsumer` + `LogRing` + `/logs`
    + `/camera/snapshot`. Mac-side: minimal `ctx` with `upload_rom`,
    `wait_for_log`, `snapshot`. One test (`test_boot_smoke.py`) green
-   against the real cart.
-2. **Cart-wedge detection and banner** + the broken-ROM fixture + matching test.
-3. **JUnit emission**, `_artifacts/` layout, full assertion API, on-disk
-   ring buffer rotation, `/status` enrichment.
-4. **NixOS VM mock-cart test** + `--mock-cart` flag on sc64-api.
-5. **MCP server** with the four tools + smoke tests.
-6. **Documentation**: `tests/hil/README.md` mirroring the existing
+   against the real cart. Inline preflight via `doctor.probe_all()`
+   wired in.
+4. **Cart-wedge detection and banner** + the broken-ROM fixture +
+   matching test.
+5. **JUnit emission**, `_artifacts/` layout, full assertion API, on-disk
+   ring buffer rotation.
+6. **NixOS VM mock-cart test** + `--mock-cart` flag on sc64-api.
+7. **MCP server** with the four tools + smoke tests, including a
+   `hil_doctor()` tool that proxies the same diagnostics to Claude.
+8. **Documentation**: `tests/hil/README.md` mirroring the existing
    `tests/README.md`; addition to `sf64-practice-rom/CLAUDE.md` under a
    new "HIL tests" section.
 
@@ -339,7 +463,216 @@ Front-load the real-hardware round trip; defer mock infrastructure.
 - **MCP transport.** Stdio for v1 (local agent), HTTP MCP comes later if
   remote Claude sessions need it.
 
-## 10. References
+## 10. User experience from cold start
+
+The Pi is unplugged. The user has the box on their desk, the cart in a
+drawer, and a clone of this repo. This section is the contract for
+"what happens next."
+
+### 10.1 The cold-start journey
+
+```
+$ cd ~/code/sf64-practice-rom
+$ python3 tools/hil_test_runner.py doctor
+
+  HIL Doctor — diagnosing sc64pi.local
+  ─────────────────────────────────────
+  [1/7]  Network reachable                  ❌  FAIL
+
+  ╭─ Fix ──────────────────────────────────────────────────────────╮
+  │ Pi is unreachable at sc64pi.local.                             │
+  │                                                                │
+  │ Most common cause: the Pi is powered off or not on the LAN.    │
+  │                                                                │
+  │ Do this:                                                       │
+  │   1. Plug the Pi into power and Ethernet (or confirm WiFi).    │
+  │   2. Wait ~30s for boot + mDNS.                                │
+  │   3. Re-run: python3 tools/hil_test_runner.py doctor           │
+  │                                                                │
+  │ If still failing after 60s, see tests/hil/SETUP.md §"Network". │
+  ╰────────────────────────────────────────────────────────────────╯
+
+  Skipping remaining probes (network is a prerequisite).
+  exit 1
+```
+
+The user plugs the Pi in, waits, re-runs:
+
+```
+$ python3 tools/hil_test_runner.py doctor
+
+  [1/7]  Network reachable                  ✅
+  [2/7]  sc64-api responding (port 8064)    ✅
+  [3/7]  Bearer token configured locally    ❌  FAIL
+
+  ╭─ Fix ──────────────────────────────────────────────────────────╮
+  │ No bearer token found on this machine.                         │
+  │                                                                │
+  │ Run:                                                           │
+  │                                                                │
+  │   pi-sc64/scripts/bootstrap-pi.sh token-only sc64pi.local      │
+  │                                                                │
+  │ This provisions a fresh token on the Pi (correct ownership +   │
+  │ mode), saves it to ~/.sc64-api-token locally (mode 600), and   │
+  │ prints it once for your records.                               │
+  │                                                                │
+  │ Then re-run: python3 tools/hil_test_runner.py doctor           │
+  ╰────────────────────────────────────────────────────────────────╯
+```
+
+…and so on for each probe. The contract: **the user only ever has to
+read the first ❌ row and the Fix box under it.** They never have to
+read the spec, the source, or any other doc to know what to do next.
+
+### 10.2 The probes
+
+Probes are split into two phases. **Phase A** runs locally on the Mac
+and requires no Pi side state beyond network reachability and SSH.
+**Phase B** runs against a working sc64-api and uses the enriched
+`/status` endpoint.
+
+The split matters because Phase A's failures (especially SSH) must be
+diagnosable without making any sc64-api call — that's what makes the
+cold-start contract real.
+
+**Phase A — local + low-level Pi connectivity:**
+
+| # | Probe | Pass criterion | Fix on fail |
+|---|---|---|---|
+| 1 | Network reachable | TCP connect to `host:22` (SSH) and `host:8064` (HTTP) both succeed within 3s | Power-cycle / plug in Pi via **Ethernet** (WiFi setup is deferred to post-bootstrap); check LAN; verify mDNS resolves with `dscacheutil -q host -a name <host>` on macOS |
+| 2 | SSH works without password | `ssh -o BatchMode=yes -o ConnectTimeout=3 root@<host> true` exits 0 | Re-flash the SD card with your SSH key baked in: `pi-sc64/scripts/build-sd-image.sh --ssh-key ~/.ssh/id_ed25519.pub` (this is the only supported cold-start path — the SD image does NOT ship with a default root password). If the Pi is already provisioned but you've changed keys, edit `pi-sc64/hosts/pi/configuration.nix` (`users.users.root.openssh.authorizedKeys.keys`) and run `bootstrap-pi.sh full <host>` from the previous Mac. |
+| 3 | sc64-api responding | `GET /health` returns `{"ok": true}` | `ssh root@<host> systemctl status sc64-api` then `journalctl -u sc64-api -n 50` |
+
+**Phase B — token, services, hardware (all queryable via `/status`):**
+
+| # | Probe | Pass criterion | Fix on fail |
+|---|---|---|---|
+| 4 | Bearer token configured locally | `SC64_API_TOKEN` env OR `~/.sc64-api-token` (mode 600, non-empty) | Run `pi-sc64/scripts/bootstrap-pi.sh token-only <host>` — provisions a fresh token on the Pi + saves to `~/.sc64-api-token` in one command (requires probe 2 ✅) |
+| 5 | Token accepted by Pi | `GET /status` with bearer returns 200 | Regenerate via `bootstrap-pi.sh token-only` |
+| 6 | Token file mode/owner on Pi correct | `/status.tokens_file.owner == "root"` AND `.group == "sc64api"` AND `.mode == "0640"` | `ssh root@<host> 'chown root:sc64api /etc/sc64-api/tokens && chmod 640 /etc/sc64-api/tokens'` (this is the single most documented pi-sc64 footgun — must be its own probe, not buried in #5's fix line) |
+| 7 | Cart FTDI device present at USB | `/status.cart.ftdi_present == true` (sysfs lookup of VID 0x0403 / PID 0x6014) | Plug in SC64 USB to Pi; verify with `ssh root@<host> lsusb \| grep 0403`; check udev rule from `sc64-server.nix` |
+| 8 | sc64-server can actually open the FTDI device | `/status.deployer.probe_ok == true` (Pi-side probe runs `sc64deployer -r localhost:9064 info` with 5s timeout) | Likely cause: `sc64-server` systemd unit user not in `sc64` group OR udev rule didn't apply (reboot Pi); fix command: `ssh root@<host> 'systemctl restart sc64-server && journalctl -u sc64-server -n 50'` |
+| 9 | Debug consumer running | `/status.debug_consumer.running == true` AND `consecutive_failures < 3` | If consecutive_failures ≥ 3: `ssh root@<host> journalctl -u sc64-api -n 100 \| grep DebugConsumer` for root cause |
+| 10 | Camera responding | `/status.camera.stream_reachable == true` | `ssh root@<host> systemctl status camera-stream`. Also: verify ribbon cable orientation — on Pi 3B, the **blue stripe faces the Ethernet jack** (this is the camera footgun) |
+
+**Warn-only (do not block test runs):**
+
+| # | Probe | Pass criterion | Fix on fail |
+|---|---|---|---|
+| W1 | Deployer has `qw-local` stdout-flush patch | `/status.deployer.has_qw_local_flush_patch == true` (computed from running `sc64deployer --version` at boot and matching a known marker) | Rebuild deployer from `qw-local` branch on Pi. Without this, IS-Viewer lines may arrive in bursts and `wait_for_log` will appear intermittent. |
+| W2 | A recent IS-Viewer line was seen | `/status.debug_consumer.last_line_ts_ms` within last 60s (only meaningful if the cart has booted recently) | Press N64 reset to reboot the ROM. Purely informational. |
+
+**Dependency graph:** failures in 1 short-circuit 2–10; failures in 2
+short-circuit 3–10 (since their fixes all require SSH); failures in 3
+short-circuit 4–10. Phases A and B are reported separately in the
+doctor output so the user can see exactly where the chain breaks.
+
+### 10.3 SD image build and bootstrap scripts
+
+The bootstrap problem is resolved by **moving SSH key + WiFi config into
+the SD image itself**. There is no way to make a `nixos-rebuild
+--target-host` flow idempotent against a freshly-flashed Pi without
+pre-shared SSH access. So we bake the keys at image build time.
+
+**`pi-sc64/scripts/build-sd-image.sh`** — builds the SD image with the
+user's SSH key embedded:
+
+```
+build-sd-image.sh [--ssh-key <path>] [--wifi-ssid <ssid> --wifi-psk <psk>]
+```
+
+Reads `~/.ssh/id_ed25519.pub` by default, embeds into
+`users.users.root.openssh.authorizedKeys.keys` via a per-build Nix
+module overlay. Optionally embeds WiFi credentials (but the cold-start
+default is **Ethernet only** — see §10.4). Outputs the SD image path
+and the `dd` command to flash.
+
+**`pi-sc64/scripts/bootstrap-pi.sh`** — runs *after* the user has
+flashed and booted the Pi. Modes:
+
+```
+bootstrap-pi.sh full <host>         # all of the below, idempotent
+bootstrap-pi.sh token-only <host>   # just provision the bearer token
+bootstrap-pi.sh deployer <host>     # rebuild deployer from qw-local
+```
+
+The `full` mode performs:
+
+1. SSH connectivity check (Phase A probe 2 equivalent). Fails with the
+   exact `build-sd-image.sh` command to re-flash with the right key.
+2. `nixos-rebuild switch --flake .#pi --target-host root@<host>` —
+   safe because SSH was guaranteed by step 1.
+3. Generates a fresh bearer token, writes to `/etc/sc64-api/tokens` on
+   the Pi (mode 640, `root:sc64api`) and to `~/.sc64-api-token` on the
+   Mac (mode 600). The token is generated locally (`openssl rand -hex
+   32`) and sent over SSH; no `sudo bash -c '...'` chains.
+4. Rebuilds `sc64deployer` from `qw-local` branch on the Pi, restarts
+   `sc64-server` and `sc64-api`.
+5. Final probe sweep using the same doctor probes A1–B10 against the
+   Pi; surfaces any remaining issues with the same fix boxes.
+6. Tells the user: "All set. Plug the cart in and run
+   `python3 tools/hil_test_runner.py doctor` from sf64-practice-rom."
+
+`token-only` is the smallest unit and is what doctor probe 4's fix
+line tells the user to run — it does not require a full
+`nixos-rebuild`.
+
+### 10.4 `tests/hil/SETUP.md`
+
+A linear page with one explicitly acknowledged branch (Ethernet vs
+WiFi at first boot). Cold-start steps:
+
+1. **Hardware checklist**: Pi 3B + SD card (8GB+), Pi Camera v1/v2/v3,
+   SC64 cart, N64, video-capture path (camera pointed at TV — diagram).
+   Camera ribbon orientation: blue stripe faces the Pi's Ethernet jack.
+2. **Build and flash the SD image**: `pi-sc64/scripts/build-sd-image.sh
+   --ssh-key ~/.ssh/id_ed25519.pub`. The script's output includes the
+   exact `dd` command (Mac users) or `nix run nixpkgs#zstd` +
+   Raspberry Pi Imager workflow. Inlines the six steps from the
+   existing `NixOS Pi SD image build on macOS` pattern memory
+   (linux-builder VM, generic kernel, redistributable firmware, WiFi
+   country code, `nix build`, flash).
+3. **First boot**: cold-start uses **Ethernet only** (no WiFi). Plug Pi
+   into your router via Ethernet. Wait ~30s for boot + mDNS. SSH should
+   work immediately: `ssh root@sc64pi.local`. WiFi-only setups: see
+   §10.5 (optional post-bootstrap).
+4. **Run the bootstrap script**: `pi-sc64/scripts/bootstrap-pi.sh full
+   sc64pi.local`. This handles nixos-rebuild, token provisioning,
+   deployer build from `qw-local`. ~5–10 min on first run.
+5. **Plug in the cart and camera.**
+6. **Run the doctor**: `python3 tools/hil_test_runner.py doctor` —
+   expect all 10 blocking probes green (W1/W2 may show as warnings
+   until the cart is booted).
+7. **Run your first test**: `python3 tools/hil_test_runner.py run
+   tests/hil/test_boot_smoke.py`.
+8. **If anything fails**: the doctor's first ❌ row and its Fix box are
+   authoritative. SETUP.md does not duplicate troubleshooting.
+
+### 10.5 WiFi switchover (optional, post-bootstrap)
+
+After step 7 succeeds on Ethernet, users who want headless WiFi can
+either (a) re-flash with `build-sd-image.sh --wifi-ssid X --wifi-psk Y`
+or (b) edit `pi-sc64/hosts/pi/configuration.nix` to add wireless config
+and re-bootstrap. This is intentionally separate from cold-start
+because the WiFi country-code footgun (from prior pattern memory) is
+real and Ethernet eliminates that class of failure during initial
+bring-up.
+
+This split (§10.4 = "no WiFi for cold start" / §10.5 = "WiFi later")
+is the one acknowledged branch in SETUP.md. It is acknowledged
+explicitly rather than hidden, per the spec's operability commitment.
+
+### 10.6 Overlap with §6
+
+Section 6 covers **runtime failures of a working, bootstrapped
+system**: cart wedged mid-session, debug consumer crashes, etc.
+Section 11 covers **cold-start failures** before the system is
+bootstrapped: SSH not configured, token never provisioned, image
+never flashed. A reader who encounters "Pi unreachable" in both
+sections should consult §10 if they're doing first-time setup and §6
+if they have a previously-working setup that just stopped responding.
+
+## 11. References
 
 - SF64 ROM repo: `sf64-practice-rom/` (this repo)
 - Pi NixOS flake: `pi-sc64/`
