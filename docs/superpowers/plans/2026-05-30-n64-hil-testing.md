@@ -4104,3 +4104,1368 @@ EOF
 Once all four hold, Chunk 5 is done. Restore your token and proceed to Chunk 6.
 
 ---
+
+## Chunk 6: Cart-wedge banner + full assertion suite + JUnit + remaining tests
+
+**Goal:** Make the runner production-quality: ship the cart-wedge banner with interactive Enter-to-retry and CI `EX_TEMPFAIL` (75) semantics per spec §6, complete the ctx assertion API (`assert_log_not_contains`, `assert_eq`, `assert_neq`), emit JUnit XML for CI consumption, ship the two remaining canonical tests (`test_isv_protocol_regression.py` and `test_cart_wedge_detection.py`) plus the broken-ROM fixture that the wedge test depends on.
+
+**Files this chunk creates/modifies:**
+
+- Create: `sf64-practice-rom/tools/hil/banner.py`
+- Create: `sf64-practice-rom/tools/hil/junit.py`
+- Modify: `sf64-practice-rom/tools/hil/ctx.py` — add `assert_log_not_contains`, `assert_eq`, `assert_neq`
+- Modify: `sf64-practice-rom/tools/hil_test_runner.py` — wire banner on `CartWedgedError`, JUnit emission, `EX_TEMPFAIL` exit
+- Create: `sf64-practice-rom/tests/hil/_fixtures/build_wedge_rom.py`
+- Create: `sf64-practice-rom/tests/hil/test_isv_protocol_regression.py`
+- Create: `sf64-practice-rom/tests/hil/test_cart_wedge_detection.py`
+
+### Task 6.1: Implement `hil/banner.py`
+
+**Files:**
+- Create: `sf64-practice-rom/tools/hil/banner.py`
+
+- [ ] **Step 1: Write the file**
+
+```python
+"""Cart-wedge banner — interactive vs CI mode per spec §6."""
+from __future__ import annotations
+
+import os
+import sys
+
+EX_TEMPFAIL = 75  # /usr/include/sysexits.h
+
+
+CART_WEDGED_BANNER = """
+╔══════════════════════════════════════════════════════════════╗
+║                                                              ║
+║   ⚠   CART NOT RESPONDING                                    ║
+║                                                              ║
+║   The ROM uploaded successfully but the N64 has not emitted  ║
+║   any IS-Viewer output within the cart-alive timeout.        ║
+║                                                              ║
+║   👉  Please walk over and POWER-CYCLE the N64 (off → on).   ║
+║                                                              ║
+║   After power-cycling:                                       ║
+║     • Interactive mode: press [Enter] to retry this test     ║
+║     • CI mode: rerun the failed test once cart is back       ║
+║                                                              ║
+║   Press Ctrl+C to abort the whole session.                   ║
+║                                                              ║
+╚══════════════════════════════════════════════════════════════╝
+"""
+
+
+def is_interactive() -> bool:
+    """True iff stdin is a TTY (Enter-to-retry mode)."""
+    return sys.stdin.isatty()
+
+
+def render_banner() -> str:
+    return CART_WEDGED_BANNER
+
+
+def prompt_retry() -> bool:
+    """Print banner and wait for Enter (retry) or EOF / Ctrl+C (abort).
+
+    Returns True if user pressed Enter, False if abort.
+    """
+    print(render_banner(), file=sys.stderr)
+    try:
+        input("> ")  # block on stdin
+        return True
+    except (EOFError, KeyboardInterrupt):
+        return False
+
+
+def emit_ci_fail() -> None:
+    """Print banner to stderr; caller exits with EX_TEMPFAIL."""
+    print(render_banner(), file=sys.stderr)
+```
+
+- [ ] **Step 2: Smoke-test**
+
+Run: `python3 -c "from tools.hil.banner import render_banner; print(render_banner())"`
+
+Expected: the banner prints with box-drawing characters intact.
+
+### Task 6.2: Extend `hil/ctx.py` with remaining assertions
+
+**Files:**
+- Modify: `sf64-practice-rom/tools/hil/ctx.py`
+
+- [ ] **Step 1: Add methods to TestContext**
+
+Append to the `TestContext` class (above `assert_true`):
+
+```python
+    def assert_log_not_contains(self, pattern: str, msg: str = "") -> None:
+        """Re-query /logs and search for pattern. Record pass if NO match."""
+        if self.upload_complete_ts is None:
+            self.failures.append("assert_log_not_contains called before upload_rom")
+            return
+        import re
+        lines = self.client.get_logs(since_ms=self.upload_complete_ts)
+        regex = re.compile(pattern)
+        matches = [l for l in lines if regex.search(l["line"])]
+        if not matches:
+            self.passes.append(msg or f"no match for {pattern!r}")
+        else:
+            sample = matches[0]["line"]
+            self.failures.append(
+                f"{msg or pattern}: unexpected match in {len(matches)} lines, "
+                f"first: {sample!r}"
+            )
+
+    def assert_eq(self, actual, expected, msg: str = "") -> None:
+        if actual == expected:
+            self.passes.append(msg)
+        else:
+            self.failures.append(f"{msg}: expected {expected!r}, got {actual!r}")
+            print(f"  FAIL: {msg}: expected {expected!r}, got {actual!r}")
+
+    def assert_neq(self, actual, expected, msg: str = "") -> None:
+        if actual != expected:
+            self.passes.append(msg)
+        else:
+            self.failures.append(f"{msg}: expected NOT {expected!r}")
+            print(f"  FAIL: {msg}: expected NOT {expected!r}")
+```
+
+- [ ] **Step 2: Extend unit tests**
+
+Append to `tests/hil/_unit/test_ctx.py`:
+
+```python
+def test_assert_log_not_contains_passes_on_clean_log(tmp_path):
+    client = MagicMock(spec=HilClient)
+    client.upload_rom.return_value = {"upload_complete_ts": 0}
+    client.get_logs.return_value = [{"ts_ms": 1, "line": "READY"}]
+    ctx = make_ctx(tmp_path, client)
+    rom = tmp_path / "x.z64"; rom.write_bytes(b"\x00")
+    ctx.upload_rom(str(rom))
+    ctx.assert_log_not_contains(r"PANIC", "no panic")
+    assert "no panic" in ctx.passes
+
+
+def test_assert_log_not_contains_fails_on_match(tmp_path):
+    client = MagicMock(spec=HilClient)
+    client.upload_rom.return_value = {"upload_complete_ts": 0}
+    client.get_logs.return_value = [{"ts_ms": 1, "line": "PANIC at 0xdead"}]
+    ctx = make_ctx(tmp_path, client)
+    rom = tmp_path / "x.z64"; rom.write_bytes(b"\x00")
+    ctx.upload_rom(str(rom))
+    ctx.assert_log_not_contains(r"PANIC", "no panic")
+    assert any("PANIC" in f for f in ctx.failures)
+
+
+def test_assert_eq_records_pass_fail(tmp_path):
+    client = MagicMock(spec=HilClient)
+    ctx = make_ctx(tmp_path, client)
+    ctx.assert_eq(1, 1, "ones equal")
+    ctx.assert_eq(1, 2, "should fail")
+    assert "ones equal" in ctx.passes
+    assert any("should fail" in f for f in ctx.failures)
+```
+
+Run: `PYTHONPATH=. python3 -m pytest tests/hil/_unit/test_ctx.py -v`
+
+Expected: all pass.
+
+### Task 6.3: Implement `hil/junit.py`
+
+**Files:**
+- Create: `sf64-practice-rom/tools/hil/junit.py`
+
+- [ ] **Step 1: Write the file**
+
+```python
+"""JUnit XML emission for HIL test runs.
+
+Schema follows the common Jenkins/Bamboo flavor — most CI systems accept it.
+"""
+from __future__ import annotations
+
+import html
+import time
+from dataclasses import dataclass, field
+from pathlib import Path
+
+
+@dataclass
+class JUnitTestCase:
+    name: str
+    duration_s: float
+    passes: list[str] = field(default_factory=list)
+    failures: list[str] = field(default_factory=list)
+    skipped: bool = False
+    skip_reason: str = ""
+
+    @property
+    def passed(self) -> bool:
+        return not self.failures and not self.skipped
+
+
+@dataclass
+class JUnitSuite:
+    name: str
+    cases: list[JUnitTestCase] = field(default_factory=list)
+    started_at: float = field(default_factory=time.time)
+
+    @property
+    def total_duration_s(self) -> float:
+        return sum(c.duration_s for c in self.cases)
+
+    @property
+    def n_failures(self) -> int:
+        return sum(1 for c in self.cases if c.failures)
+
+    @property
+    def n_skipped(self) -> int:
+        return sum(1 for c in self.cases if c.skipped)
+
+
+def render(suite: JUnitSuite) -> str:
+    def _xml_escape(s: str) -> str:
+        return html.escape(s, quote=True)
+
+    out = []
+    out.append('<?xml version="1.0" encoding="UTF-8"?>')
+    out.append(
+        f'<testsuite name="{_xml_escape(suite.name)}" '
+        f'tests="{len(suite.cases)}" '
+        f'failures="{suite.n_failures}" '
+        f'skipped="{suite.n_skipped}" '
+        f'time="{suite.total_duration_s:.3f}">'
+    )
+    for c in suite.cases:
+        out.append(
+            f'  <testcase name="{_xml_escape(c.name)}" '
+            f'time="{c.duration_s:.3f}">'
+        )
+        if c.skipped:
+            out.append(f'    <skipped message="{_xml_escape(c.skip_reason)}"/>')
+        for f in c.failures:
+            out.append(
+                f'    <failure message="{_xml_escape(f)}">{_xml_escape(f)}</failure>'
+            )
+        out.append("  </testcase>")
+    out.append("</testsuite>")
+    return "\n".join(out)
+
+
+def write(suite: JUnitSuite, path: Path) -> None:
+    path.write_text(render(suite), encoding="utf-8")
+```
+
+- [ ] **Step 2: Unit tests**
+
+Create `sf64-practice-rom/tests/hil/_unit/test_junit.py`:
+
+```python
+"""Unit tests for hil.junit XML emission."""
+from __future__ import annotations
+
+from tools.hil.junit import JUnitSuite, JUnitTestCase, render
+
+
+def test_render_passing_suite():
+    s = JUnitSuite(name="hil", cases=[
+        JUnitTestCase(name="t1", duration_s=0.5, passes=["ok"]),
+    ])
+    xml = render(s)
+    assert '<testsuite ' in xml
+    assert 'tests="1"' in xml
+    assert 'failures="0"' in xml
+
+
+def test_failure_emits_failure_node():
+    s = JUnitSuite(name="hil", cases=[
+        JUnitTestCase(name="t1", duration_s=0.1, failures=["boom"]),
+    ])
+    xml = render(s)
+    assert '<failure ' in xml
+    assert "boom" in xml
+    assert 'failures="1"' in xml
+
+
+def test_xml_escapes_special_chars():
+    s = JUnitSuite(name="hil", cases=[
+        JUnitTestCase(name="t<1>", duration_s=0.1, failures=['x"y\'z<&>']),
+    ])
+    xml = render(s)
+    assert "<1>" not in xml.split("<testcase")[1].split(">")[0]
+    assert "&lt;" in xml or "&amp;" in xml
+```
+
+Run: `PYTHONPATH=. python3 -m pytest tests/hil/_unit/test_junit.py -v`
+
+### Task 6.4: Wire banner + JUnit + EX_TEMPFAIL into the runner
+
+**Files:**
+- Modify: `sf64-practice-rom/tools/hil_test_runner.py`
+
+- [ ] **Step 1: Update the imports**
+
+```python
+from tools.hil.banner import is_interactive, prompt_retry, emit_ci_fail, EX_TEMPFAIL
+from tools.hil.junit import JUnitSuite, JUnitTestCase, write as write_junit
+```
+
+- [ ] **Step 2: Update `cmd_run` to track timings, build the suite, handle CartWedged with retry/EX_TEMPFAIL**
+
+Replace the existing test-loop body with:
+
+```python
+    cfg = ClientConfig(host=args.host)
+    suite = JUnitSuite(name="hil")
+    saw_wedge = False
+
+    for tp in test_paths:
+        test_name = __import__("pathlib").Path(tp).stem
+        print(f"\n  >> {test_name}")
+        mod = _load_test_module(tp)
+        if not hasattr(mod, "run"):
+            print(f"     SKIP (no `def run(ctx)`)")
+            suite.cases.append(JUnitTestCase(name=test_name, duration_s=0.0,
+                                             skipped=True, skip_reason="no run() function"))
+            continue
+
+        def _execute() -> tuple[list[str], list[str], float]:
+            import time as _t
+            start = _t.time()
+            with HilClient(cfg) as client:
+                ctx = TestContext(client=client, artifacts_dir=artifacts_root, test_name=test_name)
+                try:
+                    mod.run(ctx)
+                except CartWedgedError as e:
+                    ctx.failures.append(f"cart wedged: {e}")
+                    raise
+                except Exception as e:
+                    import traceback
+                    traceback.print_exc()
+                    ctx.failures.append(f"exception: {e}")
+                return list(ctx.passes), list(ctx.failures), _t.time() - start
+
+        try:
+            passes, failures, dur = _execute()
+        except CartWedgedError as e:
+            saw_wedge = True
+            if is_interactive():
+                if prompt_retry():
+                    print("  Retrying after power-cycle...")
+                    try:
+                        passes, failures, dur = _execute()
+                    except CartWedgedError as e2:
+                        passes, failures, dur = [], [f"cart wedged twice: {e2}"], 0.0
+                else:
+                    print("  Aborted by user.")
+                    return EX_TEMPFAIL
+            else:
+                # CI mode: print banner once, exit EX_TEMPFAIL
+                emit_ci_fail()
+                suite.cases.append(JUnitTestCase(
+                    name=test_name, duration_s=0.0,
+                    failures=[f"cart wedged: {e}"],
+                ))
+                write_junit(suite, artifacts_root / "junit.xml")
+                return EX_TEMPFAIL
+
+        for p in passes:
+            print(f"     PASS: {p}")
+        for f in failures:
+            print(f"     FAIL: {f}")
+        suite.cases.append(JUnitTestCase(
+            name=test_name, duration_s=dur,
+            passes=passes, failures=failures,
+        ))
+
+    write_junit(suite, artifacts_root / "junit.xml")
+    print(f"\n  JUnit: {artifacts_root}/junit.xml")
+    if suite.n_failures > 0:
+        return 1
+    return 0
+```
+
+- [ ] **Step 3: Smoke-test against the live cart**
+
+Run: `make hil-test tests/hil/test_boot_smoke.py`
+
+Expected: same as Chunk 5 plus a `junit.xml` written under the artifacts dir.
+
+### Task 6.5: Build the wedge-ROM fixture via a Make target
+
+**Files:**
+- Modify: `sf64-practice-rom/Makefile` — add `hil-wedge-fixture` target
+- Create: `sf64-practice-rom/tests/hil/_fixtures/build_wedge_rom.py` (thin wrapper that invokes the Make target)
+
+The wedge fixture is a ROM that boots normally on the N64 but emits zero IS-Viewer output. This produces "cart alive but silent" — the exact precondition for `CartWedgedError`.
+
+**Implementation approach:** rebuild the ROM with `MODS_ISVIEWER=0`. From `include/mods.h`, `MODS_ISVIEWER` gates the entire IS-Viewer subsystem; setting it to 0 stubs `ISViewer_Init` and `ISViewer_Write` into no-ops. The byte-zeroing approach considered earlier was wrong: the `IS64` token lives in the SC64 firmware-emulated register at cart-bus `0x13FF0000`, **not** in ROM bytes.
+
+- [ ] **Step 1: Add a Make target to build the wedge variant**
+
+In `sf64-practice-rom/Makefile`, add:
+
+```makefile
+.PHONY: hil-wedge-fixture
+hil-wedge-fixture:
+	@echo "==> Building wedge fixture (MODS_ISVIEWER=0)..."
+	@# Re-build with MODS_ISVIEWER overridden via CPPFLAGS.
+	@# We have to clear .o files first because the build system doesn't
+	@# track CPPFLAGS dependencies. This is a one-off, not part of the
+	@# normal rebuild cycle.
+	rm -rf build/src/mods/isviewer.o build/src/sys/sys_main.o \
+	       build/starfox64.us.rev1.elf \
+	       build/starfox64.us.rev1.uncompressed.z64
+	$(MAKE) practice -j4 PRACTICE_CPPFLAGS="-DMODS_ISVIEWER_OVERRIDE=0"
+	@mkdir -p tests/hil/_fixtures
+	@cp build/starfox64.us.rev1.uncompressed.z64 tests/hil/_fixtures/wedge_rom.z64
+	@echo "==> Wrote tests/hil/_fixtures/wedge_rom.z64"
+	@echo "    Restoring normal build..."
+	@rm -rf build/src/mods/isviewer.o build/src/sys/sys_main.o \
+	        build/starfox64.us.rev1.elf \
+	        build/starfox64.us.rev1.uncompressed.z64
+	$(MAKE) practice -j4
+```
+
+- [ ] **Step 2: Adjust `include/mods.h` to honor the override**
+
+Edit `sf64-practice-rom/include/mods.h`. Find the existing:
+
+```c
+#define MODS_ISVIEWER 1
+```
+
+Replace with:
+
+```c
+#ifdef MODS_ISVIEWER_OVERRIDE
+#define MODS_ISVIEWER MODS_ISVIEWER_OVERRIDE
+#else
+#define MODS_ISVIEWER 1
+#endif
+```
+
+This preserves the static-invariant check (`check_isviewer_sc64()` in `tools/practice_invariants.py` will see `MODS_ISVIEWER 1` literal because grep doesn't expand macros). If the invariant grep is exact-line, it may need a one-line tweak — adjust if it complains.
+
+- [ ] **Step 3: Plumb `PRACTICE_CPPFLAGS` through the Makefile if not already**
+
+If `PRACTICE_CPPFLAGS` isn't already passed through to the compile commands, add to the relevant `CFLAGS` / `CPPFLAGS` invocation in the Makefile:
+
+```makefile
+CPPFLAGS += $(PRACTICE_CPPFLAGS)
+```
+
+(Locate the existing `CPPFLAGS +=` or `CFLAGS +=` line under the `PRACTICE_ROM=1` branch.)
+
+- [ ] **Step 4: Write the thin Python wrapper**
+
+```python
+"""Build the wedge ROM fixture by invoking `make hil-wedge-fixture`.
+
+The actual build is a Makefile target — see Makefile §hil-wedge-fixture.
+This wrapper exists so the Chunk 6 acceptance test and CI can invoke
+`python3 tests/hil/_fixtures/build_wedge_rom.py` consistently with
+how the other fixtures are built.
+"""
+from __future__ import annotations
+
+import subprocess
+import sys
+from pathlib import Path
+
+
+def main() -> int:
+    repo_root = Path(__file__).resolve().parents[3]
+    proc = subprocess.run(["make", "hil-wedge-fixture"], cwd=repo_root)
+    if proc.returncode != 0:
+        return proc.returncode
+    fixture = repo_root / "tests/hil/_fixtures/wedge_rom.z64"
+    if not fixture.exists():
+        print(f"Make target succeeded but {fixture} missing", file=sys.stderr)
+        return 1
+    print(f"OK: {fixture} ({fixture.stat().st_size} bytes)")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+```
+
+- [ ] **Step 5: Build the fixture and verify**
+
+```bash
+cd ~/code/sf64-practice-rom
+make practice -j4  # ensure the normal build is in place first
+python3 tests/hil/_fixtures/build_wedge_rom.py
+ls -la tests/hil/_fixtures/wedge_rom.z64
+```
+
+Expected: fixture file is written; the Make target also restores the normal `build/...uncompressed.z64` at the end so subsequent normal tests still work. Size of the wedge fixture should be the same as the practice ROM (the IS-Viewer module stub is small).
+
+### Task 6.6: Write `test_cart_wedge_detection.py`
+
+**Files:**
+- Create: `sf64-practice-rom/tests/hil/test_cart_wedge_detection.py`
+
+- [ ] **Step 1: Write the test**
+
+```python
+"""Confirm the runner produces the cart-wedge banner and EX_TEMPFAIL.
+
+This test uploads a deliberately-broken ROM (MODS_ISVIEWER=0) that
+boots but emits no IS-Viewer output. The expected behavior is that
+ctx.upload_rom raises CartWedgedError — and we want that exception
+to propagate to the runner so the runner can drive its banner +
+EX_TEMPFAIL exit path. The wrapper script
+tests/hil/_fixtures/run_wedge_in_ci.sh runs this test
+non-interactively and asserts the runner exits 75.
+
+CRITICAL: this test must NOT catch CartWedgedError. The runner's
+catch in cmd_run is the contract. If this body catches and converts
+to a pass, the runner sees ctx.failures == [] → exit 0, and the
+wrapper script's exit-code assertion (expect 75) fails.
+
+The pre-flight check (fixture exists?) is the only failure mode this
+test asserts on directly.
+"""
+from __future__ import annotations
+
+import os
+
+WEDGE_ROM = "tests/hil/_fixtures/wedge_rom.z64"
+
+
+def run(ctx):
+    if not os.path.isfile(WEDGE_ROM):
+        ctx.failures.append(
+            f"wedge fixture not built — run "
+            f"`python3 tests/hil/_fixtures/build_wedge_rom.py`"
+        )
+        return
+
+    # Expected to raise CartWedgedError. Do not catch — the runner
+    # catches it, prints the banner, and exits EX_TEMPFAIL.
+    ctx.upload_rom(WEDGE_ROM)
+
+    # If we reach here, the fixture failed to actually wedge the cart
+    # (it printed something). Record a failure so the test surfaces.
+    ctx.failures.append(
+        "Expected CartWedgedError but upload succeeded silently — "
+        "is the wedge fixture actually wedging the cart?"
+    )
+```
+
+- [ ] **Step 2: Add CI wrapper script for the EX_TEMPFAIL check**
+
+Create `sf64-practice-rom/tests/hil/_fixtures/run_wedge_in_ci.sh`:
+
+```bash
+#!/usr/bin/env bash
+# Verifies the runner exits with EX_TEMPFAIL (75) when a wedged cart
+# is detected in non-interactive (CI) mode.
+
+set -e
+cd "$(dirname "$0")/../../.."
+
+# Disable stdin TTY to simulate CI
+echo "" | PYTHONPATH=. python3 tools/hil_test_runner.py run \
+    tests/hil/test_cart_wedge_detection.py \
+    --skip-preflight < /dev/null \
+    || rc=$?
+
+rc=${rc:-0}
+if [[ "$rc" == "75" ]]; then
+    echo "OK: runner exited EX_TEMPFAIL (75) on cart-wedge"
+    exit 0
+else
+    echo "FAIL: expected exit 75, got $rc"
+    exit 1
+fi
+```
+
+Make executable: `chmod +x tests/hil/_fixtures/run_wedge_in_ci.sh`
+
+- [ ] **Step 3: Run it against the real cart**
+
+```bash
+cd ~/code/sf64-practice-rom
+bash tests/hil/_fixtures/run_wedge_in_ci.sh
+```
+
+Expected: `OK: runner exited EX_TEMPFAIL (75)`.
+
+If the cart actually boots and prints stuff (token zero-out didn't work, IPL3 different than expected, etc.), the test will fail with `Expected CartWedgedError but upload succeeded silently`. In that case, refine the fixture builder.
+
+### Task 6.7: Write `test_isv_protocol_regression.py`
+
+**Files:**
+- Create: `sf64-practice-rom/tests/hil/test_isv_protocol_regression.py`
+
+- [ ] **Step 1: Write the test**
+
+```python
+"""Regression test: IS-Viewer SC64 protocol gotchas (CLAUDE.md).
+
+The practice ROM's isviewer.c was hardened against a list of SC64
+protocol gotchas — IS64 token, atomic rp/wp, follow-up IO_READ for
+write-FIFO drain, etc. Any rewrite that breaks one of these silently
+breaks the printf channel.
+
+This test asserts that the channel works end-to-end on real hardware
+by:
+  1. Upload the current practice ROM
+  2. Wait for an ISViewer init line (any printf-emitted text)
+  3. Confirm multiple lines arrive (proves rp/wp ring rotation works)
+  4. Confirm no malformed/garbled lines (proves byte-ordering correct)
+"""
+from __future__ import annotations
+
+import os
+
+ROM_PATH = "build/starfox64.us.rev1.uncompressed.z64"
+
+
+def run(ctx):
+    if not os.path.isfile(ROM_PATH):
+        ctx.failures.append(f"ROM not built at {ROM_PATH}")
+        return
+
+    ctx.upload_rom(ROM_PATH)
+
+    # Boot prints: any line in first 3s
+    first = ctx.wait_for_log(r".+", timeout_ms=3000)
+    ctx.assert_true(first is not None, "first IS-Viewer line received")
+
+    # Multi-line: at least 3 distinct printfs in 5s window
+    ctx.advance_seconds(5)
+    lines = ctx.client.get_logs(since_ms=ctx.upload_complete_ts)
+    distinct = {l["line"] for l in lines if l["line"].strip()}
+    ctx.assert_true(
+        len(distinct) >= 3,
+        f"received at least 3 distinct printf lines (got {len(distinct)})"
+    )
+
+    # Sanity: no obvious garbage. Lines should be 7-bit ASCII printable +
+    # newline tab. If we see non-ASCII high bytes, byte-ordering is wrong.
+    bad = [l["line"] for l in lines if any(ord(c) > 126 and ord(c) != 9 for c in l["line"])]
+    ctx.assert_true(
+        len(bad) == 0,
+        f"all lines are 7-bit ASCII printable (found {len(bad)} suspicious)"
+    )
+```
+
+- [ ] **Step 2: Run it**
+
+```bash
+PYTHONPATH=. python3 tools/hil_test_runner.py run tests/hil/test_isv_protocol_regression.py
+```
+
+Expected: all assertions pass.
+
+### Task 6.8: Commit
+
+```bash
+cd ~/code/sf64-practice-rom
+git add tools/hil/banner.py tools/hil/junit.py tools/hil/ctx.py tools/hil_test_runner.py \
+        tests/hil/_fixtures/build_wedge_rom.py tests/hil/_fixtures/run_wedge_in_ci.sh \
+        tests/hil/_unit/test_ctx.py tests/hil/_unit/test_junit.py \
+        tests/hil/test_isv_protocol_regression.py tests/hil/test_cart_wedge_detection.py
+git commit -m "$(cat <<'EOF'
+feat(hil): cart-wedge banner + assertion suite + JUnit + 2 more tests
+
+Cart-wedge banner (interactive Enter-to-retry, CI EX_TEMPFAIL=75).
+assert_log_not_contains, assert_eq, assert_neq complete the
+mupen-harness-parity API. JUnit XML emission for CI consumption.
+
+test_cart_wedge_detection: uploads a fixture ROM with the IS64 token
+zeroed out (boots but silent), asserts CartWedgedError fires.
+test_isv_protocol_regression: asserts the IS-Viewer printf channel
+delivers multiple distinct lines without garbling — regression
+coverage for the SC64 protocol gotchas documented in CLAUDE.md.
+
+Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
+EOF
+)"
+```
+
+### Chunk 6 acceptance test
+
+- [ ] Mac-side unit tests pass: `PYTHONPATH=. python3 -m pytest tests/hil/_unit/ -v`
+- [ ] `python3 tests/hil/_fixtures/build_wedge_rom.py` produces a non-empty `wedge_rom.z64`
+- [ ] `bash tests/hil/_fixtures/run_wedge_in_ci.sh` reports `OK: runner exited EX_TEMPFAIL (75)`
+- [ ] `make hil-test tests/hil/test_isv_protocol_regression.py` passes all assertions
+- [ ] Artifacts directory contains a `junit.xml` after a run, and the XML validates: `xmllint --noout tests/hil/_artifacts/<run_id>/junit.xml` exits 0
+- [ ] Interactive mode test: run `make hil-test tests/hil/test_cart_wedge_detection.py` from a real TTY; banner appears and pressing Enter retries (the retry will still hit the wedge — that's the fixture working as designed — but the banner UX should be correct)
+
+Once all six hold, Chunk 6 is done. Proceed to Chunk 7.
+
+---
+
+## Chunk 7: NixOS mock-cart VM test + MCP server + docs
+
+**Goal:** Round out the project with the regression net for no-Pi situations (NixOS VM test), the MCP server exposing HIL tools to Claude, the expanded SETUP.md, the test-author README.md, and a CLAUDE.md addition pointing future agents at the HIL system.
+
+**Files this chunk creates/modifies:**
+
+- Create: `pi-sc64/packages/sc64-api/mock_cart.py`
+- Modify: `pi-sc64/modules/sc64-api.nix` — `--mock-cart` flag plumbing
+- Create: `pi-sc64/tests/nixos-mock-cart.nix`
+- Create: `sf64-practice-rom/tools/n64-hil-mcp/pyproject.toml`
+- Create: `sf64-practice-rom/tools/n64-hil-mcp/server.py`
+- Create: `sf64-practice-rom/tools/n64-hil-mcp/test_mcp_smoke.py`
+- Modify: `sf64-practice-rom/tests/hil/SETUP.md` — replace skeleton with full guide
+- Create: `sf64-practice-rom/tests/hil/README.md`
+- Modify: `sf64-practice-rom/CLAUDE.md` — new "HIL tests" section
+
+### Task 7.1: Implement `mock_cart.py`
+
+**Files:**
+- Create: `pi-sc64/packages/sc64-api/mock_cart.py`
+
+A tiny script that emits a fixed sequence of "IS-Viewer-shaped" lines to stdout on a schedule. Used by the NixOS VM test instead of the real `sc64deployer debug` subprocess.
+
+- [ ] **Step 1: Write it**
+
+```python
+"""Fake deployer for NixOS mock-cart tests.
+
+Run as: python3 mock_cart.py [--lines-per-second N]
+Emits known fixture lines to stdout. Used by /pi-sc64/tests/nixos-mock-cart.nix.
+"""
+from __future__ import annotations
+
+import argparse
+import sys
+import time
+
+FIXTURE_LINES = [
+    "IS-Viewer init OK",
+    "boot frame 1",
+    "boot frame 2",
+    "PRACTICE READY",
+    "ENTER LEVEL_SELECT",
+]
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--lines-per-second", type=float, default=5.0)
+    parser.add_argument("--total-lines", type=int, default=-1, help="-1 = forever")
+    args = parser.parse_args()
+
+    interval = 1.0 / args.lines_per_second
+    emitted = 0
+    while args.total_lines < 0 or emitted < args.total_lines:
+        line = FIXTURE_LINES[emitted % len(FIXTURE_LINES)]
+        print(line, flush=True)  # MUST flush — sc64-api's reader expects line-buffered
+        emitted += 1
+        time.sleep(interval)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+```
+
+### Task 7.2: Add `--mock-cart` plumbing to `sc64-api.nix`
+
+**Files:**
+- Modify: `pi-sc64/modules/sc64-api.nix`
+
+- [ ] **Step 1: Add a NixOS option**
+
+```nix
+mockCart = mkOption {
+  type = types.bool;
+  default = false;
+  description = ''
+    When true, sc64-api spawns mock_cart.py instead of `sc64deployer debug`.
+    Used by NixOS VM tests.
+  '';
+};
+```
+
+- [ ] **Step 2: Wire it through environment**
+
+In the `environment` block:
+
+```nix
+SC64_MOCK_CART = if cfg.mockCart then "1" else "0";
+```
+
+- [ ] **Step 3: Deferred to Task 7.3**
+
+The `app.py` DebugConsumer construction needs to branch on `SC64_MOCK_CART`, but the cleanest implementation requires extending `DebugConsumer` with a `mock_argv` parameter first. Skip this step; **Task 7.3 implements both halves together** — the DebugConsumer change AND the final `app.py` construction with the mock-mode branch. Move on to Task 7.3.
+
+### Task 7.3: Add mock-mode to DebugConsumer
+
+**Files:**
+- Modify: `pi-sc64/packages/sc64-api/debug_consumer.py`
+
+- [ ] **Step 1: Add an optional `mock_argv` parameter**
+
+Update the constructor:
+
+```python
+def __init__(self, deployer_path, server_addr, isv_offset, log_ring,
+             on_line=None, mock_argv: list[str] | None = None):
+    ...
+    self._mock_argv = mock_argv
+```
+
+In `start()`, use `mock_argv` if set:
+
+```python
+if self._mock_argv:
+    cmd = self._mock_argv
+else:
+    cmd = [self._deployer_path, "-r", self._server_addr,
+           "debug", "--isv", self._isv_offset]
+```
+
+In `app.py`, when mock mode is on:
+
+```python
+debug_consumer = DebugConsumer(
+    deployer_path="",
+    server_addr="",
+    isv_offset="",
+    log_ring=log_ring,
+    mock_argv=[sys.executable, "/etc/sc64-api/mock_cart.py", "--lines-per-second", "10"],
+)
+```
+
+And add to `appDir` in `sc64-api.nix`:
+
+```nix
+cp ${../packages/sc64-api/mock_cart.py} $out/mock_cart.py
+```
+
+Plus a symlink at `/etc/sc64-api/mock_cart.py` via `environment.etc`:
+
+```nix
+environment.etc."sc64-api/mock_cart.py".source = "${appDir}/mock_cart.py";
+```
+
+### Task 7.4: NixOS VM test `nixos-mock-cart.nix`
+
+**Files:**
+- Create: `pi-sc64/tests/nixos-mock-cart.nix`
+
+- [ ] **Step 1: Write the test**
+
+```nix
+{ pkgs ? import <nixpkgs> {} }:
+
+pkgs.nixosTest {
+  name = "sc64-api-mock-cart";
+
+  nodes.machine = { config, ... }: {
+    imports = [
+      ../modules/sc64-api.nix
+      ../modules/sc64-server.nix
+    ];
+
+    services.sc64-api = {
+      enable = true;
+      mockCart = true;
+      tokenFile = "/tmp/test-tokens";
+    };
+
+    # The sc64-server module exists but in mock mode we don't need a
+    # real cart — skip enabling it OR run it but ignore failures.
+
+    # Pre-seed the token file
+    system.activationScripts.test-tokens = ''
+      install -d -o root -g sc64api -m 750 /etc/sc64-api
+      printf 'test-token-12345\n' > /tmp/test-tokens
+      chown root:sc64api /tmp/test-tokens
+      chmod 640 /tmp/test-tokens
+    '';
+
+    networking.firewall.allowedTCPPorts = [ 8064 ];
+  };
+
+  testScript = ''
+    machine.wait_for_unit("sc64-api.service")
+    machine.wait_for_open_port(8064)
+
+    # /health: no auth
+    health = machine.succeed("curl -s http://localhost:8064/health")
+    assert '"ok":true' in health, f"unexpected health: {health}"
+
+    # /status: with token
+    machine.sleep(2)  # give the mock consumer time to emit a line
+    status = machine.succeed(
+        "curl -s -H 'Authorization: Bearer test-token-12345' "
+        "http://localhost:8064/status"
+    )
+    assert '"running":true' in status, f"consumer not running: {status}"
+
+    # /logs: should have lines from mock_cart.py
+    logs = machine.succeed(
+        "curl -s -H 'Authorization: Bearer test-token-12345' "
+        "'http://localhost:8064/logs?since=0'"
+    )
+    assert '"IS-Viewer init OK"' in logs or '"boot frame 1"' in logs, \
+        f"no mock lines in /logs: {logs}"
+
+    # Token-file probe
+    assert '"mode":"0640"' in status, f"token mode wrong in status: {status}"
+  '';
+}
+```
+
+- [ ] **Step 2: Run the test**
+
+```bash
+cd pi-sc64
+nix-build tests/nixos-mock-cart.nix
+```
+
+Expected: VM boots, test script runs, all assertions pass.
+
+If the test fails (likely needs minor adjustment for module paths), iterate. The key signal is whether the mock consumer's output reaches `/logs` — that's the integration point being verified.
+
+### Task 7.5: Write the MCP server
+
+**Files:**
+- Create: `sf64-practice-rom/tools/n64-hil-mcp/pyproject.toml`
+- Create: `sf64-practice-rom/tools/n64-hil-mcp/server.py`
+
+- [ ] **Step 1: `pyproject.toml`**
+
+```toml
+[project]
+name = "n64-hil-mcp"
+version = "0.1.0"
+description = "MCP server exposing N64 HIL primitives to Claude"
+requires-python = ">=3.11"
+dependencies = [
+    "mcp>=1.0",
+    "httpx>=0.27",
+]
+
+[tool.setuptools]
+py-modules = ["server"]
+```
+
+- [ ] **Step 2: `server.py`**
+
+```python
+"""MCP server exposing HIL primitives to Claude.
+
+Tools:
+  - hil_doctor(host?)                       — run preflight probes
+  - upload_rom_and_watch(rom_path, watch_seconds, log_pattern?) — one-shot
+  - snapshot(host?)                         — single camera frame
+  - tail_log(seconds, host?)                — recent log lines
+"""
+from __future__ import annotations
+
+import asyncio
+import sys
+from pathlib import Path
+
+# Make the sibling hil/ package importable
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from mcp.server import Server
+from mcp.types import Tool, TextContent, ImageContent
+
+from hil.client import HilClient, ClientConfig, CartWedgedError  # type: ignore
+from hil.doctor import probe_all, render_report  # type: ignore
+
+server = Server("n64-hil")
+DEFAULT_HOST = "sc64pi.local"
+
+
+@server.list_tools()
+async def list_tools() -> list[Tool]:
+    return [
+        Tool(
+            name="hil_doctor",
+            description="Run preflight probes against the HIL Pi. Returns a "
+                        "rendered report; if any probe fails, the report's "
+                        "first ❌ row + Fix box is the authoritative next step.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "host": {"type": "string", "default": DEFAULT_HOST},
+                },
+            },
+        ),
+        Tool(
+            name="upload_rom_and_watch",
+            description="Upload a ROM to the cart, watch the IS-Viewer stream "
+                        "for `watch_seconds`, and optionally wait for a regex. "
+                        "Returns captured lines + a JPEG snapshot path.",
+            inputSchema={
+                "type": "object",
+                "required": ["rom_path"],
+                "properties": {
+                    "rom_path": {"type": "string"},
+                    "watch_seconds": {"type": "number", "default": 5.0},
+                    "log_pattern": {"type": "string"},
+                    "host": {"type": "string", "default": DEFAULT_HOST},
+                },
+            },
+        ),
+        Tool(
+            name="snapshot",
+            description="Capture a single camera frame, return the JPEG bytes.",
+            inputSchema={
+                "type": "object",
+                "properties": {"host": {"type": "string", "default": DEFAULT_HOST}},
+            },
+        ),
+        Tool(
+            name="tail_log",
+            description="Return IS-Viewer lines from the last N seconds.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "seconds": {"type": "number", "default": 30.0},
+                    "host": {"type": "string", "default": DEFAULT_HOST},
+                },
+            },
+        ),
+    ]
+
+
+@server.call_tool()
+async def call_tool(name: str, args: dict) -> list[TextContent | ImageContent]:
+    host = args.get("host", DEFAULT_HOST)
+
+    if name == "hil_doctor":
+        report = await asyncio.to_thread(probe_all, host)
+        return [TextContent(type="text", text=render_report(report))]
+
+    if name == "snapshot":
+        cfg = ClientConfig(host=host)
+        with HilClient(cfg) as c:
+            data = await asyncio.to_thread(c.get_camera_snapshot)
+        # MCP can transport images as base64
+        import base64
+        b64 = base64.b64encode(data).decode("ascii")
+        return [ImageContent(type="image", data=b64, mimeType="image/jpeg")]
+
+    if name == "tail_log":
+        import time
+        seconds = args.get("seconds", 30.0)
+        since_ms = int((time.time() - seconds) * 1000)
+        cfg = ClientConfig(host=host)
+        with HilClient(cfg) as c:
+            lines = await asyncio.to_thread(c.get_logs, since_ms)
+        text = "\n".join(f"[{l['ts_ms']}] {l['line']}" for l in lines)
+        return [TextContent(type="text", text=text or "(no lines)")]
+
+    if name == "upload_rom_and_watch":
+        from hil.ctx import TestContext, CartWedgedError  # type: ignore
+        rom = args["rom_path"]
+        watch_s = args.get("watch_seconds", 5.0)
+        pattern = args.get("log_pattern")
+        cfg = ClientConfig(host=host)
+        artifacts = Path("/tmp/n64-hil-mcp-artifacts")
+        with HilClient(cfg) as c:
+            ctx = TestContext(client=c, artifacts_dir=artifacts, test_name="mcp")
+            try:
+                ctx.upload_rom(rom)
+            except CartWedgedError as e:
+                return [TextContent(type="text",
+                                    text=f"CART WEDGED: {e}\n\nPlease power-cycle the N64.")]
+            if pattern:
+                try:
+                    ctx.wait_for_log(pattern, timeout_ms=int(watch_s * 1000))
+                except Exception as e:
+                    return [TextContent(type="text",
+                                        text=f"Pattern not seen in {watch_s}s: {e}")]
+            ctx.advance_seconds(watch_s)
+            shot = ctx.snapshot("upload")
+            lines = c.get_logs(since_ms=ctx.upload_complete_ts)
+            text = (f"Uploaded {rom}. {len(lines)} lines captured.\n"
+                    f"Snapshot: {shot}\n\n" +
+                    "\n".join(l["line"] for l in lines[:50]))
+        return [TextContent(type="text", text=text)]
+
+    return [TextContent(type="text", text=f"Unknown tool: {name}")]
+
+
+async def main() -> None:
+    from mcp.server.stdio import stdio_server
+    async with stdio_server() as (read, write):
+        await server.run(read, write, server.create_initialization_options())
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+- [ ] **Step 3: Smoke test**
+
+Create `sf64-practice-rom/tools/n64-hil-mcp/test_mcp_smoke.py`:
+
+```python
+"""Smoke test: server starts, tools list, each tool returns *something*
+with a mocked HilClient."""
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+from unittest.mock import patch, MagicMock
+
+import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import server as srv  # type: ignore
+
+
+@pytest.mark.asyncio
+async def test_list_tools_returns_four():
+    tools = await srv.list_tools()
+    names = {t.name for t in tools}
+    assert names == {"hil_doctor", "upload_rom_and_watch", "snapshot", "tail_log"}
+
+
+@pytest.mark.asyncio
+async def test_hil_doctor_returns_text(monkeypatch):
+    fake_report = MagicMock()
+    monkeypatch.setattr(srv, "probe_all", lambda host: fake_report)
+    monkeypatch.setattr(srv, "render_report", lambda r: "rendered output")
+    result = await srv.call_tool("hil_doctor", {"host": "x"})
+    assert result[0].text == "rendered output"
+```
+
+Install dev deps first if not present:
+
+```bash
+python3 -m pip install --user pytest pytest-asyncio mcp
+```
+
+Run: `cd ~/code/sf64-practice-rom && PYTHONPATH=tools python3 -m pytest tools/n64-hil-mcp/test_mcp_smoke.py -v`
+
+Expected: tests pass.
+
+### Task 7.6: Expand `SETUP.md`
+
+**Files:**
+- Modify: `sf64-practice-rom/tests/hil/SETUP.md`
+
+- [ ] **Step 1: Replace the skeleton's §8 "Troubleshooting" with**:
+
+```markdown
+## 8. Troubleshooting
+
+Run `make hil-doctor`. The first ❌ row and its Fix box are the
+authoritative source — follow that. The doctor covers all 10 known
+failure modes. If none of the probes fail but tests still fail, the
+issue is in the ROM under test, not the rig.
+
+For the rare "doctor green, test fails" case:
+- Check `tests/hil/_artifacts/<run_id>/` for the snapshot — does the
+  screen show what you expect?
+- Check the captured log in the same dir — is the expected printf there?
+- If neither: probably a cart hardware issue (replug USB, power-cycle).
+```
+
+- [ ] **Step 2: Add a §9 "For HIL test authors" pointing at README.md**
+
+```markdown
+## 9. For HIL test authors
+
+See `tests/hil/README.md` for the test-authoring guide. Key points:
+
+- Tests are Python files at `tests/hil/test_*.py` defining `def run(ctx): ...`
+- The `ctx` API mirrors the mupen64plus runner's, with hardware
+  primitives instead of memory peek/poke. See §5 of the design spec
+  for the full primitive list.
+- Build the ROM first: `make practice -j4`
+- Run a single test: `make hil-test tests/hil/test_<name>.py`
+- Run all HIL tests: `make hil-test tests/hil/`
+
+Cold-start is a one-time event. Day-to-day, `make hil-doctor` + tests
+is all you need.
+```
+
+### Task 7.7: Write `README.md` for test authors
+
+**Files:**
+- Create: `sf64-practice-rom/tests/hil/README.md`
+
+- [ ] **Step 1: Write it**
+
+```markdown
+# HIL Tests
+
+Hardware-in-the-loop tests for the SF64 practice ROM. Runs against a
+real N64 console via the Pi-hosted SC64 cart, capturing the IS-Viewer
+printf stream and camera screenshots.
+
+## Quick start
+
+```bash
+make hil-doctor              # verify the rig is healthy
+make practice -j4            # build the ROM
+make hil-test tests/hil/test_boot_smoke.py
+```
+
+## Authoring a test
+
+Tests live at `tests/hil/test_<name>.py` and define a `run(ctx)` function:
+
+```python
+ROM_PATH = "build/starfox64.us.rev1.uncompressed.z64"
+
+def run(ctx):
+    ctx.upload_rom(ROM_PATH)
+    ctx.wait_for_log(r"PRACTICE READY", timeout_ms=5000)
+    ctx.advance_seconds(3)
+    shot = ctx.snapshot("after-boot")
+    ctx.assert_log_contains(r"ISViewer init OK", "channel up")
+    ctx.assert_log_not_contains(r"PANIC", "no panic")
+```
+
+## ctx API
+
+| Method | What it does |
+|---|---|
+| `ctx.upload_rom(path)` | Upload ROM via sc64-api; block until first IS-Viewer line proves cart-alive; raise CartWedgedError on silence |
+| `ctx.wait_for_log(pattern, timeout_ms=10000)` | Poll /logs since upload anchor; return first match; raise LogWaitTimeout |
+| `ctx.advance_seconds(s)` | Wall-clock wait. Test authors must budget slack for hardware boot variance |
+| `ctx.snapshot(name=None)` | GET /camera/snapshot; save JPEG to artifacts dir; return path |
+| `ctx.assert_log_contains(pattern, msg)` | Record pass/fail; non-raising |
+| `ctx.assert_log_not_contains(pattern, msg)` | Same, inverse |
+| `ctx.assert_true(cond, msg)` / `assert_eq` / `assert_neq` | General-purpose |
+
+## How HIL relates to the mupen64plus suite
+
+HIL is a complement, not a replacement. The mupen suite (`tests/test_*.py`)
+catches bugs that compile fine but break at the C / game-state level —
+it runs in CI on every commit. HIL catches bugs that only manifest on
+real silicon: SC64 protocol regressions, ROM-size overruns that blue-screen
+the cart, FatFs hardware quirks, visual regressions.
+
+Tests should be written against BOTH backends when both are feasible —
+the same regression caught by two independent layers is much more robust.
+
+## See also
+
+- `tests/hil/SETUP.md` — cold-start guide
+- `docs/superpowers/specs/2026-05-30-n64-hil-testing-design.md` — full design
+- `make hil-doctor` — preflight diagnostics
+```
+
+### Task 7.8: Add a "HIL tests" section to `CLAUDE.md`
+
+**Files:**
+- Modify: `sf64-practice-rom/CLAUDE.md`
+
+- [ ] **Step 1: Find a good insertion point**
+
+Look for the existing "MANDATORY: Every fix and feature must have tests" section. Add the HIL block right after the BizHawk subsection (so the test-backend hierarchy is mupen → BizHawk → HIL, lightest to heaviest).
+
+- [ ] **Step 2: Add this section**
+
+```markdown
+### HIL tests (`tests/hil/test_*.py`) — real hardware
+
+Python tests that run against a real N64 console via the Pi-hosted
+SummerCart64. The harness uploads ROMs, captures IS-Viewer printf
+output, and grabs camera screenshots. Complements the mupen suite —
+catches bugs that only manifest on silicon (SC64 protocol regressions,
+ROM-size cliffs, FatFs hardware quirks, visual regressions).
+
+**Run all HIL tests:** `make hil-test tests/hil/`
+**Run one:** `make hil-test tests/hil/test_<name>.py`
+**Health check the rig:** `make hil-doctor`
+
+**Cold-start the Pi:** see `tests/hil/SETUP.md`. The doctor's fix
+boxes are the authoritative source for "what to do next" if anything
+in the rig is broken.
+
+**When writing a new HIL test:**
+1. Add `tests/hil/test_<name>.py` with `def run(ctx): ...`
+2. See `tests/hil/README.md` for the ctx API
+3. HIL tests are NOT run by the pre-commit hook (the Pi may not be
+   reachable from every machine). Run them manually before tagging a
+   release.
+
+**Spec:** `docs/superpowers/specs/2026-05-30-n64-hil-testing-design.md`
+```
+
+### Task 7.9: Final commits
+
+- [ ] **Step 1: Pi-side commit**
+
+```bash
+cd pi-sc64
+git add packages/sc64-api/mock_cart.py packages/sc64-api/debug_consumer.py \
+        packages/sc64-api/app.py modules/sc64-api.nix tests/nixos-mock-cart.nix
+git commit -m "$(cat <<'EOF'
+feat(sc64-api): --mock-cart flag + NixOS VM test
+
+mock_cart.py emits deterministic IS-Viewer-shaped fixture lines.
+sc64-api's DebugConsumer accepts a mock_argv override to spawn it
+instead of sc64deployer debug when SC64_MOCK_CART=1.
+
+tests/nixos-mock-cart.nix is a NixOS VM test asserting /logs,
+/status, and token-file mode all work in a fully hermetic
+environment — the regression net for "I'm modifying sc64-api and
+have no physical cart in front of me."
+
+Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
+EOF
+)"
+```
+
+- [ ] **Step 2: Mac-side commit**
+
+```bash
+cd ~/code/sf64-practice-rom
+git add tools/n64-hil-mcp/ tests/hil/SETUP.md tests/hil/README.md CLAUDE.md
+git commit -m "$(cat <<'EOF'
+feat(hil): MCP server + expanded SETUP.md + README.md + CLAUDE.md
+
+MCP server exposes four tools to Claude (hil_doctor,
+upload_rom_and_watch, snapshot, tail_log). Stdio transport for
+v1; HTTP transport when remote sessions need it.
+
+SETUP.md expanded with troubleshooting that delegates to the
+doctor and a §9 pointer at tests/hil/README.md (the test-author
+guide). CLAUDE.md gets a HIL section so future agents know which
+test backend to reach for.
+
+Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
+EOF
+)"
+```
+
+### Chunk 7 acceptance test
+
+- [ ] `nix-build pi-sc64/tests/nixos-mock-cart.nix` succeeds (the VM test passes)
+- [ ] MCP smoke tests pass: `cd ~/code/sf64-practice-rom && PYTHONPATH=tools python3 -m pytest tools/n64-hil-mcp/test_mcp_smoke.py -v`
+- [ ] MCP server can be invoked from a real Claude session (manual verification: register in `~/.claude/mcp.json` with stdio transport, call `hil_doctor` — should return the doctor's rendered report)
+- [ ] `tests/hil/SETUP.md` no longer has the "(skeleton)" status block; reads as a complete cold-start guide
+- [ ] `tests/hil/README.md` exists and links to SETUP.md + spec
+- [ ] `CLAUDE.md` HIL section exists, references `make hil-doctor` and `make hil-test`
+- [ ] **Full system integration**: from a fresh terminal, run `make hil-doctor && make hil-test tests/hil/` — all probes green, all three tests (`test_boot_smoke`, `test_isv_protocol_regression`, `test_cart_wedge_detection`) pass
+
+Once all seven hold, the implementation is complete. Time to merge.
+
+---
+
+## Final acceptance — end-to-end (all chunks complete)
+
+The project ships when:
+
+1. A fresh dev with no prior context can read `tests/hil/SETUP.md` and go cold-start → first-test-green using only the doctor's output for any failures along the way.
+2. `make hil-doctor` reports all 10 blocking probes green and 2 warn-only probes green when the cart is plugged in and recently booted.
+3. `make hil-test tests/hil/` exits 0 with three tests passing and a `junit.xml` produced under `tests/hil/_artifacts/<run_id>/`.
+4. `make hil-test tests/hil/test_cart_wedge_detection.py` in non-interactive mode exits 75 (`EX_TEMPFAIL`).
+5. The Pi runs unchanged for a full day of cart use without the debug consumer accumulating `consecutive_failures` or wedging the upload path.
+6. Claude can invoke the MCP server's `hil_doctor` and `upload_rom_and_watch` tools from a session and get correct results.
+
+---
+
