@@ -45,7 +45,7 @@ pi-sc64/
 │   │   ├── log_ring.py                                # NEW (Chunk 4) — in-memory ring + rotating file writer
 │   │   ├── debug_consumer.py                          # NEW (Chunk 4) — sc64deployer debug subprocess manager
 │   │   ├── status_probes.py                           # NEW (Chunk 2) — fills enriched /status fields (tokens_file, cart, deployer)
-│   │   ├── mock_cart.py                               # NEW (Chunk 6) — --mock-cart printer for VM test
+│   │   ├── mock_cart.py                               # NEW (Chunk 7) — --mock-cart printer for VM test
 │   │   └── tests/
 │   │       ├── test_log_ring.py                       # NEW (Chunk 4)
 │   │       ├── test_debug_consumer.py                 # NEW (Chunk 4)
@@ -73,32 +73,32 @@ sf64-practice-rom/
 │   ├── hil/
 │   │   ├── __init__.py                                # NEW (Chunk 3)
 │   │   ├── client.py                                  # NEW (Chunk 3) — httpx wrapper for sc64-api
-│   │   ├── ctx.py                                     # NEW (Chunk 4) — TestContext primitives
+│   │   ├── ctx.py                                     # NEW (Chunk 5) — TestContext primitives
 │   │   ├── doctor.py                                  # NEW (Chunk 3) — preflight probes + fix-box rendering
-│   │   ├── banner.py                                  # NEW (Chunk 5) — cart-wedged banner
-│   │   └── junit.py                                   # NEW (Chunk 5) — JUnit XML emission
-│   └── n64-hil-mcp/                                   # NEW (Chunk 6)
+│   │   ├── banner.py                                  # NEW (Chunk 6) — cart-wedged banner
+│   │   └── junit.py                                   # NEW (Chunk 6) — JUnit XML emission
+│   └── n64-hil-mcp/                                   # NEW (Chunk 7)
 │       ├── pyproject.toml
 │       ├── server.py
 │       └── test_mcp_smoke.py
 ├── tests/
 │   └── hil/
 │       ├── __init__.py                                # NEW (Chunk 3)
-│       ├── SETUP.md                                   # SKELETON in Chunk 1; expanded in Chunk 6
-│       ├── README.md                                  # NEW (Chunk 6)
+│       ├── SETUP.md                                   # SKELETON in Chunk 1; expanded in Chunk 7
+│       ├── README.md                                  # NEW (Chunk 7)
 │       ├── _artifacts/                                # gitignored; populated at runtime
 │       ├── _fixtures/
-│       │   ├── build_wedge_rom.py                     # NEW (Chunk 5) — generates the wedge fixture deterministically
+│       │   ├── build_wedge_rom.py                     # NEW (Chunk 6) — generates the wedge fixture deterministically
 │       │   └── wedge_rom.z64                          # gitignored — output of build_wedge_rom.py
 │       ├── _unit/
-│       │   ├── test_ctx.py                            # NEW (Chunk 4)
+│       │   ├── test_ctx.py                            # NEW (Chunk 5)
 │       │   ├── test_doctor.py                         # NEW (Chunk 3)
 │       │   └── test_client.py                         # NEW (Chunk 3)
-│       ├── test_boot_smoke.py                         # NEW (Chunk 4)
-│       ├── test_isv_protocol_regression.py            # NEW (Chunk 5)
-│       └── test_cart_wedge_detection.py               # NEW (Chunk 5)
+│       ├── test_boot_smoke.py                         # NEW (Chunk 5)
+│       ├── test_isv_protocol_regression.py            # NEW (Chunk 6)
+│       └── test_cart_wedge_detection.py               # NEW (Chunk 6)
 ├── .gitignore                                         # MODIFIED (Chunk 3) — add tests/hil/_artifacts/, _fixtures/wedge_rom.z64
-├── CLAUDE.md                                          # MODIFIED (Chunk 6) — "HIL tests" section
+├── CLAUDE.md                                          # MODIFIED (Chunk 7) — "HIL tests" section
 └── Makefile                                           # MODIFIED (Chunk 3) — `make hil-test`, `make hil-doctor` convenience targets
 ```
 
@@ -109,9 +109,10 @@ sf64-practice-rom/
 1. **Chunk 1: Foundation — Pi bring-up (SD image build + bootstrap + SETUP.md skeleton)** — get a freshly-flashed Pi reachable with the user's SSH key + a provisioned bearer token + `sc64deployer` running the `qw-local` branch. Ships a minimal SETUP.md skeleton aligned with spec §8 step 1.
 2. **Chunk 2: Pi-side enriched `/status`** — `status_probes.py` (token-file mode, FTDI presence, deployer version, deployer-can-open-FTDI probe) wired into `/status`. End state: `curl /status` returns the enriched JSON shape with stub values for fields the Mac doctor will eventually consume.
 3. **Chunk 3: Mac-side `hil doctor`** — `hil/client.py` + `hil/doctor.py` with the 10 probes from spec §10.2, `hil_test_runner.py doctor` subcommand. End state: `make hil-doctor` shows all-green against the live Pi.
-4. **Chunk 4: Round-trip MVP** — `DebugConsumer` + `LogRing` + `/logs` + `/camera/snapshot` + `ctx.upload_rom/wait_for_log/snapshot` + `test_boot_smoke.py` green against the real cart.
-5. **Chunk 5: Cart-wedge banner + assertion suite + JUnit + remaining tests** — `assert_log_contains/not_contains`, the wedge banner, the broken-ROM fixture + matching test, the IS-Viewer protocol regression test, JUnit emission.
-6. **Chunk 6: NixOS mock-cart VM test + MCP server + docs** — regression net + Claude tools + SETUP.md expansion + README.md + CLAUDE.md addition.
+4. **Chunk 4: Pi-side round-trip — `DebugConsumer` + `LogRing` + `/logs` + `/camera/snapshot`** — manages the deployer-debug subprocess lifecycle, integrates with the upload lock per the single-client deployer constraint. End state: a curl-driven upload works without breaking the debug stream.
+5. **Chunk 5: Mac-side round-trip — `ctx` + `runner.run` + `test_boot_smoke.py`** — minimum-viable test context (upload_rom with cart-alive check, wait_for_log, snapshot) + the runner's `run` subcommand. End state: `make hil-test tests/hil/test_boot_smoke.py` green against the real cart with a JPEG artifact saved.
+6. **Chunk 6: Cart-wedge banner + full assertion suite + JUnit + remaining tests** — `assert_log_not_contains`, the cart-wedge banner with interactive Enter-to-retry and CI EX_TEMPFAIL semantics, the broken-ROM fixture + `test_cart_wedge_detection.py`, the `test_isv_protocol_regression.py`, JUnit XML emission.
+7. **Chunk 7: NixOS mock-cart VM test + MCP server + docs** — regression net for no-Pi situations + Claude tools + SETUP.md expansion + README.md + CLAUDE.md addition.
 
 Each chunk ends with a hand-verifiable acceptance test the implementer must run before proceeding.
 
@@ -920,7 +921,7 @@ EOF
 
 ### Task 1.8: Write the SETUP.md skeleton
 
-Per spec §8 step 1: SETUP.md ships at the END of this milestone, written after the bootstrap script has been dogfooded once against a real cold-start. The skeleton goes in now; the polish + screenshots wait for Chunk 5.
+Per spec §8 step 1: SETUP.md ships at the END of this milestone, written after the bootstrap script has been dogfooded once against a real cold-start. The skeleton goes in now; the polish + screenshots wait for Chunk 7.
 
 **Files:**
 - Create: `sf64-practice-rom/tests/hil/SETUP.md`
@@ -2560,5 +2561,1546 @@ EOF
 - [ ] The doctor's first-failure short-circuit is observable: temporarily delete `~/.sc64-api-token` and rerun — probes 1–3 pass, probe 4 fails with the fix box, probes 5–10 skipped.
 
 Once all three hold, Chunk 3 is done. Restore your token (`bootstrap-pi.sh token-only sc64pi.local`) and proceed to Chunk 4.
+
+---
+
+## Chunk 4: Pi-side round-trip — DebugConsumer + LogRing + /logs + /camera
+
+**Goal:** Pi-side components for the round-trip MVP. `LogRing` + `DebugConsumer` together manage the `sc64deployer debug` subprocess (start at boot, stop before each upload, restart after — the lock-around-upload integration per spec §4.1, justified by the deployer server's single-threaded `server.rs:163` constraint). The new endpoints `/logs` (paginated by since/until ms) and `/camera/snapshot` (proxies ustreamer with /snapshot → /stream fallback) are wired in. `/status` fields previously stubbed (camera, debug_consumer, ring_buffer) now report real values.
+
+**End state acceptance:** an end-to-end curl `POST /upload` works without breaking the debug stream; the consumer correctly stops + restarts around the upload; post-reset IS-Viewer lines appear in `/logs?since=<upload_complete_ts>`.
+
+**Files this chunk creates/modifies:**
+
+- Create: `pi-sc64/packages/sc64-api/log_ring.py`
+- Create: `pi-sc64/packages/sc64-api/debug_consumer.py`
+- Create: `pi-sc64/packages/sc64-api/tests/test_log_ring.py`
+- Create: `pi-sc64/packages/sc64-api/tests/test_debug_consumer.py`
+- Create: `pi-sc64/packages/sc64-api/tests/conftest.py` (pytest-asyncio config)
+- Modify: `pi-sc64/packages/sc64-api/app.py` — wire DebugConsumer + LogRing into startup, add `/logs` and `/camera/snapshot`, integrate consumer.stop/start into `/upload`, fill previously-stubbed `/status` sections
+- Modify: `pi-sc64/modules/sc64-api.nix` — bundle new files, add `ringBufferDir` option + tmpfiles rule for `/var/lib/sc64-api/logs`, plumb environment vars
+
+**Skills to use:**
+- @superpowers:test-driven-development for `LogRing` and `DebugConsumer`
+- @superpowers:systematic-debugging if the integration breaks
+- @superpowers:verification-before-completion before claiming chunk complete
+
+**Design decisions encoded in this chunk:**
+
+- **Consumer lifecycle in `/upload`**: per spec §4.1, the upload lock acquires → consumer.stop() (SIGTERM, 2s grace, SIGKILL fallback) → run `sc64deployer upload` → consumer.start() → release lock. The new debug client connects post-upload and catches the post-reset IS-Viewer init lines. Documented in code with a pointer to the deployer's single-threaded `server.rs:163` constraint.
+- **Auto-respawn with exponential backoff**: DebugConsumer detects unexpected child exit (not the intentional stop during upload) and respawns with backoff `1s, 2s, 4s, cap 10s`. `consecutive_failures` exposed via `/status`.
+- **Cart-alive timeout**: `upload_rom()` blocks until first IS-Viewer line appears post-upload (default 10s budget). If no line appears, raise `CartWedgedError`. Chunk 6 wires this into the banner; in Chunks 4-5 the error just surfaces as a test failure.
+- **Log polling, not SSE**: `/logs` is GET with `since=<ts_ms>&until=<ts_ms>&limit=N`. The Mac runner polls every 100ms. Keeps deps to `httpx` only.
+
+### Task 4.1: Implement `LogRing` (Pi-side)
+
+**Files:**
+- Create: `pi-sc64/packages/sc64-api/log_ring.py`
+
+- [ ] **Step 1: Write `log_ring.py`**
+
+```python
+"""Timestamped append-only ring buffer for IS-Viewer printf lines.
+
+Two backing stores:
+  - In-memory deque(maxlen=N) for /logs queries (the test path)
+  - Rotating gzip file for forensics (panic loops, long retention)
+
+Designed so a panic-loop ROM emitting hundreds of lines/sec cannot
+trash the test-path window — the file rotation always captures the
+full stream even when the in-memory ring evicts.
+"""
+from __future__ import annotations
+
+import gzip
+import os
+import threading
+import time
+from collections import deque
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Iterator
+
+
+@dataclass(frozen=True)
+class LogLine:
+    ts_ms: int
+    line: str
+
+
+class LogRing:
+    def __init__(
+        self,
+        in_memory_max: int = 50_000,
+        file_dir: str | None = None,
+        file_retention_days: int = 7,
+    ):
+        self._lock = threading.Lock()
+        self._deque: deque[LogLine] = deque(maxlen=in_memory_max)
+        self._in_memory_max = in_memory_max
+        self._file_dir = Path(file_dir) if file_dir else None
+        self._retention_days = file_retention_days
+        self._current_date: str | None = None
+        self._current_file = None  # type: ignore[assignment]
+        self._last_line_ts_ms: int | None = None
+        self._last_line_preview: str | None = None
+
+        if self._file_dir:
+            self._file_dir.mkdir(parents=True, exist_ok=True)
+
+    def append(self, line: str) -> None:
+        """Append a line. Idempotent on empty/whitespace input (drops it)."""
+        line = line.rstrip("\n")
+        if not line:
+            return
+        now_ms = int(time.time() * 1000)
+        entry = LogLine(ts_ms=now_ms, line=line)
+        with self._lock:
+            self._deque.append(entry)
+            self._last_line_ts_ms = now_ms
+            self._last_line_preview = line[:200]
+            if self._file_dir:
+                self._write_file(entry)
+
+    def _write_file(self, entry: LogLine) -> None:
+        """Append to today's gzip file, rotating at midnight."""
+        date = time.strftime("%Y-%m-%d", time.gmtime(entry.ts_ms / 1000))
+        if date != self._current_date:
+            self._close_file()
+            self._current_date = date
+            assert self._file_dir is not None
+            path = self._file_dir / f"isv-{date}.log.gz"
+            self._current_file = gzip.open(path, "at", encoding="utf-8")
+            self._prune_old_files()
+        assert self._current_file is not None
+        self._current_file.write(f"{entry.ts_ms}\t{entry.line}\n")
+        self._current_file.flush()
+
+    def _close_file(self) -> None:
+        if self._current_file is not None:
+            try:
+                self._current_file.close()
+            except Exception:
+                pass
+            self._current_file = None
+
+    def _prune_old_files(self) -> None:
+        """Delete files older than retention window."""
+        if not self._file_dir:
+            return
+        cutoff = time.time() - (self._retention_days * 86400)
+        for p in self._file_dir.glob("isv-*.log.gz"):
+            try:
+                if p.stat().st_mtime < cutoff:
+                    p.unlink()
+            except OSError:
+                pass
+
+    def read_window(self, since_ms: int = 0, until_ms: int | None = None) -> list[LogLine]:
+        """Return all lines with since_ms <= ts_ms < until_ms (exclusive until)."""
+        until_ms = until_ms if until_ms is not None else int(time.time() * 1000) + 1
+        with self._lock:
+            return [e for e in self._deque if since_ms <= e.ts_ms < until_ms]
+
+    def stats(self) -> dict[str, object]:
+        with self._lock:
+            file_path = None
+            file_bytes = 0
+            if self._file_dir and self._current_date:
+                fp = self._file_dir / f"isv-{self._current_date}.log.gz"
+                file_path = str(fp)
+                try:
+                    file_bytes = fp.stat().st_size
+                except OSError:
+                    pass
+            return {
+                "in_memory_lines": len(self._deque),
+                "in_memory_max": self._in_memory_max,
+                "file_path": file_path,
+                "file_bytes": file_bytes,
+                "last_line_ts_ms": self._last_line_ts_ms,
+                "last_line_preview": self._last_line_preview,
+            }
+
+    def close(self) -> None:
+        with self._lock:
+            self._close_file()
+```
+
+- [ ] **Step 2: Smoke-check Python syntax**
+
+Run: `python3 -c "import ast; ast.parse(open('pi-sc64/packages/sc64-api/log_ring.py').read())"`
+
+Expected: exit 0.
+
+### Task 4.2: Unit tests for `LogRing`
+
+**Files:**
+- Create: `pi-sc64/packages/sc64-api/tests/test_log_ring.py`
+
+- [ ] **Step 1: Write the tests**
+
+```python
+"""Unit tests for log_ring.LogRing."""
+from __future__ import annotations
+
+import gzip
+import time
+from pathlib import Path
+
+import pytest
+
+from log_ring import LogRing, LogLine
+
+
+def test_append_then_read_returns_in_order():
+    ring = LogRing(in_memory_max=10)
+    ring.append("first")
+    time.sleep(0.001)
+    ring.append("second")
+    lines = ring.read_window()
+    assert [l.line for l in lines] == ["first", "second"]
+    assert lines[0].ts_ms <= lines[1].ts_ms
+
+
+def test_overflow_evicts_oldest():
+    ring = LogRing(in_memory_max=3)
+    for i in range(5):
+        ring.append(f"line{i}")
+    lines = ring.read_window()
+    assert [l.line for l in lines] == ["line2", "line3", "line4"]
+
+
+def test_empty_line_dropped():
+    ring = LogRing(in_memory_max=5)
+    ring.append("")
+    ring.append("   \n")
+    ring.append("real")
+    assert [l.line for l in ring.read_window()] == ["real"]
+
+
+def test_trailing_newline_stripped():
+    ring = LogRing(in_memory_max=5)
+    ring.append("hello\n")
+    assert ring.read_window()[0].line == "hello"
+
+
+def test_read_window_filters_by_timestamp():
+    ring = LogRing(in_memory_max=5)
+    ring.append("a")
+    boundary = int(time.time() * 1000) + 1
+    time.sleep(0.005)
+    ring.append("b")
+    after = ring.read_window(since_ms=boundary)
+    assert [l.line for l in after] == ["b"]
+
+
+def test_stats_reflects_state():
+    ring = LogRing(in_memory_max=10)
+    ring.append("one")
+    ring.append("two")
+    s = ring.stats()
+    assert s["in_memory_lines"] == 2
+    assert s["in_memory_max"] == 10
+    assert s["last_line_preview"] == "two"
+    assert s["last_line_ts_ms"] is not None
+
+
+def test_file_rotation_writes_gzipped_lines(tmp_path):
+    ring = LogRing(in_memory_max=5, file_dir=str(tmp_path))
+    ring.append("hello")
+    ring.append("world")
+    ring.close()
+    files = list(tmp_path.glob("isv-*.log.gz"))
+    assert len(files) == 1
+    with gzip.open(files[0], "rt") as f:
+        content = f.read()
+    assert "\thello\n" in content
+    assert "\tworld\n" in content
+
+
+def test_file_retention_prunes_old(tmp_path):
+    # Create an old file directly
+    old = tmp_path / "isv-2020-01-01.log.gz"
+    with gzip.open(old, "wt") as f:
+        f.write("old\n")
+    # Backdate it
+    import os
+    os.utime(old, (time.time() - 365 * 86400, time.time() - 365 * 86400))
+
+    ring = LogRing(in_memory_max=5, file_dir=str(tmp_path), file_retention_days=7)
+    ring.append("new")  # triggers _prune_old_files
+    ring.close()
+    assert not old.exists()
+```
+
+- [ ] **Step 2: Run the tests**
+
+Run from `pi-sc64/packages/sc64-api`:
+
+```bash
+cd pi-sc64/packages/sc64-api
+PYTHONPATH=. python3 -m pytest tests/test_log_ring.py -v
+```
+
+Expected: all tests pass.
+
+- [ ] **Step 3: Commit**
+
+```bash
+cd pi-sc64
+git add packages/sc64-api/log_ring.py packages/sc64-api/tests/test_log_ring.py
+git commit -m "$(cat <<'EOF'
+feat(sc64-api): LogRing — timestamped ring buffer + rotating gzip file
+
+In-memory deque(maxlen=50k) for the test path; rotating gzip file
+for forensics so a panic-loop ROM can't lose history. 7-day file
+retention. Thread-safe. Designed per spec §6: ring overflow and
+panic-loop failure modes both have correct behavior.
+
+Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
+EOF
+)"
+```
+
+### Task 4.3: Implement `DebugConsumer` (Pi-side)
+
+**Files:**
+- Create: `pi-sc64/packages/sc64-api/debug_consumer.py`
+
+- [ ] **Step 1: Write `debug_consumer.py`**
+
+```python
+"""Manages the sc64deployer debug subprocess lifecycle.
+
+Lifecycle:
+  start()  - spawn `sc64deployer -r <addr> debug --isv 0x03FF0000` as a child;
+             pipe stdout into LogRing; spawn a reaper task that respawns on
+             unexpected exit with exponential backoff.
+  stop()   - SIGTERM the child with 2s grace, SIGKILL fallback. Mark as
+             intentionally stopped so the reaper doesn't respawn.
+  restart() - stop() then start().
+
+The /upload endpoint calls stop() before invoking the deployer (because the
+sc64deployer server is single-threaded — see server.rs:163 — so a long-lived
+debug client would block the upload), runs the upload, then calls start().
+
+Tracks consecutive_failures so /status can surface a stuck-failing state.
+"""
+from __future__ import annotations
+
+import asyncio
+import logging
+import os
+import signal
+import subprocess
+from typing import Optional
+
+logger = logging.getLogger("debug_consumer")
+
+
+class DebugConsumer:
+    BACKOFF_S = [1.0, 2.0, 4.0, 8.0, 10.0]  # last value is the cap
+
+    def __init__(self, deployer_path: str, server_addr: str, isv_offset: str,
+                 log_ring, on_line=None):
+        """
+        log_ring: anything with .append(str)
+        on_line: optional callback called per line (synchronously on the
+                 reader task). Used in tests.
+        """
+        self._deployer_path = deployer_path
+        self._server_addr = server_addr
+        self._isv_offset = isv_offset
+        self._log_ring = log_ring
+        self._on_line = on_line
+        self._proc: Optional[subprocess.Popen] = None
+        self._reader_task: Optional[asyncio.Task] = None
+        self._reaper_task: Optional[asyncio.Task] = None
+        self._intentional_stop = False
+        self._consecutive_failures = 0
+        self._started_at_ms: Optional[int] = None
+        self._lock = asyncio.Lock()
+
+    @property
+    def running(self) -> bool:
+        return self._proc is not None and self._proc.poll() is None
+
+    @property
+    def consecutive_failures(self) -> int:
+        return self._consecutive_failures
+
+    @property
+    def pid(self) -> Optional[int]:
+        return self._proc.pid if self._proc else None
+
+    @property
+    def started_at_ms(self) -> Optional[int]:
+        return self._started_at_ms
+
+    async def start(self) -> None:
+        """Spawn the deployer-debug subprocess. Idempotent: no-op if already running."""
+        async with self._lock:
+            if self.running:
+                return
+            self._intentional_stop = False
+            import time
+            self._started_at_ms = int(time.time() * 1000)
+            cmd = [self._deployer_path, "-r", self._server_addr,
+                   "debug", "--isv", self._isv_offset]
+            logger.info("starting debug consumer: %s", " ".join(cmd))
+            try:
+                self._proc = await asyncio.to_thread(
+                    subprocess.Popen,
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    bufsize=1,  # line-buffered
+                )
+            except FileNotFoundError as e:
+                logger.error("deployer not found: %s", e)
+                self._consecutive_failures += 1
+                raise
+
+            self._reader_task = asyncio.create_task(self._read_loop())
+            self._reaper_task = asyncio.create_task(self._reap_loop())
+
+    async def stop(self) -> None:
+        """SIGTERM, 2s grace, SIGKILL. Marks as intentional so the reaper
+        doesn't respawn after this call returns."""
+        async with self._lock:
+            self._intentional_stop = True
+            proc = self._proc
+            if proc is None:
+                return
+            if proc.poll() is None:
+                try:
+                    proc.terminate()
+                except ProcessLookupError:
+                    pass
+                try:
+                    await asyncio.wait_for(
+                        asyncio.to_thread(proc.wait), timeout=2.0
+                    )
+                except asyncio.TimeoutError:
+                    logger.warning("SIGTERM ignored, escalating to SIGKILL")
+                    try:
+                        proc.kill()
+                    except ProcessLookupError:
+                        pass
+                    await asyncio.to_thread(proc.wait)
+            self._proc = None
+
+            # Tasks should be cancelled (they may be blocked on stdout read).
+            for t in (self._reader_task, self._reaper_task):
+                if t and not t.done():
+                    t.cancel()
+            self._reader_task = None
+            self._reaper_task = None
+
+    async def restart(self) -> None:
+        await self.stop()
+        await self.start()
+
+    async def _read_loop(self) -> None:
+        """Pull stdout lines off the subprocess and into the ring."""
+        proc = self._proc
+        assert proc is not None and proc.stdout is not None
+        try:
+            while True:
+                line = await asyncio.to_thread(proc.stdout.readline)
+                if not line:
+                    return
+                self._log_ring.append(line.rstrip("\n"))
+                if self._on_line:
+                    self._on_line(line.rstrip("\n"))
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            logger.exception("reader loop crashed: %s", e)
+
+    async def _reap_loop(self) -> None:
+        """Respawn on unexpected exit with exponential backoff."""
+        proc = self._proc
+        assert proc is not None
+        try:
+            rc = await asyncio.to_thread(proc.wait)
+            logger.info("debug subprocess exited rc=%d (intentional=%s)",
+                        rc, self._intentional_stop)
+            if self._intentional_stop:
+                return
+            # Unexpected exit. Bump failure counter and respawn.
+            self._consecutive_failures += 1
+            backoff_idx = min(self._consecutive_failures - 1, len(self.BACKOFF_S) - 1)
+            wait_s = self.BACKOFF_S[backoff_idx]
+            logger.warning("respawning in %.1fs (failure #%d)", wait_s,
+                           self._consecutive_failures)
+            await asyncio.sleep(wait_s)
+            try:
+                await self.start()
+            except Exception as e:
+                logger.exception("respawn failed: %s", e)
+        except asyncio.CancelledError:
+            raise
+
+    def reset_failure_counter(self) -> None:
+        """Called after a successful run lasts > N seconds (optional polish)."""
+        self._consecutive_failures = 0
+```
+
+### Task 4.4: Unit tests for `DebugConsumer`
+
+**Files:**
+- Create: `pi-sc64/packages/sc64-api/tests/test_debug_consumer.py`
+
+- [ ] **Step 1: Write the tests**
+
+```python
+"""Unit tests for debug_consumer.DebugConsumer.
+
+Uses a tiny shell script as the "deployer" — emits known lines and
+exits when told. Avoids mocking subprocess.Popen because we want
+real semantics for the process-control behavior.
+"""
+from __future__ import annotations
+
+import asyncio
+import os
+import stat
+import sys
+import textwrap
+import time
+from pathlib import Path
+
+import pytest
+
+from log_ring import LogRing
+from debug_consumer import DebugConsumer
+
+
+@pytest.fixture
+def fake_deployer(tmp_path):
+    """A shell script that mimics `sc64deployer debug --isv ...`."""
+    script = tmp_path / "fake-deployer"
+    script.write_text(textwrap.dedent("""\
+        #!/usr/bin/env bash
+        # args: -r addr debug --isv offset
+        # Emits 3 lines and waits for SIGTERM
+        echo "IS-Viewer init OK"
+        echo "boot frame 1"
+        echo "boot frame 2"
+        trap 'exit 0' TERM
+        # Long sleep so the parent has to terminate us
+        sleep 600
+    """))
+    script.chmod(0o755)
+    return str(script)
+
+
+@pytest.fixture
+def fake_deployer_exits_immediately(tmp_path):
+    """A deployer that exits non-zero immediately — triggers respawn."""
+    script = tmp_path / "fake-bad-deployer"
+    script.write_text(textwrap.dedent("""\
+        #!/usr/bin/env bash
+        echo "starting" >&2
+        exit 7
+    """))
+    script.chmod(0o755)
+    return str(script)
+
+
+@pytest.mark.asyncio
+async def test_start_streams_lines_into_ring(fake_deployer):
+    ring = LogRing(in_memory_max=10)
+    dc = DebugConsumer(fake_deployer, "localhost:9064", "0x03FF0000", ring)
+    await dc.start()
+    # Give the subprocess time to emit lines
+    await asyncio.sleep(0.5)
+    assert dc.running
+    lines = [l.line for l in ring.read_window()]
+    assert "IS-Viewer init OK" in lines
+    await dc.stop()
+
+
+@pytest.mark.asyncio
+async def test_stop_terminates_subprocess(fake_deployer):
+    ring = LogRing(in_memory_max=10)
+    dc = DebugConsumer(fake_deployer, "x", "0x03", ring)
+    await dc.start()
+    assert dc.running
+    pid = dc.pid
+    await dc.stop()
+    assert not dc.running
+    # Verify the process is really gone (not zombie)
+    try:
+        os.kill(pid, 0)
+        assert False, f"process {pid} still alive"
+    except ProcessLookupError:
+        pass
+
+
+@pytest.mark.asyncio
+async def test_start_idempotent(fake_deployer):
+    ring = LogRing(in_memory_max=10)
+    dc = DebugConsumer(fake_deployer, "x", "0x03", ring)
+    await dc.start()
+    pid1 = dc.pid
+    await dc.start()  # second start should be a no-op
+    assert dc.pid == pid1
+    await dc.stop()
+
+
+@pytest.mark.asyncio
+async def test_respawn_on_unexpected_exit(fake_deployer_exits_immediately):
+    ring = LogRing(in_memory_max=10)
+    dc = DebugConsumer(fake_deployer_exits_immediately, "x", "0x03", ring)
+    # Override backoff for fast test
+    dc.BACKOFF_S = [0.05, 0.1, 0.2, 0.4, 0.4]
+    await dc.start()
+    # Wait long enough for at least 2 respawn cycles
+    await asyncio.sleep(0.6)
+    await dc.stop()
+    assert dc.consecutive_failures >= 1
+
+
+@pytest.mark.asyncio
+async def test_intentional_stop_does_not_increment_failures(fake_deployer):
+    ring = LogRing(in_memory_max=10)
+    dc = DebugConsumer(fake_deployer, "x", "0x03", ring)
+    await dc.start()
+    await dc.stop()
+    assert dc.consecutive_failures == 0
+```
+
+- [ ] **Step 2: Install pytest-asyncio if needed**
+
+```bash
+python3 -m pip install --user pytest-asyncio
+```
+
+Add to `pi-sc64/packages/sc64-api/tests/conftest.py`:
+
+```python
+import pytest
+pytest_plugins = ["pytest_asyncio"]
+```
+
+Or use `pytest.ini` with `asyncio_mode = auto`. Either works; pick whichever fits the rest of the test setup.
+
+- [ ] **Step 3: Run the tests**
+
+Run: `cd pi-sc64/packages/sc64-api && PYTHONPATH=. python3 -m pytest tests/test_debug_consumer.py -v`
+
+Expected: all tests pass. The `test_respawn_on_unexpected_exit` test is timing-sensitive; if it's flaky, bump the `asyncio.sleep` to 1.0s.
+
+- [ ] **Step 4: Commit**
+
+```bash
+cd pi-sc64
+git add packages/sc64-api/debug_consumer.py packages/sc64-api/tests/test_debug_consumer.py packages/sc64-api/tests/conftest.py
+git commit -m "$(cat <<'EOF'
+feat(sc64-api): DebugConsumer — manages sc64deployer debug subprocess
+
+start() / stop() / restart() with SIGTERM-then-SIGKILL on stop and
+exponential-backoff respawn on unexpected exit. Tracks
+consecutive_failures for /status. The /upload endpoint will call
+stop() before invoking the deployer (since the deployer server is
+single-threaded per server.rs:163) and start() after.
+
+Tests use a shell-script fake deployer for real process-control
+semantics rather than mocked subprocess.Popen.
+
+Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
+EOF
+)"
+```
+
+### Task 4.5: Wire DebugConsumer + LogRing + `/logs` + `/camera/snapshot` into `app.py`
+
+**Files:**
+- Modify: `pi-sc64/packages/sc64-api/app.py`
+
+- [ ] **Step 1: Add imports and globals**
+
+At the top of `app.py` add:
+
+```python
+from log_ring import LogRing
+from debug_consumer import DebugConsumer
+import io
+import httpx as _httpx  # for camera proxy
+```
+
+Below the existing globals add:
+
+```python
+ISV_OFFSET = os.environ.get("SC64_ISV_OFFSET", "0x03FF0000")
+RING_BUFFER_DIR = os.environ.get("SC64_RING_BUFFER_DIR", "/var/lib/sc64-api/logs")
+CAMERA_STREAM_URL = os.environ.get("SC64_CAMERA_STREAM_URL", "http://localhost:8080")
+
+log_ring = LogRing(in_memory_max=50_000, file_dir=RING_BUFFER_DIR)
+debug_consumer = DebugConsumer(
+    deployer_path=SC64_DEPLOYER,
+    server_addr=SC64_SERVER_ADDR,
+    isv_offset=ISV_OFFSET,
+    log_ring=log_ring,
+)
+```
+
+- [ ] **Step 2: Modify the startup handler**
+
+Replace the existing `_start_background_probes` with:
+
+```python
+@app.on_event("startup")
+async def _startup():
+    # Start debug consumer — captures IS-Viewer printfs into the ring.
+    try:
+        await debug_consumer.start()
+    except Exception as e:
+        # Non-fatal at startup: /status will show debug_consumer.running=False
+        # and the doctor's probe 9 will surface this.
+        import logging
+        logging.getLogger("sc64-api").warning("debug_consumer.start failed: %s", e)
+
+    async def refresh_loop():
+        while True:
+            v = await asyncio.to_thread(deployer_version, SC64_DEPLOYER)
+            _deployer_version_cache.update(v)
+            p = await asyncio.to_thread(deployer_probe, SC64_DEPLOYER, SC64_SERVER_ADDR)
+            _deployer_probe_cache.update(p)
+            await asyncio.sleep(DEPLOYER_PROBE_TTL_S)
+    asyncio.create_task(refresh_loop())
+
+
+@app.on_event("shutdown")
+async def _shutdown():
+    await debug_consumer.stop()
+    log_ring.close()
+```
+
+- [ ] **Step 3: Update the `/status` handler to fill the previously-stubbed sections**
+
+Replace the existing `/status` body with:
+
+```python
+@app.get("/status")
+async def status(auth: AuthContext = Depends(require_auth)):
+    ring_stats = log_ring.stats()
+    camera_reachable = await _probe_camera_async()
+    return {
+        "ok": True,
+        "version": "0.3.0",
+        "sc64_server": SC64_SERVER_ADDR,
+        "upload_busy": _upload_lock.locked(),
+        "user_id": auth.user_id,
+
+        "deployer": {
+            **_deployer_version_cache,
+            **_deployer_probe_cache,
+        },
+        "tokens_file": token_file_status(SC64_TOKEN_FILE),
+        "cart": cart_ftdi_status(),
+
+        "camera": {
+            "stream_reachable": camera_reachable,
+            "last_snapshot_ms": _last_snapshot_ms,
+        },
+        "debug_consumer": {
+            "running": debug_consumer.running,
+            "pid": debug_consumer.pid,
+            "started_at_ms": debug_consumer.started_at_ms,
+            "consecutive_failures": debug_consumer.consecutive_failures,
+            "last_line_ts_ms": ring_stats["last_line_ts_ms"],
+            "last_line_preview": ring_stats["last_line_preview"],
+        },
+        "ring_buffer": {
+            "in_memory_lines": ring_stats["in_memory_lines"],
+            "in_memory_max": ring_stats["in_memory_max"],
+            "file_path": ring_stats["file_path"],
+            "file_bytes": ring_stats["file_bytes"],
+        },
+    }
+
+
+_last_snapshot_ms: int | None = None
+
+
+async def _probe_camera_async() -> bool:
+    """Cheap reachability check — HEAD on the stream URL."""
+    try:
+        async with _httpx.AsyncClient(timeout=2.0) as c:
+            r = await c.head(f"{CAMERA_STREAM_URL}/stream")
+            return r.status_code < 500
+    except Exception:
+        return False
+```
+
+- [ ] **Step 4: Add `/logs` endpoint**
+
+```python
+@app.get("/logs")
+async def get_logs(
+    since: int = 0,
+    until: int | None = None,
+    limit: int = 10_000,
+    auth: AuthContext = Depends(require_auth),
+):
+    lines = log_ring.read_window(since_ms=since, until_ms=until)
+    if len(lines) > limit:
+        lines = lines[-limit:]
+    return {"lines": [{"ts_ms": l.ts_ms, "line": l.line} for l in lines]}
+```
+
+- [ ] **Step 5: Add `/camera/snapshot` endpoint**
+
+```python
+from fastapi.responses import Response
+
+
+@app.get("/camera/snapshot")
+async def camera_snapshot(auth: AuthContext = Depends(require_auth)):
+    """Return one JPEG frame from the ustreamer MJPEG stream.
+
+    ustreamer in some builds exposes /snapshot. If yours doesn't, we
+    fall back to slicing the first complete JPEG out of /stream.
+    """
+    global _last_snapshot_ms
+    import time
+    async with _httpx.AsyncClient(timeout=5.0) as c:
+        # Try /snapshot first (cheap if supported)
+        try:
+            r = await c.get(f"{CAMERA_STREAM_URL}/snapshot")
+            if r.status_code == 200 and r.headers.get("content-type", "").startswith("image/"):
+                _last_snapshot_ms = int(time.time() * 1000)
+                return Response(content=r.content, media_type="image/jpeg")
+        except Exception:
+            pass
+
+        # Fallback: pull one frame from the MJPEG stream
+        try:
+            async with c.stream("GET", f"{CAMERA_STREAM_URL}/stream") as r:
+                buf = bytearray()
+                async for chunk in r.aiter_bytes(chunk_size=4096):
+                    buf.extend(chunk)
+                    # Find SOI (0xFFD8) and EOI (0xFFD9)
+                    soi = buf.find(b"\xff\xd8")
+                    if soi == -1:
+                        continue
+                    eoi = buf.find(b"\xff\xd9", soi + 2)
+                    if eoi == -1:
+                        continue
+                    jpeg = bytes(buf[soi:eoi + 2])
+                    _last_snapshot_ms = int(time.time() * 1000)
+                    return Response(content=jpeg, media_type="image/jpeg")
+        except Exception as e:
+            raise HTTPException(status_code=502, detail=f"camera unavailable: {e}")
+    raise HTTPException(status_code=502, detail="camera produced no JPEG")
+```
+
+- [ ] **Step 6: Modify `/upload` to stop/start the consumer around the deployer call**
+
+Find the existing `@app.post("/upload")` handler. Replace the body of `async with _upload_lock:` with:
+
+```python
+async with _upload_lock:
+    suffix = Path(file.filename or "rom").suffix or ".z64"
+    content = await file.read()
+
+    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+        tmp.write(content)
+        tmp_path = tmp.name
+
+    try:
+        # Stop the debug consumer so the deployer server can accept our
+        # upload client. See server.rs:163 — server is single-threaded.
+        await debug_consumer.stop()
+
+        result = await asyncio.to_thread(
+            subprocess.run,
+            [
+                SC64_DEPLOYER, "-r", SC64_SERVER_ADDR,
+                "upload", "--direct", "--reboot", tmp_path,
+            ],
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+    finally:
+        Path(tmp_path).unlink(missing_ok=True)
+        # Always restart the consumer, even if upload failed —
+        # we still want to capture whatever the cart says.
+        try:
+            await debug_consumer.start()
+        except Exception:
+            pass  # /status will surface the failure
+
+    if result.returncode != 0:
+        raise HTTPException(
+            status_code=502,
+            detail=f"sc64deployer: {result.stderr.strip() or result.stdout.strip()}",
+        )
+
+    import time
+    return {
+        "ok": True,
+        "rom": file.filename,
+        "size_bytes": len(content),
+        "upload_complete_ts": int(time.time() * 1000),
+        "user_id": auth.user_id,
+    }
+```
+
+- [ ] **Step 7: Update the NixOS module to bundle new files**
+
+In `pi-sc64/modules/sc64-api.nix`, update `appDir`:
+
+```nix
+appDir = pkgs.runCommand "sc64-api-app" {} ''
+  mkdir -p $out
+  cp ${../packages/sc64-api/app.py} $out/app.py
+  cp ${../packages/sc64-api/status_probes.py} $out/status_probes.py
+  cp ${../packages/sc64-api/log_ring.py} $out/log_ring.py
+  cp ${../packages/sc64-api/debug_consumer.py} $out/debug_consumer.py
+'';
+```
+
+Add a tmpfiles rule and option for the ring-buffer directory. In the same file, in the `config` block:
+
+```nix
+systemd.tmpfiles.rules = [
+  "d /var/lib/sc64-api 0750 sc64api sc64api -"
+  "d /var/lib/sc64-api/logs 0750 sc64api sc64api -"
+];
+
+# Add to the systemd service environment:
+environment = {
+  SC64_SERVER_ADDR = cfg.sc64ServerAddr;
+  SC64_DEPLOYER = "${pkgs.sc64deployer}/bin/sc64deployer";
+  SC64_TOKEN_FILE = cfg.tokenFile;
+  SC64_ISV_OFFSET = "0x03FF0000";
+  SC64_RING_BUFFER_DIR = "/var/lib/sc64-api/logs";
+  SC64_CAMERA_STREAM_URL = "http://localhost:8080";
+};
+
+# Add to serviceConfig:
+serviceConfig.ReadWritePaths = [ "/var/lib/sc64-api" ];
+```
+
+Merge with whatever's already in the file.
+
+- [ ] **Step 8: Deploy to the Pi and verify**
+
+```bash
+cd pi-sc64
+scripts/bootstrap-pi.sh full sc64pi.local 2>&1 | tail -10
+```
+
+Then:
+
+```bash
+TOKEN=$(cat ~/.sc64-api-token)
+# /logs should return an empty list initially (or whatever's been captured since boot)
+curl -s -H "Authorization: Bearer $TOKEN" "http://sc64pi.local:8064/logs?since=0" | jq
+
+# /camera/snapshot should return a JPEG (with cart unplugged, camera should still work)
+curl -s -H "Authorization: Bearer $TOKEN" http://sc64pi.local:8064/camera/snapshot -o /tmp/snap.jpg
+file /tmp/snap.jpg  # Expected: JPEG image data
+
+# /status now shows real values for debug_consumer, ring_buffer, camera
+curl -s -H "Authorization: Bearer $TOKEN" http://sc64pi.local:8064/status | jq '.debug_consumer, .ring_buffer, .camera'
+```
+
+Expected: debug_consumer.running is true if cart is plugged in (deployer can open the device), ring_buffer.in_memory_max is 50000, camera.stream_reachable is true.
+
+- [ ] **Step 9: Commit**
+
+```bash
+cd pi-sc64
+git add packages/sc64-api/app.py modules/sc64-api.nix
+git commit -m "$(cat <<'EOF'
+feat(sc64-api): wire DebugConsumer + LogRing into app + /logs + /camera
+
+- /upload now stops the debug consumer before running sc64deployer
+  upload, then restarts it (single-threaded server constraint)
+- /logs paginated by since/until ms timestamps
+- /camera/snapshot proxies to ustreamer with /snapshot → /stream
+  fallback
+- /status fills the previously-stubbed debug_consumer, ring_buffer,
+  and camera sections with real values
+
+tmpfiles creates /var/lib/sc64-api/logs as sc64api:sc64api 0750 so
+LogRing's file writer can rotate gzip logs there.
+
+Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
+EOF
+)"
+```
+
+### Chunk 4 acceptance test
+
+- [ ] Pi-side unit tests pass: `cd pi-sc64/packages/sc64-api && PYTHONPATH=. python3 -m pytest tests/ -v`
+- [ ] After `nixos-rebuild switch`, `/status` shows `debug_consumer.running == true` (cart plugged in) and `camera.stream_reachable == true`
+- [ ] `curl -s -H "Authorization: Bearer $TOKEN" "http://sc64pi.local:8064/logs?since=0" | jq '.lines | length'` returns a positive integer
+- [ ] `curl -s -H "Authorization: Bearer $TOKEN" http://sc64pi.local:8064/camera/snapshot -o /tmp/snap.jpg && file /tmp/snap.jpg` reports `JPEG image data`
+- [ ] An end-to-end upload via curl works without breaking the debug stream: ``curl -X POST -H "Authorization: Bearer $TOKEN" -F "file=@build/starfox64.us.rev1.uncompressed.z64" http://sc64pi.local:8064/upload`` returns 200, then `/logs?since=<upload_complete_ts>` shows new post-reset lines from the cart
+- [ ] `make hil-doctor` shows blocking probes 9 (debug consumer running) and 10 (camera reachable) now green — no longer stubbed
+
+Once all six hold, Chunk 4 is done. Proceed to Chunk 5.
+
+---
+
+## Chunk 5: Mac-side round-trip — ctx + runner.run + smoke test
+
+**Goal:** Mac-side counterpart to Chunk 4. Implements `ctx.upload_rom` (with cart-alive check), `ctx.wait_for_log`, `ctx.snapshot`, plus the `hil_test_runner.py run` subcommand. End state: `make hil-test tests/hil/test_boot_smoke.py` exits 0 against the live cart with a JPEG artifact saved.
+
+**Files this chunk creates/modifies:**
+
+- Modify: `sf64-practice-rom/tools/hil/client.py` — add `upload_rom`, `get_logs`, `get_camera_snapshot`
+- Create: `sf64-practice-rom/tools/hil/ctx.py`
+- Modify: `sf64-practice-rom/tools/hil_test_runner.py` — implement `run` subcommand
+- Modify: `sf64-practice-rom/tests/hil/_unit/test_client.py` — add tests for new methods
+- Create: `sf64-practice-rom/tests/hil/_unit/test_ctx.py`
+- Create: `sf64-practice-rom/tests/hil/test_boot_smoke.py`
+
+**Skills to use:**
+- @superpowers:test-driven-development
+- @superpowers:verification-before-completion before claiming chunk complete
+
+### Task 5.1: Extend `hil/client.py` with upload/logs/snapshot
+
+**Files:**
+- Modify: `sf64-practice-rom/tools/hil/client.py`
+
+- [ ] **Step 1: Add methods to HilClient**
+
+In `client.py`, replace the `# Chunk 4 will add: ...` comment with:
+
+```python
+    def upload_rom(self, path: str) -> dict[str, Any]:
+        """Upload a ROM. Returns the server response including upload_complete_ts."""
+        with open(path, "rb") as f:
+            files = {"file": (Path(path).name, f, "application/octet-stream")}
+            resp = self._request(
+                "POST", "/upload",
+                headers=self._auth_headers(),
+                files=files,
+                timeout=180.0,  # uploads can be slow
+            )
+        if resp.status_code == 409:
+            raise UploadConflict("another upload in progress")
+        if resp.status_code != 200:
+            raise HilError(f"upload failed: {resp.status_code} {resp.text}")
+        return resp.json()
+
+    def get_logs(self, since_ms: int, until_ms: int | None = None,
+                 limit: int = 10_000) -> list[dict[str, Any]]:
+        params: dict[str, int] = {"since": since_ms, "limit": limit}
+        if until_ms is not None:
+            params["until"] = until_ms
+        resp = self._request("GET", "/logs",
+                             headers=self._auth_headers(),
+                             params=params)
+        resp.raise_for_status()
+        return resp.json()["lines"]
+
+    def get_camera_snapshot(self) -> bytes:
+        resp = self._request("GET", "/camera/snapshot",
+                             headers=self._auth_headers(),
+                             timeout=10.0)
+        if resp.status_code != 200:
+            raise SnapshotUnavailable(f"snapshot failed: {resp.status_code}")
+        return resp.content
+```
+
+- [ ] **Step 2: Run existing client unit tests**
+
+```bash
+cd ~/code/sf64-practice-rom
+PYTHONPATH=. python3 -m pytest tests/hil/_unit/test_client.py -v
+```
+
+Expected: existing tests still pass.
+
+- [ ] **Step 3: Add tests for the new methods**
+
+Append to `tests/hil/_unit/test_client.py`:
+
+```python
+class TestUploadRom:
+    def test_409_raises_upload_conflict(self, tmp_path):
+        rom = tmp_path / "x.z64"
+        rom.write_bytes(b"\x00" * 1024)
+        cfg = ClientConfig(host="x", token="t")
+        with HilClient(cfg) as c:
+            mock_resp = MagicMock(status_code=409, text="busy")
+            with patch.object(c._client, "request", return_value=mock_resp):
+                from tools.hil.client import UploadConflict
+                with pytest.raises(UploadConflict):
+                    c.upload_rom(str(rom))
+
+    def test_200_returns_dict(self, tmp_path):
+        rom = tmp_path / "x.z64"
+        rom.write_bytes(b"\x00" * 1024)
+        cfg = ClientConfig(host="x", token="t")
+        with HilClient(cfg) as c:
+            mock_resp = MagicMock(status_code=200)
+            mock_resp.json.return_value = {"ok": True, "upload_complete_ts": 12345}
+            with patch.object(c._client, "request", return_value=mock_resp):
+                r = c.upload_rom(str(rom))
+                assert r["upload_complete_ts"] == 12345
+
+
+class TestGetLogs:
+    def test_returns_line_list(self):
+        cfg = ClientConfig(host="x", token="t")
+        with HilClient(cfg) as c:
+            mock_resp = MagicMock(status_code=200)
+            mock_resp.json.return_value = {"lines": [
+                {"ts_ms": 1, "line": "a"},
+                {"ts_ms": 2, "line": "b"},
+            ]}
+            mock_resp.raise_for_status.return_value = None
+            with patch.object(c._client, "request", return_value=mock_resp):
+                lines = c.get_logs(since_ms=0)
+                assert len(lines) == 2
+                assert lines[0]["line"] == "a"
+```
+
+Run: `PYTHONPATH=. python3 -m pytest tests/hil/_unit/test_client.py -v`
+
+Expected: all pass.
+
+### Task 5.2: Implement `hil/ctx.py`
+
+**Files:**
+- Create: `sf64-practice-rom/tools/hil/ctx.py`
+
+- [ ] **Step 1: Write the file**
+
+```python
+"""TestContext for HIL tests.
+
+Test files define `def run(ctx): ...` and call methods like:
+    ctx.upload_rom("build/foo.z64")
+    ctx.wait_for_log(r"ISViewer init OK")
+    shot = ctx.snapshot()
+    ctx.assert_log_contains(r"PRACTICE READY")
+
+ctx manages: upload anchor timestamp, polling for log matches,
+artifact paths, assertion bookkeeping. Chunk 6 adds the cart-wedge
+banner + assert_log_not_contains + JUnit emission.
+"""
+from __future__ import annotations
+
+import re
+import time
+import uuid
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+from tools.hil.client import HilClient, ClientConfig, HilError
+
+
+class LogWaitTimeout(HilError):
+    pass
+
+
+class CartWedgedError(HilError):
+    """upload_rom() saw no IS-Viewer line within cart_alive_timeout_ms."""
+
+
+@dataclass
+class TestContext:
+    client: HilClient
+    artifacts_dir: Path
+    test_name: str
+    cart_alive_timeout_ms: int = 10_000
+
+    upload_complete_ts: int | None = None
+    _snapshot_seq: int = 0
+    passes: list[str] = field(default_factory=list)
+    failures: list[str] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        self.artifacts_dir.mkdir(parents=True, exist_ok=True)
+
+    def upload_rom(self, rom_path: str) -> None:
+        """Upload + wait for first IS-Viewer line to prove the cart is alive."""
+        result = self.client.upload_rom(rom_path)
+        self.upload_complete_ts = int(result["upload_complete_ts"])
+
+        # Cart-alive check: poll /logs until ANY line appears since upload.
+        deadline = time.time() * 1000 + self.cart_alive_timeout_ms
+        while time.time() * 1000 < deadline:
+            lines = self.client.get_logs(since_ms=self.upload_complete_ts)
+            if lines:
+                return
+            time.sleep(0.1)
+        raise CartWedgedError(
+            f"No IS-Viewer line within {self.cart_alive_timeout_ms}ms after upload"
+        )
+
+    def wait_for_log(self, pattern: str, timeout_ms: int = 10_000) -> dict[str, Any]:
+        """Poll /logs since upload_complete_ts. Return first matching line."""
+        if self.upload_complete_ts is None:
+            raise HilError("wait_for_log called before upload_rom")
+        regex = re.compile(pattern)
+        deadline = time.time() * 1000 + timeout_ms
+        seen_last_idx = 0
+        while time.time() * 1000 < deadline:
+            lines = self.client.get_logs(since_ms=self.upload_complete_ts)
+            for entry in lines[seen_last_idx:]:
+                if regex.search(entry["line"]):
+                    return entry
+            seen_last_idx = len(lines)
+            time.sleep(0.1)
+        raise LogWaitTimeout(
+            f"pattern {pattern!r} not seen within {timeout_ms}ms"
+        )
+
+    def advance_seconds(self, seconds: float) -> None:
+        """Wall-clock wait. Test authors must budget slack for hardware boot variance."""
+        time.sleep(seconds)
+
+    def snapshot(self, name: str | None = None) -> Path:
+        """GET /camera/snapshot, save to artifacts dir, return the path."""
+        self._snapshot_seq += 1
+        suffix = f"{self._snapshot_seq}" if name is None else name
+        path = self.artifacts_dir / f"{self.test_name}-{suffix}.jpg"
+        data = self.client.get_camera_snapshot()
+        path.write_bytes(data)
+        return path
+
+    def assert_log_contains(self, pattern: str, msg: str = "") -> None:
+        """Re-query /logs and search for pattern. Record pass/fail."""
+        if self.upload_complete_ts is None:
+            self.failures.append("assert_log_contains called before upload_rom")
+            return
+        lines = self.client.get_logs(since_ms=self.upload_complete_ts)
+        regex = re.compile(pattern)
+        if any(regex.search(l["line"]) for l in lines):
+            self.passes.append(msg or pattern)
+        else:
+            self.failures.append(f"{msg or pattern}: no match in {len(lines)} lines")
+
+    def assert_true(self, cond: bool, msg: str = "") -> None:
+        if cond:
+            self.passes.append(msg)
+        else:
+            self.failures.append(msg)
+            print(f"  FAIL: {msg}")
+```
+
+- [ ] **Step 2: Unit tests for ctx**
+
+Create `sf64-practice-rom/tests/hil/_unit/test_ctx.py`:
+
+```python
+"""Unit tests for ctx.TestContext — mocked client."""
+from __future__ import annotations
+
+import pytest
+from unittest.mock import MagicMock, patch
+
+from tools.hil.ctx import TestContext, CartWedgedError, LogWaitTimeout
+from tools.hil.client import HilClient, ClientConfig
+
+
+def make_ctx(tmp_path, mock_client) -> TestContext:
+    return TestContext(
+        client=mock_client,
+        artifacts_dir=tmp_path / "art",
+        test_name="t",
+        cart_alive_timeout_ms=100,
+    )
+
+
+def test_upload_rom_records_ts(tmp_path):
+    rom = tmp_path / "x.z64"
+    rom.write_bytes(b"\x00")
+    client = MagicMock(spec=HilClient)
+    client.upload_rom.return_value = {"upload_complete_ts": 999}
+    client.get_logs.return_value = [{"ts_ms": 1000, "line": "boot"}]
+    ctx = make_ctx(tmp_path, client)
+    ctx.upload_rom(str(rom))
+    assert ctx.upload_complete_ts == 999
+
+
+def test_upload_rom_raises_cart_wedged_on_silence(tmp_path):
+    rom = tmp_path / "x.z64"
+    rom.write_bytes(b"\x00")
+    client = MagicMock(spec=HilClient)
+    client.upload_rom.return_value = {"upload_complete_ts": 999}
+    client.get_logs.return_value = []  # no lines ever
+    ctx = make_ctx(tmp_path, client)
+    with pytest.raises(CartWedgedError):
+        ctx.upload_rom(str(rom))
+
+
+def test_wait_for_log_returns_match(tmp_path):
+    client = MagicMock(spec=HilClient)
+    client.upload_rom.return_value = {"upload_complete_ts": 0}
+    client.get_logs.return_value = [
+        {"ts_ms": 1, "line": "boot"},
+        {"ts_ms": 2, "line": "ISViewer init OK"},
+    ]
+    ctx = make_ctx(tmp_path, client)
+    rom = tmp_path / "x.z64"; rom.write_bytes(b"\x00")
+    ctx.upload_rom(str(rom))
+    match = ctx.wait_for_log(r"ISViewer init OK", timeout_ms=100)
+    assert "ISViewer init OK" in match["line"]
+
+
+def test_wait_for_log_raises_on_timeout(tmp_path):
+    client = MagicMock(spec=HilClient)
+    client.upload_rom.return_value = {"upload_complete_ts": 0}
+    client.get_logs.return_value = [{"ts_ms": 1, "line": "boot"}]
+    ctx = make_ctx(tmp_path, client)
+    rom = tmp_path / "x.z64"; rom.write_bytes(b"\x00")
+    ctx.upload_rom(str(rom))
+    with pytest.raises(LogWaitTimeout):
+        ctx.wait_for_log(r"never gonna match", timeout_ms=100)
+
+
+def test_snapshot_writes_file(tmp_path):
+    client = MagicMock(spec=HilClient)
+    client.get_camera_snapshot.return_value = b"\xff\xd8\xff\xd9"  # tiny JPEG-ish
+    ctx = make_ctx(tmp_path, client)
+    p = ctx.snapshot()
+    assert p.exists()
+    assert p.read_bytes() == b"\xff\xd8\xff\xd9"
+
+
+def test_assert_log_contains_records_pass_fail(tmp_path):
+    client = MagicMock(spec=HilClient)
+    client.upload_rom.return_value = {"upload_complete_ts": 0}
+    client.get_logs.return_value = [{"ts_ms": 1, "line": "PRACTICE READY"}]
+    ctx = make_ctx(tmp_path, client)
+    rom = tmp_path / "x.z64"; rom.write_bytes(b"\x00")
+    ctx.upload_rom(str(rom))
+    ctx.assert_log_contains(r"PRACTICE", "practice ready emitted")
+    assert "practice ready emitted" in ctx.passes
+    ctx.assert_log_contains(r"NOT THERE", "missing")
+    assert any("missing" in f for f in ctx.failures)
+```
+
+Run: `PYTHONPATH=. python3 -m pytest tests/hil/_unit/test_ctx.py -v`
+
+Expected: all pass.
+
+### Task 5.3: Implement `run` subcommand in `hil_test_runner.py`
+
+**Files:**
+- Modify: `sf64-practice-rom/tools/hil_test_runner.py`
+
+- [ ] **Step 1: Replace `cmd_run` with a real implementation**
+
+Replace the existing `cmd_run` body:
+
+```python
+def cmd_run(args: argparse.Namespace) -> int:
+    import importlib.util
+    import uuid
+
+    from tools.hil.client import HilClient, ClientConfig
+    from tools.hil.ctx import TestContext, CartWedgedError
+    from tools.hil.doctor import probe_all, render_report
+
+    # Optional preflight
+    if not args.skip_preflight:
+        report = probe_all(args.host)
+        blocking = report.blocking_failed
+        if blocking:
+            print(render_report(report))
+            print("\n  Preflight failed. Aborting (use --skip-preflight to bypass).")
+            return 1
+
+    test_paths = _discover_tests(args.path)
+    if not test_paths:
+        print(f"No tests found at {args.path}", file=sys.stderr)
+        return 2
+
+    run_id = uuid.uuid4().hex[:8]
+    artifacts_root = (
+        __import__("pathlib").Path("tests/hil/_artifacts") / run_id
+    )
+    artifacts_root.mkdir(parents=True, exist_ok=True)
+    print(f"  Run ID: {run_id}")
+    print(f"  Artifacts: {artifacts_root}")
+
+    cfg = ClientConfig(host=args.host)
+    total_fail = 0
+    for tp in test_paths:
+        test_name = __import__("pathlib").Path(tp).stem
+        print(f"\n  >> {test_name}")
+        mod = _load_test_module(tp)
+        if not hasattr(mod, "run"):
+            print(f"     SKIP (no `def run(ctx)`)")
+            continue
+        with HilClient(cfg) as client:
+            ctx = TestContext(
+                client=client,
+                artifacts_dir=artifacts_root,
+                test_name=test_name,
+            )
+            try:
+                mod.run(ctx)
+            except CartWedgedError as e:
+                print(f"     CART WEDGED: {e}")
+                # Chunk 6 wires the banner + EX_TEMPFAIL exit; for Chunk 5
+                # we just fail the test.
+                ctx.failures.append(f"cart wedged: {e}")
+            except Exception as e:
+                import traceback
+                traceback.print_exc()
+                ctx.failures.append(f"exception: {e}")
+            for p in ctx.passes:
+                print(f"     PASS: {p}")
+            for f in ctx.failures:
+                print(f"     FAIL: {f}")
+            if ctx.failures:
+                total_fail += 1
+    return 0 if total_fail == 0 else 1
+
+
+def _discover_tests(path: str) -> list[str]:
+    import glob
+    from pathlib import Path
+    p = Path(path)
+    if p.is_file():
+        return [str(p)]
+    if p.is_dir():
+        return sorted(glob.glob(str(p / "test_*.py")))
+    return []
+
+
+def _load_test_module(path: str):
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("hil_test_module", path)
+    assert spec is not None and spec.loader is not None
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+```
+
+Update the argparse parser:
+
+```python
+    run = subs.add_parser("run", help="run a HIL test or directory of tests")
+    run.add_argument("path", help="test file or directory")
+    run.add_argument("--host", default=DEFAULT_HOST)
+    run.add_argument("--skip-preflight", action="store_true",
+                     help="skip the inline doctor preflight")
+    run.set_defaults(func=cmd_run)
+```
+
+### Task 5.4: Write `test_boot_smoke.py`
+
+**Files:**
+- Create: `sf64-practice-rom/tests/hil/test_boot_smoke.py`
+
+- [ ] **Step 1: Write the test**
+
+```python
+"""Smoke test: upload the current practice ROM build, confirm the cart
+boots and emits any IS-Viewer output, snapshot the screen.
+
+This is the canonical "is the HIL rig alive" test. Failures here mean
+the rig itself is broken, not the ROM.
+
+Pre-req: `make practice -j4` has run and produced
+build/starfox64.us.rev1.uncompressed.z64.
+"""
+from __future__ import annotations
+
+ROM_PATH = "build/starfox64.us.rev1.uncompressed.z64"
+
+
+def run(ctx):
+    import os
+    if not os.path.isfile(ROM_PATH):
+        ctx.failures.append(f"ROM not built at {ROM_PATH} — run `make practice -j4`")
+        return
+
+    ctx.upload_rom(ROM_PATH)
+    # Wait for ANY IS-Viewer line. The IS-Viewer module emits an init
+    # banner when the channel comes up; if our ROM uses MODS_ISVIEWER
+    # this fires reliably within ~50ms.
+    ctx.wait_for_log(r".+", timeout_ms=5000)
+    ctx.advance_seconds(2)
+    shot = ctx.snapshot("boot")
+    ctx.assert_true(shot.exists() and shot.stat().st_size > 0,
+                    "screenshot captured")
+    ctx.assert_true(
+        # Lenient assertion: ANY log line at all means the cart is alive
+        # and printing. Tighter assertions belong in dedicated tests.
+        True, "cart booted and emitted at least one IS-Viewer line",
+    )
+```
+
+- [ ] **Step 2: Build the ROM if needed**
+
+```bash
+cd ~/code/sf64-practice-rom
+make practice -j4
+```
+
+(Already built? It'll no-op.)
+
+- [ ] **Step 3: Run the test**
+
+```bash
+PYTHONPATH=. python3 tools/hil_test_runner.py run tests/hil/test_boot_smoke.py
+```
+
+Expected:
+- Preflight runs and is green (cart plugged in)
+- `>> test_boot_smoke` printed
+- `PASS: screenshot captured`
+- `PASS: cart booted and emitted at least one IS-Viewer line`
+- Artifact JPEG written under `tests/hil/_artifacts/<run_id>/test_boot_smoke-boot.jpg`
+- Exit 0
+
+**Iterate against the real cart until green.** Common failures:
+- `CART WEDGED` — the cart isn't picking up the upload's reset signal. Press the physical N64 reset button after upload, or check that the cart is in a state where `--reboot` actually triggers.
+- `LogWaitTimeout` — IS-Viewer init line not seen within 5s. Could mean: (a) ROM doesn't have MODS_ISVIEWER=1, (b) deployer is upstream not qw-local (no flush patch), (c) the `--isv 0x03FF0000` offset is wrong.
+- `screenshot` is 0 bytes — camera dead. `hil doctor` should have caught this.
+
+- [ ] **Step 4: Commit**
+
+```bash
+cd ~/code/sf64-practice-rom
+git add tools/hil/client.py tools/hil/ctx.py tools/hil_test_runner.py tests/hil/_unit/test_ctx.py tests/hil/test_boot_smoke.py
+git commit -m "$(cat <<'EOF'
+feat(hil): round-trip MVP — ctx, runner.run, test_boot_smoke
+
+ctx.upload_rom blocks until first IS-Viewer line proves cart-alive
+(CartWedgedError on silence). ctx.wait_for_log polls /logs since the
+upload anchor. ctx.snapshot fetches /camera/snapshot to the artifacts
+dir. hil_test_runner.py `run` subcommand discovers and executes tests
+with inline preflight (--skip-preflight to bypass).
+
+test_boot_smoke is the canonical "is the rig alive" smoke. Failures
+there mean the rig, not the ROM, is broken.
+
+Cart-wedge banner and assert_log_not_contains land in Chunk 6.
+
+Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>
+EOF
+)"
+```
+
+### Chunk 5 acceptance test
+
+- [ ] Mac-side unit tests pass: `cd ~/code/sf64-practice-rom && PYTHONPATH=. python3 -m pytest tests/hil/_unit/ -v`
+- [ ] `make hil-test tests/hil/test_boot_smoke.py` (or the equivalent `python3 tools/hil_test_runner.py run ...`) exits 0 with the test passing
+- [ ] The artifact JPEG exists under `tests/hil/_artifacts/<run_id>/test_boot_smoke-boot.jpg` and is a valid non-empty JPEG (`file <path>` reports `JPEG image data`)
+- [ ] Inline preflight runs before the test: temporarily delete `~/.sc64-api-token` and rerun — the doctor's probe 4 failure short-circuits the run with the fix box (no test executes), exit 1
+
+Once all four hold, Chunk 5 is done. Restore your token and proceed to Chunk 6.
 
 ---
