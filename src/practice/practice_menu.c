@@ -26,15 +26,17 @@ typedef struct RadialMenuDef {
     s32 (*getSlice)(s8 sx, s8 sy);
 } RadialMenuDef;
 
-// -- Root radial - 8-item octant layout
-// N=RESTART NE=DISPLAY E=SAVE SE=LOAD S=LEVELS SW=LOADOUT W=CHEATS NW=SD CARD
+// -- Root radial - 7-item octant layout
+// N=RESTART NE=DISPLAY E=AUDIO S=LEVELS SW=LOADOUT W=CHEATS NW=SD CARD
+// SE is intentionally empty: SAVE/LOAD were removed from the root radial.
+// Position save/load still run from the gameplay hotkeys; SD save/load lives
+// in the SD CARD sub-radial.
 // Each wedge is 45deg wide (tan 22.5deg ~ 5/12 gives clean integer boundary).
 
 typedef enum RootSlice {
     RSLICE_RESTART,   // N
     RSLICE_DISPLAY,   // NE
-    RSLICE_SAVE,      // E
-    RSLICE_LOAD,      // SE
+    RSLICE_AUDIO,     // E
     RSLICE_LEVELS,    // S
     RSLICE_LOADOUT,   // SW
     RSLICE_CHEATS,    // W
@@ -45,8 +47,7 @@ typedef enum RootSlice {
 static const RadialEntry sRootEntries[RSLICE_MAX] = {
     { "RESTART", "RESTART LEVEL",  134, 48,  7,  180, 60,  60  },  // N
     { "DISPLAY", "DISPLAY...",     204, 58,  7,  60,  160, 160 },  // NE
-    { "SAVE",    "SAVE POSITION",  225, 108, 4,  60,  140, 180 },  // E
-    { "LOAD",    "LOAD POSITION",  225, 154, 4,  60,  180, 100 },  // SE
+    { "AUDIO",   "AUDIO...",       216, 108, 5,  90,  140, 220 },  // E
     { "LEVELS",  "LEVEL SELECT",   140, 178, 6,  180, 140, 60  },  // S
     { "LOADOUT", "LOADOUT...",      68, 154, 7,  140, 60,  180 },  // SW
     { "CHEATS",  "CHEATS...",       64, 108, 6,  200, 80,  80  },  // W
@@ -67,11 +68,11 @@ static s32 Root_GetSlice(s8 stickX, s8 stickY) {
         return y > 0 ? RSLICE_RESTART : RSLICE_LEVELS;
     }
     if (ay * 12 < ax * 5) {           // near horizontal
-        return x > 0 ? RSLICE_SAVE : RSLICE_CHEATS;
+        return x > 0 ? RSLICE_AUDIO : RSLICE_CHEATS;
     }
     // diagonal quadrants
     if (x > 0) {
-        return y > 0 ? RSLICE_DISPLAY : RSLICE_LOAD;
+        return y > 0 ? RSLICE_DISPLAY : SLICE_NONE;   // SE empty (save/load removed)
     }
     return y > 0 ? RSLICE_SD : RSLICE_LOADOUT;
 }
@@ -280,17 +281,6 @@ void Practice_Menu_Update(void) {
         sStartHoldTimer = 0;
     }
 
-    /* Z = SD save/load shortcuts when radial is open at depth 0.
-     * Must come before B_BUTTON check so Z+B is caught here, not by the close-menu path. */
-    if (sMenuDepth == 0 && (press->button & Z_TRIG)) {
-        if (press->button & B_BUTTON) {
-            Practice_Sd_StartLoad();
-        } else {
-            Practice_Sd_StartSave();
-        }
-        return;
-    }
-
     if (press->button & B_BUTTON) {
         if (sMenuDepth > 0) {
             sMenuDepth--;
@@ -312,13 +302,8 @@ void Practice_Menu_Update(void) {
                     Practice_InputGrace_Start();
                     Practice_LaunchLevel(gCurrentLevel, gLevelPhase, 0.0f);
                     break;
-                case RSLICE_SAVE:
-                    Practice_SaveState();
-                    break;
-                case RSLICE_LOAD:
-                    Practice_Menu_Close();
-                    Practice_InputGrace_Start();
-                    Practice_LoadState();
+                case RSLICE_AUDIO:
+                    Practice_StateMenu_Open(PSUBMENU_AUDIO);
                     break;
                 case RSLICE_LEVELS:
                     Practice_Menu_Close();
@@ -616,7 +601,7 @@ void Practice_Menu_Draw(void) {
     if (sMenuDepth > 0) {
         Practice_DrawTextColor(56, 198, "STICK:SELECT A:GO B:BACK", 150, 150, 150);
     } else {
-        Practice_DrawTextColor(40, 198, "L-R:SLOT B:CLOSE Z:SAVE ZB:LOAD", 150, 150, 150);
+        Practice_DrawTextColor(74, 198, "L-R:SLOT  B:CLOSE", 150, 150, 150);
     }
 
     if (Practice_StateMenuIsOpen()) {

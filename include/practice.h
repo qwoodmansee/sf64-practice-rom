@@ -65,6 +65,9 @@ typedef struct PracticeConfig {
     bool enemyHealthHideModels; /* ghost mode: suppress actor/boss 3-D models */
     s32 hitCount;               /* starting hit count applied on level launch */
     bool showLevelTimers;       /* level-specific overlays: SZ missile dist, FO spawn countdown */
+    u8 volMusic;                /* engine master volume 0..99 (Audio menu): covers BGM + fanfare */
+    u8 volSfx;
+    u8 volVoice;
 } PracticeConfig;
 
 typedef enum PracticeSubMenu {
@@ -75,6 +78,7 @@ typedef enum PracticeSubMenu {
     PSUBMENU_PREV_PLANETS,
     PSUBMENU_MACRO,
     PSUBMENU_ENEMY_HEALTH,
+    PSUBMENU_AUDIO,
 } PracticeSubMenu;
 
 typedef enum PracticeAction {
@@ -190,6 +194,17 @@ u16 Practice_AudioSpecForLevel(LevelId levelId);
 /* Two-character abbreviation suitable for tight HUD layouts (e.g. the
  * radial slot picker). Returns "??" for unknown LevelIds. */
 const char* Practice_LevelAbbrev(LevelId levelId);
+
+/* practice_audio.c — engine master-volume control (0..99 scale).
+ * Lane index is an AudioType (AUDIO_TYPE_MUSIC/SFX/VOICE). Routed through
+ * Audio_SetVolume so values survive a level restart's audio reset. */
+u8   Practice_Audio_GetVolume(s32 type);
+void Practice_Audio_SetVolume(s32 type, s32 vol);
+void Practice_Audio_AdjustVolume(s32 type, s32 delta);
+void Practice_Audio_ApplyLane(s32 type);
+void Practice_Audio_ApplyAll(void);
+void Practice_Audio_ResetLane(s32 type);
+void Practice_Audio_ResetAll(void);
 
 /* practice_state.c */
 bool Practice_StateMenuIsOpen(void);

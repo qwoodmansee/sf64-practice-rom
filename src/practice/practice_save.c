@@ -1689,24 +1689,22 @@ void Practice_Save_Tick(void) {
              * rescue call unconditionally effective. */
             sActiveSequences[SEQ_PLAYER_BGM].isWaitingForFonts = 0;
             AUDIO_PLAY_BGM(gPracticeBgmPendingSeqId);
-            /* Restore main volume on ALL four sequence players. Every level
-             * transition (including same-spec restart) runs through
-             * Game_SetGameState, which calls Audio_FadeOutAll(1) -- that
-             * queues SEQCMD_SET_SEQPLAYER_VOLUME(player, 1, 0) for BGM,
-             * FANFARE, SFX, and VOICE. On a normal cross-spec launch the
-             * later Audio_RestartSeqPlayers brings SFX/VOICE back to 127.
-             * Same-spec launches never trigger that restart, so without an
-             * explicit restore here SFX (lasers, hits) and VOICE (radio
-             * chatter) stay silent even though BGM is audible.
+            /* Restore the master volume settings. Every level transition
+             * (including same-spec restart) runs through Game_SetGameState,
+             * which calls Audio_FadeOutAll(1) -- that fades BGM, FANFARE, SFX,
+             * and VOICE to 0. On a normal cross-spec launch the later
+             * Audio_RestartSeqPlayers re-applies sVolumeSettings, but same-spec
+             * launches never trigger that restart, so without an explicit
+             * restore here SFX (lasers, hits) and VOICE (radio chatter) stay
+             * silent even though BGM is audible.
              *
-             * 0x7F maps to 1.0 (full volume); duration 0 takes effect
-             * immediately. FANFARE restore is defense-in-depth -- no
-             * fanfare is active during gameplay, but a stuck mod=0 would
-             * silence the next event jingle. */
-            SEQCMD_SET_SEQPLAYER_VOLUME(SEQ_PLAYER_BGM, 0, 0x7F);
-            SEQCMD_SET_SEQPLAYER_VOLUME(SEQ_PLAYER_FANFARE, 0, 0x7F);
-            SEQCMD_SET_SEQPLAYER_VOLUME(SEQ_PLAYER_SFX, 0, 0x7F);
-            SEQCMD_SET_SEQPLAYER_VOLUME(SEQ_PLAYER_VOICE, 0, 0x7F);
+             * Practice_Audio_ApplyAll re-issues Audio_SetVolume for MUSIC/SFX/
+             * VOICE from gPracticeConfig.vol* (the engine master-volume layer,
+             * 0..99). Routing through Audio_SetVolume -- rather than a flat
+             * full-volume SEQCMD -- preserves the user's configured mix and
+             * keeps it consistent with the value the engine's own reset restore
+             * re-asserts from sVolumeSettings. */
+            Practice_Audio_ApplyAll();
             gPracticeBgmPending = false;
         }
     }

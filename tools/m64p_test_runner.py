@@ -85,17 +85,23 @@ def parse_symbols():
                     offset = 0
                     continue
                 if in_config:
-                    if "}" in line:
+                    # Struct ends at the closing brace line ("} PracticeConfig;"),
+                    # NOT at a "}" that appears inside a field's trailing comment
+                    # (e.g. "s32 x; /* one of {0,1,5} */"). Strip comments first.
+                    code = re.sub(r"/\*.*?\*/", "", line)
+                    code = re.sub(r"//.*", "", code)
+                    if "}" in code:
                         break
-                    m = re.match(r"\s+(\w+)\s+(\w+);", line)
+                    m = re.match(r"\s+(\w+)\s+(\w+);", code)
                     if m:
                         sz = _fsz(m.group(1))
                         al = min(sz, 4)
                         offset = _align(offset, al)
-                        config_fields.append((m.group(2), offset))
+                        config_fields.append((m.group(2), offset, sz))
                         offset += sz
 
-    config_offsets = {name: off for name, off in config_fields}
+    config_offsets = {name: off for name, off, _ in config_fields}
+    config_sizes = {name: sz for name, _, sz in config_fields}
 
     # Constants — must match enums in sf64thread.h and practice.h
     constants = {}
@@ -108,7 +114,8 @@ def parse_symbols():
     ]:
         constants[name] = val
 
-    return {"addrs": syms, "config": config_offsets, "const": constants}
+    return {"addrs": syms, "config": config_offsets, "config_size": config_sizes,
+            "const": constants}
 
 
 class HarnessConnection:
@@ -228,14 +235,35 @@ class TestContext:
         self.harness.key_up(7)
 
     def config_field(self, name):
+        """Read a PracticeConfig field, returning just that field's bytes.
+
+        u8/u16 fields are packed into a 32-bit word; the N64 is big-endian, so
+        the lowest-addressed byte is the most significant byte of the word.
+        Extract only the field's own bytes so e.g. a u8 volMusic returns 99, not
+        a packed neighbour word.
+        """
         base = self.syms.addrs["gPracticeConfig"]
         offset = self.syms.config[name]
-        return self.read_s32(base + offset)
+        size = getattr(self.syms, "config_size", {}).get(name, 4)
+        if size >= 4:
+            return self.read_s32(base + offset)
+        word = self.harness.read32((base + offset) & ~3)
+        shift = 8 * (4 - size - (offset & 3))   # big-endian byte position
+        return (word >> shift) & ((1 << (8 * size)) - 1)
 
     def set_config_field(self, name, val):
         base = self.syms.addrs["gPracticeConfig"]
         offset = self.syms.config[name]
-        self.write_s32(base + offset, val)
+        size = getattr(self.syms, "config_size", {}).get(name, 4)
+        if size >= 4:
+            self.write_s32(base + offset, val)
+            return
+        word_addr = (base + offset) & ~3
+        word = self.harness.read32(word_addr)
+        shift = 8 * (4 - size - (offset & 3))   # big-endian byte position
+        mask = ((1 << (8 * size)) - 1) << shift
+        word = (word & ~mask) | ((val << shift) & mask)
+        self.harness.write32(word_addr, word & 0xFFFFFFFF)
 
     def wait_for_level_select(self, timeout_ms=10000):
         # Wait for GSTATE_MAP (4) — non-zero so BSS false-fire can't happen

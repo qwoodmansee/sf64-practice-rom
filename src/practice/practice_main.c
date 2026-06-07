@@ -65,6 +65,9 @@ void Practice_Init(void) {
     gPracticeConfig.enemyHealthHideModels = false;
     gPracticeConfig.hitCount = 0;
     gPracticeConfig.showLevelTimers = true;
+    gPracticeConfig.volMusic = 99;
+    gPracticeConfig.volSfx = 99;
+    gPracticeConfig.volVoice = 99;
 
     /* Boss-test override flag: runtime-only, reset on every boot.
      * Per-launch resets happen in Practice_LevelSelect_Update's non-boss
@@ -72,50 +75,35 @@ void Practice_Init(void) {
      * it true after Practice_LaunchLevel returns). */
     gPracticeForceCarrier = false;
 
-    osSyncPrintf("=== PRACTICE ROM boot @ %s %s ===\n", __DATE__, __TIME__);
-
     /* iodev_* live in .practice_late_core, which is loaded only when an
      * Expansion Pak is present (RAM 0x80720000 is unmapped on stock 4MB).
      * Skip the cart-detect diagnostic on stock carts; SD-backed features
-     * are already disabled there. */
+     * are already disabled there.
+     *
+     * Cart detect only — iodev_sd_init() is DEFERRED to first save
+     * (see lib/fatfs/diskio.c disk_initialize). Calling iodev_sd_init
+     * at boot wedges the SC64 firmware on cold boot: the SD_OP_INIT
+     * command issued while audio thread's first PI DMAs are still
+     * in flight races for the PI bus, even with __osDisableInt
+     * guards on our command-issue dance. Deferring to runtime (when
+     * audio thread is in steady-state and PI traffic is quiet) avoids
+     * the race. UX tradeoff: first save attempt may stall up to 6s
+     * on a failing SD card (previously absorbed at boot). */
     if (osMemSize >= 0x800000U) {
-        /* Cart detect only — iodev_sd_init() is DEFERRED to first save
-         * (see lib/fatfs/diskio.c disk_initialize). Calling iodev_sd_init
-         * at boot wedges the SC64 firmware on cold boot: the SD_OP_INIT
-         * command issued while audio thread's first PI DMAs are still
-         * in flight races for the PI bus, even with __osDisableInt
-         * guards on our command-issue dance. Deferring to runtime (when
-         * audio thread is in steady-state and PI traffic is quiet) avoids
-         * the race. UX tradeoff: first save attempt may stall up to 6s
-         * on a failing SD card (previously absorbed at boot). */
-        iodev_id_t cart = iodev_detect();
-        osSyncPrintf("[iodev] cart=%d sd_init=DEFERRED to first use\n", (int)cart);
-    } else {
-        osSyncPrintf("[iodev] skipped (stock 4MB, no Expansion Pak)\n");
+        iodev_detect();
     }
-    /* P2 PURPLE: iodev_detect + iodev_sd_init returned. */
     Lib_DebugFillScreen(0x803F);
 
-    osSyncPrintf("[init] Practice_Save_Init enter\n");
     Practice_Save_Init();
-    osSyncPrintf("[init] Practice_Save_Init exit\n");
-    /* P3 MAGENTA: Practice_Save_Init returned. */
     Lib_DebugFillScreen(0xF83F);
     /* Practice_Sd_Init touches several .practice_late_core symbols
      * (iodev_*, slot_manager_set_sd_scratch) and Practice_Save_ScratchBase()
      * which lives in the Pak-only slot pool. Skip on stock 4MB. */
     if (osMemSize >= 0x800000U) {
-        osSyncPrintf("[init] Practice_Sd_Init enter\n");
         Practice_Sd_Init();
-        osSyncPrintf("[init] Practice_Sd_Init exit\n");
-    } else {
-        osSyncPrintf("[init] Practice_Sd_Init skipped (stock 4MB)\n");
     }
-    /* P4 TURQUOISE: Practice_Sd_Init returned. */
     Lib_DebugFillScreen(0x07DF);
-    osSyncPrintf("[init] practice_overlay_prime_build_ids enter\n");
     practice_overlay_prime_build_ids();
-    osSyncPrintf("[init] practice_overlay_prime_build_ids exit\n");
 
 #ifdef IODEV_DIAG_FATFS
     /* Phase 2 hardware verification probe. Build with IODEV_DIAG_FATFS=1
@@ -123,7 +111,6 @@ void Practice_Init(void) {
     Practice_TestFatfs();
 #endif
     Practice_Macro_Init();
-    osSyncPrintf("[init] Practice_Init returning\n");
 }
 
 void Practice_Update(void) {
@@ -235,8 +222,6 @@ void Practice_ApplyStartConditions(void) {
     gHitCount = gPracticeConfig.hitCount;
 
     if (gPracticeConfig.skipCutscenes) {
-        osSyncPrintf("[bgm_dbg] ApplyStart lvl=%d gBgmSeqId=0x%04X\n",
-                     (s32)gCurrentLevel, (u32)gBgmSeqId);
         switch (gCurrentLevel) {
             case LEVEL_CORNERIA:  AUDIO_PLAY_BGM(NA_BGM_STAGE_CO); break;
             case LEVEL_METEO:     AUDIO_PLAY_BGM(NA_BGM_STAGE_ME); break;

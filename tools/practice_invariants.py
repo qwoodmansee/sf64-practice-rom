@@ -1664,10 +1664,16 @@ def check_bgm_rescue_restores_main_volume():
     restore on every player here SFX (lasers, hits) and VOICE (radio
     chatter) stay silent even though BGM is audible.
 
-    The rescue in Practice_Save_Tick must queue
-    SEQCMD_SET_SEQPLAYER_VOLUME(<player>, duration, 0x7F) for all four
-    players after AUDIO_PLAY_BGM. See tests/test_restart_kills_audio.py
-    which asserts mainVolume.mod = 1.0f on every player post-restart.
+    The rescue in Practice_Save_Tick must, after AUDIO_PLAY_BGM, restore the
+    volume. This is satisfied either by an explicit
+    SEQCMD_SET_SEQPLAYER_VOLUME(<player>, duration, 0x7F) for each player, OR
+    by a single Practice_Audio_ApplyAll() call -- which re-applies the engine
+    master-volume layer (Audio_SetVolume for MUSIC/SFX/VOICE) from the user's
+    configured mix (defaulting to full). The ApplyAll form is preferred because
+    forcing a flat full restore here would discard the player's volume-slider
+    settings on every state load. See tests/test_restart_kills_audio.py
+    (mainVolume.mod = 1.0f at defaults) and
+    tests/test_load_preserves_audio_levels.py (mix survives a load).
     """
     save_src = read(PRACTICE_SAVE_C)
 
@@ -1684,6 +1690,19 @@ def check_bgm_rescue_restores_main_volume():
     play_pos = tick_body.find("AUDIO_PLAY_BGM(gPracticeBgmPendingSeqId)")
     if play_pos < 0:
         # Caught by check_bgm_rescue_clears_waiting_for_fonts; bail.
+        return
+
+    # Preferred form: Practice_Audio_ApplyAll() after AUDIO_PLAY_BGM restores
+    # all four lanes (verified to loop every SequencePlayerId in
+    # check_audio_volume_menu) from the configured mix.
+    apply_all_pos = tick_body.find("Practice_Audio_ApplyAll()")
+    if apply_all_pos >= 0:
+        if apply_all_pos < play_pos:
+            error(
+                f"{PRACTICE_SAVE_C}: Practice_Audio_ApplyAll() must come AFTER "
+                "AUDIO_PLAY_BGM in the rescue path so the volume restore applies "
+                "to the newly-started sequence (check_bgm_rescue_restores_main_volume)"
+            )
         return
 
     required_players = ("SEQ_PLAYER_BGM", "SEQ_PLAYER_FANFARE",
@@ -2438,6 +2457,7 @@ def check_state_menu_layout():
         "PSUBMENU_VISUALIZERS": "StateMenu_DrawVisualizers",
         "PSUBMENU_MACRO": "StateMenu_DrawMacro",
         "PSUBMENU_ENEMY_HEALTH": "StateMenu_DrawEnemyHealth",
+        "PSUBMENU_AUDIO": "StateMenu_DrawAudio",
     }
 
     for submenu, fn_name in submenu_to_fn.items():
@@ -2494,6 +2514,41 @@ def check_state_menu_layout():
                 f"overlaps help text at y={help_y} "
                 f"(items={item_count}, step={step})"
             )
+
+
+def check_audio_volume_menu():
+    """Audio volume feature: source/API present, config fields wired, and the
+    post-load BGM rescue re-applies the user's configured mix instead of forcing
+    full volume (otherwise loading a state silently resets the volume sliders)."""
+    src_path = os.path.join(SRC_PRACTICE, "practice_audio.c")
+    if not os.path.isfile(src_path):
+        error(f"Audio volume source missing: {src_path}")
+        return
+
+    audio_src = read(src_path)
+    practice_h = read(INCLUDE_PRACTICE)
+    save_src = read(os.path.join(SRC_PRACTICE, "practice_save.c"))
+
+    # Config fields (one per engine master-volume type: MUSIC/SFX/VOICE).
+    for field in ("volMusic", "volSfx", "volVoice"):
+        if field not in practice_h:
+            error(f"{INCLUDE_PRACTICE}: {field} not in PracticeConfig")
+
+    # Core apply API exists and routes through the engine master-volume layer
+    # (Audio_SetVolume -> sVolumeSettings) so volumes survive a level restart's
+    # audio reset. A raw SEQCMD_SET_SEQPLAYER_VOLUME only sets a transient
+    # target and is clobbered by the reset's Audio_RestoreVolumeSettings.
+    if "Audio_SetVolume" not in audio_src:
+        error(f"{src_path}: Practice_Audio must route volume through Audio_SetVolume "
+              "(master-volume layer survives the level-restart audio reset)")
+    if "Practice_Audio_ApplyAll" not in audio_src:
+        error(f"{src_path}: Practice_Audio_ApplyAll not defined")
+
+    # The post-load BGM rescue must re-apply the configured mix, NOT hardcode
+    # full volume — that was the bug where loading a state reset the sliders.
+    if "Practice_Audio_ApplyAll()" not in save_src:
+        error(f"{os.path.join(SRC_PRACTICE, 'practice_save.c')}: load rescue must "
+              "call Practice_Audio_ApplyAll() (re-apply configured volume, not 0x7F)")
 
 
 def main():
@@ -2560,6 +2615,7 @@ def main():
     check_build_info()
     check_boss_test()
     check_enemy_health()
+    check_audio_volume_menu()
     check_hitbox_shadow_drawn()
     check_enemy_health_hide_models()
     check_loadout_live_apply_gated()
