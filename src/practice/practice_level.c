@@ -320,10 +320,18 @@ void Practice_LevelSelect_Draw(void) {
     const char* laserStr;
 
     Practice_DrawBox(16, 16, 288, 208, 0, 0, 0, 180);
-    Practice_Owl_Draw(231.0f, 14.0f);
+    /* The owl/logo textures live in .practice_late_core (RAM 0x80720000+),
+     * which is only DMA'd in on Expansion Pak systems. On stock 4 MB that RAM
+     * does not exist, so the draws (which read the texture data) must be gated
+     * by osMemSize -- otherwise the RDP texture load faults. */
+    if (osMemSize >= 0x00800000U) {
+        Practice_Owl_Draw(231.0f, 14.0f);
+    }
     Practice_DrawTextColor(219, 48, "UPDATES:", 160, 160, 160);
     Practice_DrawText(196, 57, "SAGERACES.COM");
-    Practice_Logo_Draw(219.0f, 69.0f);
+    if (osMemSize >= 0x00800000U) {
+        Practice_Logo_Draw(219.0f, 69.0f);
+    }
     Practice_DrawTextColor(196, 104, "LEADERBOARDS:", 160, 160, 160);
     Practice_DrawText(212, 113, "HIT64.NET");
 
