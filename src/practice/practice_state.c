@@ -81,6 +81,19 @@ typedef enum EnemyHealthOption {
     EHOPT_MAX,
 } EnemyHealthOption;
 
+/* Lane rows map to engine AudioType values via sAudioLaneType[]. The three
+ * rows mirror the engine's master-volume layer (MUSIC covers BGM + fanfare). */
+typedef enum AudioOption {
+    AOPT_MUSIC,
+    AOPT_SFX,
+    AOPT_VOICE,
+    AOPT_RESET_ALL,
+    AOPT_BACK,
+    AOPT_MAX,
+} AudioOption;
+
+#define AOPT_LANE_COUNT AOPT_RESET_ALL  /* number of adjustable volume rows */
+
 static s32 sSelectedOption = 0;
 static bool sStateMenuOpen = false;
 static bool sStateMenuJustOpened = false;
@@ -90,6 +103,9 @@ static bool sConfirmOverwrite = false;
 static const char* sLaserNames[] = { "SINGLE", "TWIN", "HYPER" };
 static const char* sWingNames[] = { "NONE", "BROKEN", "INTACT" };
 static const char* sHealthNames[] = { "SHORT", "LONG" };
+static const char* sAudioLaneNames[] = { "MUSIC", "SFX", "VOICE" };
+/* Row -> engine AudioType (the enum order is MUSIC, VOICE, SFX). */
+static const u8 sAudioLaneType[] = { AUDIO_TYPE_MUSIC, AUDIO_TYPE_SFX, AUDIO_TYPE_VOICE };
 
 #define PREV_PLANETS_COUNT 13
 static const LevelId sPrevPlanetIds[PREV_PLANETS_COUNT] = {
@@ -123,6 +139,7 @@ static s32 StateMenu_GetOptionCount(void) {
         case PSUBMENU_PREV_PLANETS:  return PREV_PLANETS_COUNT + 1;
         case PSUBMENU_MACRO:         return MOPT_MAX;
         case PSUBMENU_ENEMY_HEALTH:  return EHOPT_MAX;
+        case PSUBMENU_AUDIO:         return AOPT_MAX;
         default:                     return 0;
     }
 }
@@ -481,6 +498,30 @@ static void StateMenu_UpdateEnemyHealth(u16 buttons) {
     }
 }
 
+#define AUDIO_VOL_STEP 9   /* 0..99 in 11 steps; reaches both 0 and 99 exactly */
+
+/* Audio submenu: L/R adjust the hovered lane's volume; A resets it (or RESET
+ * ALL). Volume rows map to an engine AudioType via sAudioLaneType[]. */
+static void StateMenu_UpdateAudio(u16 buttons) {
+    s32 row = sSelectedOption;
+
+    if (row < AOPT_LANE_COUNT) {
+        s32 type = sAudioLaneType[row];
+
+        if (buttons & L_JPAD) {
+            Practice_Audio_AdjustVolume(type, -AUDIO_VOL_STEP);
+        }
+        if (buttons & R_JPAD) {
+            Practice_Audio_AdjustVolume(type, AUDIO_VOL_STEP);
+        }
+        if (buttons & A_BUTTON) {
+            Practice_Audio_ResetLane(type);
+        }
+    } else if ((row == AOPT_RESET_ALL) && (buttons & A_BUTTON)) {
+        Practice_Audio_ResetAll();
+    }
+}
+
 void Practice_StateMenu_Update(void) {
     OSContPad* press = &gControllerPress[gMainController];
     s32 optCount = StateMenu_GetOptionCount();
@@ -573,6 +614,10 @@ void Practice_StateMenu_Update(void) {
             sSelectedOption = 0;
             return;
         }
+        if (sActiveSubMenu == PSUBMENU_AUDIO && sSelectedOption == AOPT_BACK) {
+            Practice_StateMenu_Close();
+            return;
+        }
     }
 
     switch (sActiveSubMenu) {
@@ -596,6 +641,9 @@ void Practice_StateMenu_Update(void) {
             break;
         case PSUBMENU_ENEMY_HEALTH:
             StateMenu_UpdateEnemyHealth(press->button);
+            break;
+        case PSUBMENU_AUDIO:
+            StateMenu_UpdateAudio(press->button);
             break;
     }
 }
@@ -995,6 +1043,34 @@ static void StateMenu_DrawEnemyHealth(void) {
     }
 }
 
+static void StateMenu_DrawAudio(void) {
+    s32 y;
+    s32 i;
+    s32 vol;
+    s32 fill;
+
+    for (i = 0; i < AOPT_MAX; i++) {
+        y = 60 + (i * 14);
+
+        if (i == sSelectedOption) {
+            Practice_DrawBox(42, y - 1, 230, 12, 255, 255, 255, 60);
+        }
+
+        if (i < AOPT_LANE_COUNT) {
+            Practice_DrawText(54, y, sAudioLaneNames[i]);
+            vol = Practice_Audio_GetVolume(sAudioLaneType[i]);
+            fill = (vol * 96) / 99;
+            Practice_DrawBox(120, y + 1, 96, 7, 40, 40, 40, 200);
+            Practice_DrawBox(120, y + 1, fill, 7, 0, 200, 255, 255);
+            Practice_DrawNumber(222, y, vol);
+        } else if (i == AOPT_RESET_ALL) {
+            Practice_DrawTextColor(54, y, "RESET ALL", 255, 200, 60);
+        } else {
+            Practice_DrawTextColor(54, y, "BACK", 150, 150, 150);
+        }
+    }
+}
+
 void Practice_StateMenu_Draw(void) {
     const char* title;
     s32 boxHeight;
@@ -1041,6 +1117,11 @@ void Practice_StateMenu_Draw(void) {
             boxHeight = 110;
             helpY = 142;
             break;
+        case PSUBMENU_AUDIO:
+            title = "AUDIO";
+            boxHeight = 96;
+            helpY = 128;
+            break;
         default:
             return;
     }
@@ -1072,6 +1153,10 @@ void Practice_StateMenu_Draw(void) {
         case PSUBMENU_MACRO:
             StateMenu_DrawMacro();
             Practice_DrawTextColor(50, helpY, "A:SELECT  B:BACK", 150, 150, 150);
+            break;
+        case PSUBMENU_AUDIO:
+            StateMenu_DrawAudio();
+            Practice_DrawTextColor(50, helpY, "L-R:VOLUME  A:RESET  B:BACK", 150, 150, 150);
             break;
         case PSUBMENU_ENEMY_HEALTH:
             StateMenu_DrawEnemyHealth();

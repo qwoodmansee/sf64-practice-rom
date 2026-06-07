@@ -511,11 +511,8 @@ void Practice_LaunchLevel(LevelId levelId, s32 phase, f32 checkpointProgress) {
      * isWaitingForFonts is set from the level-select preview. Queue a rescue
      * play that fires 3 PLAY_UPDATE frames after Play_Init completes, giving
      * any in-flight font load time to clear. Also covers same-spec restarts. */
-    osSyncPrintf("[bgm_dbg] launch lvl=%d lp=0x%04X ls=0x%04X\n",
-                 (s32)levelId, (u32)levelPacked, (u32)sBgmLastSpecPacked);
     if (levelPacked == sBgmLastSpecPacked) {
         bgmId = Practice_BgmIdForLevel(levelId);
-        osSyncPrintf("[bgm_dbg] same-spec bgmId=0x%04X\n", (u32)bgmId);
         if (bgmId != (u16)SEQ_ID_NONE) {
             Practice_QueueBgmRescue(bgmId, 3);
         }

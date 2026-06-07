@@ -26,6 +26,7 @@ PRACTICE_OBJS = [
     "practice_level",
     "practice_state",
     "practice_menu",
+    "practice_audio",
     "practice_save",
     "practice_save_slotpool",  # Pak-only BSS; must follow practice_save for patch anchors
     "practice_overlay",     # Phase 4: LevelId -> ovl_iN region map (Wave 1: stubs)

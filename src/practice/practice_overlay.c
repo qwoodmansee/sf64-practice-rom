@@ -261,8 +261,6 @@ void practice_overlay_request_load(LevelId id, s32 phase) {
      * or wiping HUD here would corrupt the in-flight load (and the active
      * radial menu path that initiated it). */
     if (!practice_overlay_is_saveable(id)) {
-        osSyncPrintf("[overlay] request_load refuse: non-saveable level=%d\n",
-                     (s32)id);
         return;
     }
 
@@ -277,7 +275,6 @@ void practice_overlay_request_load(LevelId id, s32 phase) {
     gNextGameState = GSTATE_PLAY;
     gDrawMode = DRAW_NONE;
 
-    osSyncPrintf("[overlay] request_load level=%d phase=%d\n", (s32)id, phase);
 }
 
 #endif /* PRACTICE_ROM */

@@ -39,3 +39,10 @@ def run(ctx):
     ctx.assert_eq(ctx.config_field("showHitboxFlash"), 0, "showHitboxFlash = false")
     ctx.assert_eq(ctx.config_field("showSpawnZones"), 0, "showSpawnZones = false")
     ctx.assert_eq(ctx.config_field("expertMode"), 0, "expertMode = false")
+
+    # Audio: the three u8 master volumes (volMusic/volSfx/volVoice) each default
+    # to 99 (full, engine 0..99 scale). config_field is size-aware and returns a
+    # single byte per u8 field.
+    ctx.assert_eq(ctx.config_field("volMusic"), 99, "volMusic defaults to 99")
+    ctx.assert_eq(ctx.config_field("volSfx"), 99, "volSfx defaults to 99")
+    ctx.assert_eq(ctx.config_field("volVoice"), 99, "volVoice defaults to 99")
