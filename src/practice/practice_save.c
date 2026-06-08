@@ -1678,8 +1678,10 @@ void Practice_Save_Tick(void) {
                 gPracticeBgmPendingDelay--;
             }
         } else {
+#if PRACTICE_SAVE_TRACE
             osSyncPrintf("[bgm_dbg] rescue fire seqId=0x%04X ps=%d\n",
                          (u32)gPracticeBgmPendingSeqId, (s32)gPlayState);
+#endif
             /* Clear isWaitingForFonts before firing AUDIO_PLAY_BGM.
              * If a same-spec BGM preview was cancelled mid-async-font-load
              * (e.g. user presses A at level select), Audio_StopSequence cancels

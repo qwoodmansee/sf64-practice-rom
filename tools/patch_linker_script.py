@@ -37,8 +37,10 @@ PRACTICE_OBJS = [
     "practice_hitbox",
     "practice_minimap",
     "practice_freecam",
-    "practice_logo_tex",
-    "practice_owl_tex",
+    # practice_logo_tex / practice_owl_tex moved to PRACTICE_LATE_CORE_PRACTICE_OBJS
+    # (2026-06-07): level-select-only textures were pushing the vanilla audio
+    # tables at the top of main past the IPL boot-staging boundary, freezing
+    # Macbeth on hardware. See check_boot_main_rom_budget.
     "practice_icon_tex",
     "practice_test_fatfs",  # Phase 2: gated by IODEV_DIAG_FATFS, otherwise empty .o
     "practice_sd",          # Phase 6: OSK + file browser rendering and glue
@@ -115,6 +117,15 @@ PRACTICE_LATE_CORE_LIB_OBJS = [
 PRACTICE_LATE_CORE_SD_HOST_OBJS = [
     "sd_host",
 ]
+# src/practice/*.c files moved into .practice_late_core (Pak-only, loaded at boot
+# by Practice_Late_Init). Their consumers MUST be osMemSize-gated -- on stock 4 MB
+# the segment isn't loaded, so the data at 0x80720000+ does not exist. Added
+# 2026-06-07 to keep the vanilla audio tables (top of main) below the IPL
+# boot-staging boundary; see check_boot_main_rom_budget.
+PRACTICE_LATE_CORE_PRACTICE_OBJS = [
+    "practice_logo_tex",  # HIT64 logo, level-select only (Practice_Logo_Draw, Pak-gated)
+    "practice_owl_tex",   # owl, level-select only (Practice_Owl_Draw, Pak-gated)
+]
 
 ANCHOR = "build/src/engine/fox_save.o"
 
@@ -164,7 +175,8 @@ PRACTICE_MACRO_SNAP_SECTION = """\
 """
 
 
-def emit_practice_late_core_segment(iodev_objs, lib_objs, sd_host_objs):
+def emit_practice_late_core_segment(iodev_objs, lib_objs, sd_host_objs,
+                                    practice_objs=()):
     """Emit the .practice_late_core (LOAD) + .practice_late_core_bss (NOLOAD)
     block as a single linker-script snippet.
 
@@ -191,6 +203,8 @@ def emit_practice_late_core_segment(iodev_objs, lib_objs, sd_host_objs):
             lines.append(f"        build/lib/{obj}.o({section});")
         for obj in sd_host_objs:
             lines.append(f"        build/lib/sd_host/{obj}.o({section});")
+        for obj in practice_objs:
+            lines.append(f"        build/src/practice/{obj}.o({section});")
 
     lines.append("    /* practice_late_core: Pak-only persistent overlay (RAM 0x80720000).")
     lines.append("     * Was at 0x801F4000 but Load_SceneFiles' sequential asset loader")
@@ -235,7 +249,8 @@ def emit_practice_late_core_segment(iodev_objs, lib_objs, sd_host_objs):
 
 
 def strip_late_core_objs_from_main(content,
-                                   iodev_objs, lib_objs, sd_host_objs):
+                                   iodev_objs, lib_objs, sd_host_objs,
+                                   practice_objs=()):
     """Phase 1 migration scrubber: when .practice_late_core is injected
     with non-empty member sublists, the same object names may also still
     appear inside .main from prior patcher runs (the canonical .ld
@@ -257,6 +272,8 @@ def strip_late_core_objs_from_main(content,
         targets.append(f"build/lib/{obj}")
     for obj in sd_host_objs:
         targets.append(f"build/lib/sd_host/{obj}")
+    for obj in practice_objs:
+        targets.append(f"build/src/practice/{obj}")
 
     if not targets:
         return content
@@ -679,6 +696,7 @@ def patch():
             PRACTICE_LATE_CORE_IODEV_OBJS,
             PRACTICE_LATE_CORE_LIB_OBJS,
             PRACTICE_LATE_CORE_SD_HOST_OBJS,
+            PRACTICE_LATE_CORE_PRACTICE_OBJS,
         )
         replacement = anchor_line + "\n\n" + segment_text
         new_content = content.replace(needle, replacement, 1)
@@ -699,6 +717,7 @@ def patch():
         PRACTICE_LATE_CORE_IODEV_OBJS,
         PRACTICE_LATE_CORE_LIB_OBJS,
         PRACTICE_LATE_CORE_SD_HOST_OBJS,
+        PRACTICE_LATE_CORE_PRACTICE_OBJS,
     )
 
     dirty = (content != initial_content) or inject_count != 0

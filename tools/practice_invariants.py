@@ -1257,9 +1257,24 @@ def check_practice_pool_no_overlay_overlap():
 def check_boot_main_rom_budget():
     """The boot-loaded main segment must stay below the IPL copy ceiling.
 
-    Hardware and mupen both wedge on the solid blue boot fill if main_ROM_END
-    creeps past this boundary: early code/data beyond it is not resident when
-    boot threads start.
+    The N64 IPL stages only the first ~1 MB of cart ROM into RDRAM at boot.
+    Anything in `main` past that line is not resident when threads start.
+
+    Two distinct failure modes, by how far over the line:
+      * Gross overflow -> boot code itself is missing -> solid blue boot wedge.
+      * MARGINAL overflow -> only the TOP of main is unstaged. The top of main
+        holds the vanilla audio tables (note_data, wave_samples); practice
+        code/data below them pushes them upward. When the unstaged portion of
+        those tables is indexed during playback (audio-heavy levels such as
+        Macbeth, ~30-60 s in), audio synthesis reads garbage and the console
+        HARD-FREEZES mid-level -- hardware only, no crash frame. The emulator
+        stages the whole ROM, so it never reproduces.
+
+    2026-06-07 hardware bisection (SC64): main_ROM_END 0xFCF40 froze Macbeth at
+    ~30-60 s; shrinking to 0xFC3F0 played well past with no freeze. The real
+    boot-safe boundary is therefore BELOW 0xFCF40 -- the old 0xFD000 limit was
+    too generous and shipped a latent Macbeth freeze. Limit set conservatively
+    below the highest-confirmed-good build.
     """
     map_path = "build/starfox64.us.rev1.map"
     if not os.path.isfile(map_path):
@@ -1272,11 +1287,13 @@ def check_boot_main_rom_budget():
         return
 
     main_rom_end = int(match.group(1), 16)
-    limit = 0xFD000
+    limit = 0xFC000
     if main_rom_end > limit:
         error(
             f"{map_path}: main_ROM_END 0x{main_rom_end:06X} exceeds boot-safe "
-            f"limit 0x{limit:06X}; shrink/move main assets or boot hangs on blue screen "
+            f"limit 0x{limit:06X}; the vanilla audio tables at the top of main "
+            "get unstaged on hardware and audio-heavy levels (Macbeth) freeze "
+            "mid-level. Move practice code/data into .practice_late_core "
             "(check_boot_main_rom_budget)"
         )
 
