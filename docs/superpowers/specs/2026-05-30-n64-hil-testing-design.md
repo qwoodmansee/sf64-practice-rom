@@ -209,9 +209,12 @@ Each field maps 1:1 to a doctor probe (§10). Notes:
   60s by a background task — covers the case where the deployer is
   rebuilt out from under sc64-api. `version_checked_at_ms` exposes
   freshness so doctor can warn if stale.
-- `deployer.has_qw_local_flush_patch` is computed at boot from the
-  version string's known marker (falls back to "unknown" if the binary
-  changes shape).
+- `deployer.has_qw_local_flush_patch` is a tri-state computed at boot from
+  the version string's known marker: `true` or `false` when the marker can
+  be evaluated, or the string `"unknown"` if the binary changes shape and the
+  marker can't be matched. Consumers (doctor probes, test runner) must treat
+  any value other than `true` as "patch not confirmed" rather than coercing
+  it to a strict boolean.
 - `deployer.probe_ok` is the result of the most recent `sc64deployer
   -r localhost:9064 info` invocation (run every 30s by a background
   task) — this is what catches "FTDI device present but sc64-server
@@ -666,7 +669,7 @@ explicitly rather than hidden, per the spec's operability commitment.
 
 Section 6 covers **runtime failures of a working, bootstrapped
 system**: cart wedged mid-session, debug consumer crashes, etc.
-Section 11 covers **cold-start failures** before the system is
+Section 10 covers **cold-start failures** before the system is
 bootstrapped: SSH not configured, token never provisioned, image
 never flashed. A reader who encounters "Pi unreachable" in both
 sections should consult §10 if they're doing first-time setup and §6
