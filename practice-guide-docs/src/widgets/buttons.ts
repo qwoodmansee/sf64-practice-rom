@@ -2,7 +2,7 @@ import { doc } from '../renderer';
 import { C, FONTS } from '../theme';
 
 // ─── Button token type ────────────────────────────────────────────────────────
-export type BtnToken = 'A' | 'B' | 'Z' | 'R' | 'L' | 'START' | 'DU' | 'DD' | 'DL' | 'DR' | '+' | '/';
+export type BtnToken = 'A' | 'B' | 'Z' | 'R' | 'L' | 'START' | 'CR' | 'DU' | 'DD' | 'DL' | 'DR' | '+' | '/';
 
 export const BTN_SZ = 12;
 
@@ -11,6 +11,7 @@ export function tokenWidth(tok: BtnToken): number {
   if (tok === 'Z') return 22;
   if (tok === 'R' || tok === 'L') return 24;
   if (tok === 'START') return 14;
+  if (tok === 'CR') return 14;
   if (tok === 'A') return 14;
   if (tok === 'B') return 12;
   if (tok === '+') return 9;
@@ -67,6 +68,15 @@ function drawBtnStart(x: number, y: number, sz = BTN_SZ): number {
   return sz + 2;
 }
 
+function drawBtnCRight(x: number, y: number, sz = BTN_SZ): number {
+  const r = sz / 2;
+  const cx = x + r, cy = y + r;
+  doc.circle(cx, cy, r).fill('#E8B800');
+  // right-pointing arrow, vector-drawn (text glyphs garble in PDFKit)
+  doc.polygon([cx - 2.5, cy - 3], [cx + 3.5, cy], [cx - 2.5, cy + 3]).fill('#403000');
+  return sz + 2;
+}
+
 function drawBtnDPad(x: number, y: number, dir?: 'U' | 'D' | 'L' | 'R', sz = 13): number {
   const arm = Math.round(sz / 3);
   const base = '#303038';
@@ -92,6 +102,7 @@ export function drawTokens(tokens: BtnToken[], x: number, y: number): number {
       case 'R':     ox += drawBtnR(ox, y); break;
       case 'L':     ox += drawBtnL(ox, y); break;
       case 'START': ox += drawBtnStart(ox, y); break;
+      case 'CR':    ox += drawBtnCRight(ox, y); break;
       case 'DU':    ox += drawBtnDPad(ox, y, 'U'); break;
       case 'DD':    ox += drawBtnDPad(ox, y, 'D'); break;
       case 'DL':    ox += drawBtnDPad(ox, y, 'L'); break;

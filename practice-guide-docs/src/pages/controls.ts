@@ -6,7 +6,7 @@ export function pageControls() {
   newPage('Controls');
 
   sectionHeader('OPENING THE MENU');
-  bodyText('Press Z + D-RIGHT at any time during active gameplay to open the radial practice menu.');
+  bodyText('Press C-RIGHT + START at any time during active gameplay to open the radial practice menu.');
   vspace(2);
 
   sectionHeader('DURING GAMEPLAY  (menu CLOSED)');

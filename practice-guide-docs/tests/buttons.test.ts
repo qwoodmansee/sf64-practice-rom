@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { tokenWidth, type BtnToken } from '../src/widgets/buttons';
 
-// All 12 token types
-const ALL_TOKENS: BtnToken[] = ['A', 'B', 'Z', 'R', 'L', 'START', 'DU', 'DD', 'DL', 'DR', '+', '/'];
+// All 13 token types
+const ALL_TOKENS: BtnToken[] = ['A', 'B', 'Z', 'R', 'L', 'START', 'CR', 'DU', 'DD', 'DL', 'DR', '+', '/'];
 
 describe('tokenWidth', () => {
   it('returns a positive number for every token type', () => {
@@ -11,8 +11,8 @@ describe('tokenWidth', () => {
     }
   });
 
-  it('covers all 12 token types exhaustively', () => {
-    expect(ALL_TOKENS).toHaveLength(12);
+  it('covers all 13 token types exhaustively', () => {
+    expect(ALL_TOKENS).toHaveLength(13);
     const widths = ALL_TOKENS.map(tokenWidth);
     expect(widths.every(w => typeof w === 'number' && w > 0)).toBe(true);
   });
@@ -46,6 +46,10 @@ describe('tokenWidth', () => {
 
   it('START width equals A width (both use BTN_SZ + 2)', () => {
     expect(tokenWidth('START')).toBe(tokenWidth('A'));
+  });
+
+  it('CR width equals A width (both use BTN_SZ + 2)', () => {
+    expect(tokenWidth('CR')).toBe(tokenWidth('A'));
   });
 
   it('Z width is 22', () => {
