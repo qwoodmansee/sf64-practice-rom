@@ -9,7 +9,7 @@ export function pageRadialMenu() {
 
   sectionHeader('THE RADIAL PRACTICE MENU');
   inlineBody([
-    'Press ', ['Z', '+', 'DR'], ' to open the menu. Tilt the control stick toward any option, ' +
+    'Press ', ['CR', '+', 'START'], ' to open the menu. Tilt the control stick toward any option, ' +
     'then press ', ['A'], ' to confirm. ' +
     'Options are arranged like a compass -- stick up selects RESTART, stick right selects SAVE, etc.',
   ]);

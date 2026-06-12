@@ -47,7 +47,7 @@ export const PATTERN_CARDS: PatternCard[] = [
   {
     title: 'MANAGE SLOTS', color: '#7FC224',
     steps: [
-      { btns: ['Z', '+', 'DR'],   text: 'Open menu' },
+      { btns: ['CR', '+', 'START'],   text: 'Open menu' },
       { btns: ['L', '/', 'R'],    text: 'Cycle active slot (in menu)' },
       { btns: ['DL'],             text: 'Save to active slot' },
       { btns: ['DR'],             text: 'Load from active slot' },
@@ -66,7 +66,7 @@ export const PATTERN_CARDS: PatternCard[] = [
   {
     title: 'CHANGING LEVELS', color: '#E08020',
     steps: [
-      { btns: ['Z', '+', 'DR'],  text: 'Open menu' },
+      { btns: ['CR', '+', 'START'],  text: 'Open menu' },
       { dim: true,               text: 'Stick DOWN  -> LEVELS, press A' },
       { dim: true,               text: 'Navigate planet map with stick' },
       { btns: ['A'],             text: 'Confirm warp' },
@@ -75,7 +75,7 @@ export const PATTERN_CARDS: PatternCard[] = [
   {
     title: 'CHANGE VISUALIZERS', color: '#A040C0',
     steps: [
-      { btns: ['Z', '+', 'DR'],  text: 'Open menu' },
+      { btns: ['CR', '+', 'START'],  text: 'Open menu' },
       { dim: true,               text: 'Stick UP-RIGHT  -> DISPLAY, press A' },
       { dim: true,               text: 'Navigate to VISUALIZERS  -> HITBOXES' },
       { btns: ['A'],             text: 'Toggle on / off' },
@@ -85,7 +85,7 @@ export const PATTERN_CARDS: PatternCard[] = [
   {
     title: 'INPUT MONITOR', color: '#20A8A0',
     steps: [
-      { btns: ['Z', '+', 'DR'],  text: 'Open menu' },
+      { btns: ['CR', '+', 'START'],  text: 'Open menu' },
       { dim: true,               text: 'Stick UP-RIGHT  -> DISPLAY, press A' },
       { dim: true,               text: 'Navigate to INPUT' },
       { btns: ['A'],             text: 'Toggle on / off' },
@@ -94,7 +94,7 @@ export const PATTERN_CARDS: PatternCard[] = [
   {
     title: 'SAVE TO SD CARD', color: '#FB1A32',
     steps: [
-      { btns: ['Z', '+', 'DR'],  text: 'Open menu' },
+      { btns: ['CR', '+', 'START'],  text: 'Open menu' },
       { btns: ['Z'],             text: 'Save state to SD' },
       { btns: ['Z', '+', 'B'],   text: 'Load state from SD' },
       { dim: true,               text: '(!) NOT WORKING ON ANY CART' },

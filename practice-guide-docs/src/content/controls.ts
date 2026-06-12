@@ -1,7 +1,7 @@
 import type { BtnToken } from '../widgets/buttons';
 
 export const GAMEPLAY_CONTROLS = [
-  { btns: ['Z', '+', 'DR'] as BtnToken[], val: 'Open the radial practice menu' },
+  { btns: ['CR', '+', 'START'] as BtnToken[], val: 'Open the radial practice menu' },
   { btns: ['DD']           as BtnToken[], val: 'Pause / unpause frame advance' },
   { btns: ['DU']           as BtnToken[], val: 'Advance one frame (only while paused)' },
   { btns: ['DL']           as BtnToken[], val: 'Save state to the active slot' },

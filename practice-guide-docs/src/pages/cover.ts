@@ -91,7 +91,7 @@ export function pageCover() {
   doc.fillColor(C.white).font('Helvetica').fontSize(9);
   doc.text('Press', qx, qTy, { lineBreak: false });
   qx += doc.widthOfString('Press') + 5;
-  qx += drawTokens(['Z', '+', 'DR'], qx, qIy);
+  qx += drawTokens(['CR', '+', 'START'], qx, qIy);
   doc.fillColor(C.white).font('Helvetica').fontSize(9);
   doc.text('during gameplay to open the practice menu.', qx + 3, qTy, { lineBreak: false });
 }
