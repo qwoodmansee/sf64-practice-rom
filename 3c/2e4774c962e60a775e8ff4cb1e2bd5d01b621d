@@ -1,0 +1,24 @@
+docs/specs/boss-remixes.md
+  432e1d84d72938c5 1-290
+docs/superpowers/plans/boss-remixes.md
+  432e1d84d72938c5 1-289
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.4.4",
+  "base_commit_sha": "3c2e4774c962e60a775e8ff4cb1e2bd5d01b621d",
+  "prompts": {
+    "432e1d84d72938c5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "65365c7e-8dc4-4758-b905-c7564d6ed50c",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "qwoodmansee",
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 579,
+      "overriden_lines": 0
+    }
+  }
+}
