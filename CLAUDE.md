@@ -236,6 +236,31 @@ break the channel — the ROM keeps booting, the deployer terminal just stays em
 The static invariant `check_isviewer_sc64()` in `tools/practice_invariants.py`
 guards `MODS_ISVIEWER == 1`, the `IS64` token, and the `PI_WRITE` macro.
 
+## HIL hardware testing (real N64 via the Pi rig)
+
+Hardware-in-the-loop tests run a ROM on a real N64 through a Raspberry Pi
+(`sc64pi.local`) that drives a SummerCart64 and captures IS-Viewer logs + a
+camera snapshot of the TV. The Pi's NixOS config lives in a separate repo,
+`~/code/pi-sc64` (see its `CLAUDE.md`).
+
+```bash
+python3 tools/hil_test_runner.py doctor                      # preflight probes against the Pi
+python3 tools/hil_test_runner.py run tests/hil/test_boot_smoke.py
+python3 tools/hil_test_runner.py run tests/hil/               # whole HIL suite
+```
+
+- Auth: bearer token from `$SC64_API_TOKEN` or `~/.sc64-api-token`. Default
+  `--host sc64pi.local`. Cold-start setup: `tests/hil/SETUP.md`.
+- HIL tests live in `tests/hil/`; the client/context are `tools/hil/client.py`
+  and `tools/hil/ctx.py`. `ctx.snapshot(name)` GETs the Pi's
+  `http://<host>:8064/camera/snapshot` and saves a JPEG to the artifacts dir.
+- **Snapshots are best-effort:** `ctx.snapshot()` returns `None` (test
+  continues) when the camera is unavailable; the boot-smoke "screenshot
+  captured" assertion passes on ANY response. To actually trust a frame, open
+  the JPEG or pass `required=True`.
+- These run only against live hardware; they are separate from the
+  mupen64plus functional tests (`tools/m64p_test_runner.py`) that gate commits.
+
 ## Enemy scoring system
 
 | Path | What it does |
