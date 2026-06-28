@@ -161,6 +161,9 @@ PRACTICE_SAVE_TRACE ?= 0
 ifeq ($(PRACTICE_ROM),1)
     BUILD_DEFINES   += -DPRACTICE_ROM=1 -DAVOID_UB -DPRACTICE_HEAP_AUDIT=$(PRACTICE_HEAP_AUDIT) \
                        -DPRACTICE_SAVE_TRACE=$(PRACTICE_SAVE_TRACE)
+    # Extra ad-hoc defines for one-off builds (e.g. the HIL wedge fixture
+    # passes PRACTICE_CPPFLAGS="-DMODS_ISVIEWER_OVERRIDE=0"). Empty by default.
+    BUILD_DEFINES   += $(PRACTICE_CPPFLAGS)
     CFLAGS += -DSLOT_MANAGER_USE_FATFS=1
     COMPARE := 0
 endif
@@ -550,6 +553,59 @@ practice-compressed:
 
 practice-patch: practice-compressed
 	npm --prefix tools/patcher run create-release -- --source $(CURDIR)/$(BASEROM) --target $(CURDIR)/$(ROMC) --assets-dir $(CURDIR)/$(RELEASE_ASSETS_DIR) --version $(PATCH_VERSION)
+
+# --- HIL (hardware-in-the-loop) testing -------------------------------------
+# See tests/hil/SETUP.md and docs/superpowers/plans/2026-05-30-n64-hil-testing.md
+
+.PHONY: hil-doctor
+hil-doctor:
+	@PYTHONPATH=. python3 tools/hil_test_runner.py doctor
+
+.PHONY: hil-test
+hil-test:
+	@PYTHONPATH=. python3 tools/hil_test_runner.py run $(filter-out $@,$(MAKECMDGOALS))
+
+.PHONY: hil-wedge-fixture
+hil-wedge-fixture:
+	@echo "==> Building wedge fixture (MODS_ISVIEWER=0)..."
+	@# Re-build with MODS_ISVIEWER overridden via PRACTICE_CPPFLAGS.
+	@# We have to clear .o files first because the build system doesn't
+	@# track CPPFLAGS dependencies. This is a one-off, not part of the
+	@# normal rebuild cycle.
+	rm -rf build/src/mods/isviewer.o build/src/sys/sys_main.o \
+	       build/starfox64.us.rev1.elf \
+	       build/starfox64.us.rev1.uncompressed.z64
+	$(MAKE) practice -j4 PRACTICE_CPPFLAGS="-DMODS_ISVIEWER_OVERRIDE=0"
+	@mkdir -p tests/hil/_fixtures
+	@cp build/starfox64.us.rev1.uncompressed.z64 tests/hil/_fixtures/wedge_rom.z64
+	@echo "==> Wrote tests/hil/_fixtures/wedge_rom.z64"
+	@echo "    Restoring normal build..."
+	@rm -rf build/src/mods/isviewer.o build/src/sys/sys_main.o \
+	        build/starfox64.us.rev1.elf \
+	        build/starfox64.us.rev1.uncompressed.z64
+	$(MAKE) practice -j4
+
+.PHONY: hil-sd-fixture
+hil-sd-fixture:
+	@echo "==> Building SD self-test fixture (IODEV_DIAG_FATFS=1)..."
+	@# Rebuild the boot self-test + its caller with IODEV_DIAG_FATFS=1. The
+	@# build system doesn't track CPPFLAGS deps, so clear the affected .o
+	@# files first. This fixture runs the temp-file+rename round-trip on boot
+	@# and prints results over IS-Viewer (see tests/hil/test_sd_save_load.py).
+	rm -rf build/src/practice/practice_test_fatfs.o \
+	       build/src/practice/practice_main.o \
+	       build/starfox64.us.rev1.elf \
+	       build/starfox64.us.rev1.uncompressed.z64
+	$(MAKE) practice -j4 IODEV_DIAG_FATFS=1
+	@mkdir -p tests/hil/_fixtures
+	@cp build/starfox64.us.rev1.uncompressed.z64 tests/hil/_fixtures/sd_selftest_rom.z64
+	@echo "==> Wrote tests/hil/_fixtures/sd_selftest_rom.z64"
+	@echo "    Restoring normal build..."
+	@rm -rf build/src/practice/practice_test_fatfs.o \
+	        build/src/practice/practice_main.o \
+	        build/starfox64.us.rev1.elf \
+	        build/starfox64.us.rev1.uncompressed.z64
+	$(MAKE) practice -j4
 
 clean:
 	rm -f torch.hash.yml

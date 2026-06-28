@@ -42,3 +42,7 @@ src/.DS_Store
 .claude/
 .worktrees/
 bin/
+bin
+include/assets
+tests/hil/_artifacts/
+tests/hil/_fixtures/wedge_rom.z64
