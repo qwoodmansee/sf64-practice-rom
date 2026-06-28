@@ -17,6 +17,13 @@
 
 extern void iodev_mock_set_image(const char *path);
 extern void iodev_mock_close(void);
+extern void iodev_mock_drop_writes(uint32_t lba, int count);
+
+/* Diagnostic accessors from the metadata verify-retry path in diskio.c. */
+extern int disk_last_verify_off(void);
+extern int disk_last_verify_wrote(void);
+extern int disk_last_verify_read(void);
+extern void disk_verify_reset(void);
 
 static int failures = 0;
 
@@ -123,6 +130,67 @@ int main(int argc, char **argv) {
         ASSERT_EQ(disk_write(0, misaligned,   101000, 1), RES_OK, "T16a misaligned write -> OK");
         ASSERT_EQ(disk_read (0, misaligned_r, 101000, 1), RES_OK, "T16b misaligned read -> OK");
         ASSERT_EQ((int)memcmp(misaligned, misaligned_r, 512), 0, "T16c misaligned round-trip content matches");
+    }
+
+    /* T17: metadata verify-retry succeeds after transient non-durable writes.
+     * Models the SC64 "ACK but not readable" bug: the first N single-sector
+     * writes are dropped (stale data reads back), so diskio's verify loop must
+     * retry until a write actually persists. Uses a misaligned (4-byte) buffer
+     * so disk_write takes the per-sector bounce+verify metadata path. */
+    {
+        static BYTE seed[2048] __attribute__((aligned(8)));
+        static BYTE storage[2048] __attribute__((aligned(8)));
+        static BYTE rbuf[512] __attribute__((aligned(8)));
+        BYTE *misaligned = storage + 4;  /* 4-aligned -> metadata path */
+        const LBA_t meta_lba = 102000;
+        int i;
+
+        /* Seed the sector with a known OLD pattern (aligned write, no verify). */
+        for (i = 0; i < 512; i++) seed[i] = 0x5A;
+        ASSERT_EQ(disk_write(0, seed, meta_lba, 1), RES_OK, "T17 seed old pattern -> OK");
+
+        /* New pattern, written through the metadata path while the first 2
+         * writes are dropped. Attempts 1-2 read back 0x5A (mismatch), attempt 3
+         * persists -> RES_OK. */
+        for (i = 0; i < 512; i++) misaligned[i] = (BYTE)(i ^ 0x3C);
+        iodev_mock_drop_writes((uint32_t)meta_lba, 2);
+        ASSERT_EQ(disk_write(0, misaligned, meta_lba, 1), RES_OK, "T17a verify-retry succeeds -> OK");
+
+        ASSERT_EQ(disk_read(0, rbuf, meta_lba, 1), RES_OK, "T17b read back -> OK");
+        ASSERT_EQ((int)memcmp(misaligned, rbuf, 512), 0, "T17c persisted content matches new pattern");
+    }
+
+    /* T18: metadata verify-retry gives up after META_WRITE_RETRIES and reports
+     * the mismatch via the diagnostic accessors. Drop more writes than the
+     * retry budget so every attempt reads back stale data. */
+    {
+        static BYTE seed[2048] __attribute__((aligned(8)));
+        static BYTE storage[2048] __attribute__((aligned(8)));
+        BYTE *misaligned = storage + 4;
+        const LBA_t meta_lba = 103000;
+        int i;
+
+        for (i = 0; i < 512; i++) seed[i] = 0x11;  /* OLD byte that will read back */
+        ASSERT_EQ(disk_write(0, seed, meta_lba, 1), RES_OK, "T18 seed old pattern -> OK");
+
+        for (i = 0; i < 512; i++) misaligned[i] = 0x22;  /* NEW byte we try to write */
+        iodev_mock_drop_writes((uint32_t)meta_lba, 999);  /* never persists */
+        ASSERT_EQ(disk_write(0, misaligned, meta_lba, 1), RES_ERROR, "T18a gives up -> RES_ERROR");
+        ASSERT_EQ(disk_last_verify_off() >= 0, 1, "T18b verify offset captured");
+        ASSERT_EQ((unsigned)disk_last_verify_wrote(), 0x22u, "T18c diag: byte we wrote");
+        ASSERT_EQ((unsigned)disk_last_verify_read(),  0x11u, "T18d diag: stale byte read back");
+
+        iodev_mock_drop_writes(0, 0);  /* disarm */
+    }
+
+    /* T19: disk_verify_reset clears the diagnostics back to the "no failure"
+     * sentinel (used by the SD self-test fixture to isolate one round-trip). */
+    {
+        ASSERT_EQ(disk_last_verify_off() >= 0, 1, "T19 precondition: diag is set from T18");
+        disk_verify_reset();
+        ASSERT_EQ(disk_last_verify_off(), -1, "T19a reset -> off == -1");
+        ASSERT_EQ(disk_last_verify_wrote(), 0, "T19b reset -> wrote == 0");
+        ASSERT_EQ(disk_last_verify_read(), 0, "T19c reset -> read == 0");
     }
 
     iodev_mock_close();

@@ -215,6 +215,76 @@ static void test_atomic_write_produces_final_file(void) {
 }
 
 /* --------------------------------------------------------------------------
+ * Test 5: a save_cb that serializes OUT of sd_scratch must not have its
+ * source clobbered by slot_manager's staging buffer.
+ *
+ * Regression for the SD-save overlap bug: the practice ROM's Practice_Save_Cb
+ * fills a PracticeSnapshot into sd_scratch and then serializes from it. If
+ * slot_manager stages the serialized image in sd_scratch too (base =
+ * sd_scratch, payload = sd_scratch + HEADER), the large early tags (overlay
+ * bytes) overwrite the snapshot's player/actor region before their own tags
+ * are emitted -- writing engine code/garbage into the file. On hardware this
+ * showed up as a corrupt player array (baseSpeed read back as MIPS opcode
+ * bytes). slot_manager must stage in a buffer distinct from sd_scratch (the
+ * RAM slot pool), as the load path already does.
+ * -------------------------------------------------------------------------- */
+
+#define OVL_STATE_SIZE (16u * 1024u)
+static uint8_t sOvlStorage[4u * OVL_STATE_SIZE];  /* slot pool (4 slots) */
+static uint8_t sOvlScratch[OVL_STATE_SIZE];       /* sd_scratch: SEPARATE buffer */
+
+static const uint32_t kOvlMarker = 0xC0FFEE11u;
+#define OVL_MARK_OFF 0x100u   /* deep enough that base+HEADER writes reach it */
+#define OVL_BLOB     0x2000u  /* a big early "overlay bytes" tag */
+
+static uint32_t overlap_save(void *buf, uint32_t cap) {
+    uint8_t *out = (uint8_t *)buf;
+    uint32_t i;
+    if (cap < OVL_BLOB + 4u) return cap + 1u;
+    /* (1) Snapshot fill: marker lands deep in sd_scratch (like playerData). */
+    memcpy(&sOvlScratch[OVL_MARK_OFF], &kOvlMarker, 4);
+    /* (2) Emit a big "overlay" blob first. If the output buffer overlaps
+     *     sd_scratch, this stomps the marker before step (3) reads it. */
+    for (i = 0; i < OVL_BLOB; i++) out[i] = 0xCC;
+    /* (3) Emit the marker, read back from the snapshot scratch. */
+    memcpy(&out[OVL_BLOB], &sOvlScratch[OVL_MARK_OFF], 4);
+    return OVL_BLOB + 4u;
+}
+
+static uint32_t sOvlLoaded;
+static int overlap_load(const void *buf, uint32_t size) {
+    const uint8_t *in = (const uint8_t *)buf;
+    (void)size;
+    memcpy(&sOvlLoaded, &in[OVL_BLOB], 4);
+    return 0;
+}
+
+static void test_save_cb_scratch_not_clobbered(void) {
+    int result;
+    const char *path = "/sf64-practice/states/OVERLAP.SF64ST";
+
+    printf("\n-- test_save_cb_scratch_not_clobbered --\n");
+
+    /* Fresh RAM disk + FatFs, but wire storage and sd_scratch to SEPARATE
+     * buffers (as the real ROM does: slot pool vs sSaveScratchPak). */
+    assert(diskio_ram_init() == 0);
+    format_and_mount();
+    slot_manager_init(1, 1, overlap_save, overlap_load, 4);
+    slot_manager_set_ram_storage(sOvlStorage, sizeof(sOvlStorage), OVL_STATE_SIZE);
+    slot_manager_set_sd_scratch(sOvlScratch, sizeof(sOvlScratch));
+
+    sOvlLoaded = 0;
+    result = slot_manager_save_sd_named(path);
+    check(result == SLOT_MANAGER_OK, "overlap save returns OK");
+
+    result = slot_manager_load_sd_named(path);
+    check(result == SLOT_MANAGER_OK, "overlap load returns OK");
+
+    check(sOvlLoaded == kOvlMarker,
+          "save_cb sd_scratch source survives serialization (no staging overlap)");
+}
+
+/* --------------------------------------------------------------------------
  * main
  * -------------------------------------------------------------------------- */
 
@@ -225,6 +295,7 @@ int main(void) {
     test_load_truncated_file();
     test_load_bad_magic();
     test_atomic_write_produces_final_file();
+    test_save_cb_scratch_not_clobbered();
 
     printf("\n");
     if (sFailures > 0) {
