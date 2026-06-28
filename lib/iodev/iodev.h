@@ -20,6 +20,14 @@ typedef enum {
     IODEV_ERR_PARAM     = -5,  /* Bad arguments */
 } iodev_result_t;
 
+/* Diagnostic-only breadcrumb hook. When set non-NULL by the app, the SC64
+ * backend calls it at each waypoint inside sc64_execute_cmd with a small step
+ * code (see iodev_sc64.c). Lets the app visualize exactly where a hardware SD
+ * command wedges without lib/ depending on any game header. NULL = no-op.
+ * Codes are 1-based and stable; the app maps code -> on-screen color. */
+typedef void (*iodev_breadcrumb_fn)(int code);
+extern iodev_breadcrumb_fn gIodevBreadcrumb;
+
 /* Run-once hardware probe. Idempotent; result cached after first call. */
 iodev_id_t iodev_detect(void);
 

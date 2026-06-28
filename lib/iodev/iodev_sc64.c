@@ -20,8 +20,13 @@
 #include "libultra/ultra64.h"  /* OSIoMesg, OSMesgQueue, osPiStartDma, osCreateMesgQueue,
                                 * osRecvMesg, osInvalDCache, osWritebackDCache.
                                 * Path matches the project convention (see src/sys/sys.h). */
+#include "piint.h"             /* __osPiGetAccess / __osPiRelAccess / __osPiAccessQueueEnabled */
 #include "iodev.h"
 #include "iodev_internal.h"
+
+/* Diagnostic breadcrumb: fire the app-registered hook (if any) with a step
+ * code. No-op in production (hook NULL). See gIodevBreadcrumb in iodev.h. */
+#define BC(code) do { if (gIodevBreadcrumb) gIodevBreadcrumb(code); } while (0)
 
 #define SC64_REGS_BASE    0x1FFF0000UL
 #define SC64_REG_SCR      (SC64_REGS_BASE + 0x00)
@@ -39,9 +44,19 @@
 #define SC64_KEY_UNLOCK_1    0x5F554E4Cu
 #define SC64_KEY_UNLOCK_2    0x4F434B5Fu
 
-#define PI_WRITE_FLUSH(addr, val) do {            \
-    IO_WRITE((addr), (val));                      \
-    (void) IO_READ(SC64_REG_IDENT);               \
+/* Wait for any in-flight PI DMA/IO to finish before raw access.
+ * Even with __osPiGetAccess held, the PI hardware can still be servicing
+ * a DMA that was queued before we acquired the semaphore. Raw IO_READ/
+ * IO_WRITE without this wait can collide with in-flight transfers and
+ * wedge the SC64 firmware. Mirrors gz's __pi_wait() in src/gz/pi.h. */
+#define PI_WAIT() do {                                                  \
+    while (IO_READ(PI_STATUS_REG) & (PI_STATUS_IO_BUSY | PI_STATUS_DMA_BUSY)) \
+        ;                                                                \
+} while (0)
+
+#define PI_WRITE_FLUSH(addr, val) do {                  \
+    PI_WAIT(); IO_WRITE((addr), (val));                 \
+    PI_WAIT(); (void) IO_READ(SC64_REG_IDENT);          \
 } while (0)
 
 /* SC64 command IDs (from ~/code/SummerCart64/docs/02_n64_commands.md). */
@@ -49,6 +64,10 @@
 #define SC64_CMD_SD_SECTOR_SET  'I'
 #define SC64_CMD_SD_READ        's'
 #define SC64_CMD_SD_WRITE       'S'
+#define SC64_CMD_CONFIG_SET     'C'   /* arg0=config_id, arg1=new_value */
+
+/* SC64 config IDs (docs/04_config_options.md). */
+#define SC64_CFG_ROM_WRITE_ENABLE  1  /* bool, default 0 (ROM/SDRAM read-only) */
 
 /* SD_CARD_OP sub-operations. */
 #define SD_OP_DEINIT          0
@@ -58,16 +77,26 @@
 
 /* PI cart-space target for SD DMA buffers.
  *
- * Must point at SC64 SDRAM (the cart-bus ROM region 0x10000000..0x13FE0000),
- * NOT at the SC64 flash-shadow region (0x13FE0000..0x13FFFFFF, where the
- * IS-Viewer at 0x13FF0000 also lives -- overlapping that region is a hardware
- * conflict that would either silently fail or corrupt IS-Viewer logging).
+ * Use the SC64's DEDICATED 8 KiB Data buffer at PI 0x1FFE0000 (BlockRAM,
+ * RW, see docs/01_memory_map.md). This is exactly what gz uses for SC64 SD
+ * (src/gz/sc64.h: BUFFER_BASE 0xBFFE0000 == PI 0x1FFE0000), and it is the
+ * correct target for three reasons the old 0x10F00000 got wrong:
  *
- * SF64's ROM is approximately 10 MiB. We reserve 64 KiB at offset 15 MiB
- * (0x10F00000..0x10F0FFFF), well past the ROM's tail and well below the
- * flash-shadow boundary. Gives us 128 sectors (64 KiB / 512) of buffer
- * space, which caps a single SD R/W call at 128 sectors. */
-#define SC64_SD_DMA_SCRATCH   0x10F00000u
+ *  1. It is genuinely READ-WRITE from the N64 side. The previous scratch
+ *     0x10F00000 lives in the ROM/SDRAM region, which is READ-ONLY unless the
+ *     ROM_WRITE_ENABLE config is set -- so every SD *write* DMA (N64 PI-writes
+ *     a sector into scratch for SD_WRITE) was silently dropped and the firmware
+ *     flushed stale bytes to the card. Writes never persisted; reads (which
+ *     only read scratch) worked. That is the whole "SAVE OK but no file" / 444
+ *     / WRITE FAIL story. The data buffer needs no config to be writable.
+ *  2. It does not overlap and clobber the running ROM image in SDRAM.
+ *  3. The earlier 0x12000000 attempt wedged because it, too, was an arbitrary
+ *     ROM-region address; the data buffer is the firmware's intended target.
+ *
+ * Tradeoff: 8 KiB = 16 sectors per transfer (vs the old 64 KiB/128). diskio.c
+ * and the count checks below chunk to SC64_SD_DMA_MAX_SECTORS. */
+#define SC64_SD_DMA_SCRATCH    0x1FFE0000u
+#define SC64_SD_DMA_MAX_SECTORS 16u   /* 8 KiB data buffer / 512 */
 
 /* SC64 command-completion timeout. PI-bus IO_READ is roughly 1 us at
  * worst-case wait states; this gives a multi-second wall-clock upper
@@ -80,67 +109,155 @@
  *
  * NOTE: this uses the polling path (no IRQ), matching the bootloader's
  * non-IRQ branch in sc64.c:108-113. */
+/* Cart-lock state for save/restore. Pattern lifted from gz src/gz/sc64.c
+ * cart_lock/cart_unlock. The SC64 firmware needs the PI domain 1
+ * latency/pulse-width registers in a specific configuration to respond
+ * to register reads/writes. The audio thread's PI manager configures
+ * dom1 timing differently for ROM data DMAs; if our SC64 register
+ * access runs under audio's timing values, the firmware wedges (red LED
+ * stuck on). Save audio's timing on lock, swap to SC64-safe values
+ * (the libultra defaults baked into pi_regs at boot), do our work,
+ * restore audio's timing on unlock. */
+static int sc64_lock_irqf;
+static uint32_t sc64_lock_lat;
+static uint32_t sc64_lock_pwd;
+static int sc64_lock_pi_acquired;
+
+static void sc64_cart_lock(void) {
+    if (__osPiAccessQueueEnabled) {
+        __osPiGetAccess();
+        sc64_lock_pi_acquired = 1;
+    } else {
+        sc64_lock_pi_acquired = 0;
+    }
+    sc64_lock_irqf = __osDisableInt();
+    sc64_lock_lat = IO_READ(PI_BSD_DOM1_LAT_REG);
+    sc64_lock_pwd = IO_READ(PI_BSD_DOM1_PWD_REG);
+}
+
+static void sc64_cart_unlock(void) {
+    IO_WRITE(PI_BSD_DOM1_LAT_REG, sc64_lock_lat);
+    IO_WRITE(PI_BSD_DOM1_PWD_REG, sc64_lock_pwd);
+    __osRestoreInt(sc64_lock_irqf);
+    if (sc64_lock_pi_acquired) {
+        __osPiRelAccess();
+        sc64_lock_pi_acquired = 0;
+    }
+}
+
+/* Bus-settle pacing after every SC64 command (host-independent).
+ *
+ * On SF64 the cart-bus race between SC64 register I/O and the audio subsystem
+ * is only fully tamed when the IS-Viewer debug prints happen to serialize the
+ * PI bus between FatFs steps -- each osSyncPrintf does __osPiGetAccess plus a
+ * timed PI rp/wp dance. With no host draining the IS-Viewer, those prints
+ * self-disable into no-ops after 5 timeouts and the race reappears: SD ops
+ * wedge/corrupt only when NOT attached to `sc64deployer debug --isv`.
+ *
+ * Replicate that serialization unconditionally. Reacquire PI access (forcing
+ * the PI manager to drain any queued audio DMA), wait for the PI hardware to go
+ * idle, then hold a quiet bus for a short tunable interval so the SC64 firmware
+ * has breathing room before the next command. SC64_SETTLE_US is the single knob
+ * -- start generous, then dial down to the minimum that still holds reliably
+ * without `--isv`. Set to 0 to disable.
+ *
+ * Hardware finding (2026-06-07): the failure point is settle-INDEPENDENT.
+ * At 200µs, 500µs, and 2000µs the save reaches the SAME place -- f_rename --
+ * and fails there; larger settle only makes the bulk write take longer (2ms
+ * pushed a full save into minutes). So settle is NOT the rename fix. Held at
+ * 500µs: large enough to let the bulk write through reliably, small enough to
+ * keep a full save to tens of seconds while the real rename cause is chased
+ * (the caller now surfaces the exact f_rename FRESULT on screen). */
+#ifndef SC64_SETTLE_US
+#define SC64_SETTLE_US 500
+#endif
+
+static void sc64_settle(void) {
+    u32 target;
+    int acquired = 0;
+
+    if (SC64_SETTLE_US == 0) {
+        return;
+    }
+    if (__osPiAccessQueueEnabled) {
+        __osPiGetAccess();
+        acquired = 1;
+    }
+    PI_WAIT();
+    target = osGetCount() + (u32)OS_USEC_TO_CYCLES(SC64_SETTLE_US);
+    while ((s32)(osGetCount() - target) < 0) {
+        ;
+    }
+    if (acquired) {
+        __osPiRelAccess();
+    }
+}
+
 static iodev_result_t sc64_execute_cmd(uint8_t cmd_id,
                                        uint32_t arg0, uint32_t arg1,
                                        uint32_t *rsp0_out, uint32_t *rsp1_out) {
     int retries;
     uint32_t sr;
-    uint32_t saved_int_mask;
+    iodev_result_t result;
 
-    /* Atomic command-issue dance from the SC64 firmware's POV. Same class
-     * of bug as the isviewer rp/wp race fixed in commit 47bc3f9: a timer/
-     * AI/SP IRQ landing between these three PI_WRITE_FLUSHes lets the
-     * audio thread's PI activity tear the firmware's view of the command
-     * setup. Empirically this wedges the SD command interface on first
-     * f_mkdir during cold boot (v0.6.0+, after iodev_sd_init was added),
-     * stranding the SC64 with its red LED stuck on. Spin-poll stays
-     * OUTSIDE the guard since worst-case SC64_CMD_TIMEOUT_RETRIES runs
-     * for several seconds; we only need atomicity across the three setup
-     * writes. __osDisableInt is a no-op pre-osInitialize, so this is
-     * safe from any context. */
-    saved_int_mask = __osDisableInt();
+    BC(1);                  /* entry: about to take PI access (cart_lock) */
+    sc64_cart_lock();
+    BC(2);                  /* PI access acquired -- cart_lock returned.
+                             * If 1 shows but not 2, __osPiGetAccess() in
+                             * sc64_cart_lock is deadlocked (audio thread was
+                             * stopped while holding the PI access token). */
+
     PI_WRITE_FLUSH(SC64_REG_DATA0, arg0);
+    BC(3);                  /* wrote DATA0 (first PI_WAIT survived) */
     PI_WRITE_FLUSH(SC64_REG_DATA1, arg1);
+    BC(4);                  /* wrote DATA1 */
     PI_WRITE_FLUSH(SC64_REG_SCR, (uint32_t)cmd_id);
-    __osRestoreInt(saved_int_mask);
+    BC(5);                  /* command byte issued; CPU_BUSY poll begins */
 
-    /* Spin until CPU_BUSY clears. */
+    /* Spin until CPU_BUSY clears. PI access + IRQs disabled means no
+     * audio DMA or interrupt can interleave with the SCR poll. PI_WAIT
+     * before each read ensures PI hardware is idle before we touch the
+     * register (gz pi.h __pi_read_raw pattern). */
     retries = SC64_CMD_TIMEOUT_RETRIES;
     do {
+        PI_WAIT();
         sr = IO_READ(SC64_REG_SCR);
         if (--retries <= 0) {
-            return IODEV_ERR_TIMEOUT;
+            result = IODEV_ERR_TIMEOUT;
+            goto unlock;
         }
     } while (sr & SC64_SCR_CPU_BUSY);
+    BC(6);                  /* CPU_BUSY cleared -- firmware finished the cmd */
 
     if (sr & SC64_SCR_CMD_ERROR) {
-        /* The error code is in DATA0; we don't translate it for now --
-         * caller just gets IODEV_ERR_IO. Per-error logging via osSyncPrintf
-         * can be added later if needed. */
-        return IODEV_ERR_IO;
+        result = IODEV_ERR_IO;
+        goto unlock;
     }
 
-    if (rsp0_out) *rsp0_out = IO_READ(SC64_REG_DATA0);
-    if (rsp1_out) *rsp1_out = IO_READ(SC64_REG_DATA1);
-    return IODEV_OK;
+    if (rsp0_out) { PI_WAIT(); *rsp0_out = IO_READ(SC64_REG_DATA0); }
+    if (rsp1_out) { PI_WAIT(); *rsp1_out = IO_READ(SC64_REG_DATA1); }
+    result = IODEV_OK;
+
+unlock:
+    sc64_cart_unlock();
+    BC(7);                  /* cart_unlock done; entering settle */
+    sc64_settle();
+    BC(8);                  /* settle done; returning. If 7 shows but not 8,
+                             * sc64_settle's __osPiGetAccess/PI_WAIT wedged. */
+    return result;
 }
 
 static iodev_id_t sc64_detect(void) {
     uint32_t ident;
-    uint32_t saved_int_mask;
 
-    /* Same atomicity requirement as sc64_execute_cmd: the SC64 firmware
-     * watches the KEY register for the unlock sequence (RESET → UNLOCK_1 →
-     * UNLOCK_2). An IRQ landing between any two of these writes lets the
-     * audio thread's PI activity tear the firmware's view of the sequence.
-     * Practice_Sd_Init re-calls iodev_detect() in its error branch on cold
-     * boot, which is when this race manifests. */
-    saved_int_mask = __osDisableInt();
+    sc64_cart_lock();
     PI_WRITE_FLUSH(SC64_REG_KEY, SC64_KEY_RESET);
     PI_WRITE_FLUSH(SC64_REG_KEY, SC64_KEY_UNLOCK_1);
     PI_WRITE_FLUSH(SC64_REG_KEY, SC64_KEY_UNLOCK_2);
+    PI_WAIT();
     ident = IO_READ(SC64_REG_IDENT);
-    __osRestoreInt(saved_int_mask);
+    sc64_cart_unlock();
+
     if (ident == SC64_V2_IDENTIFIER) {
         return IODEV_SC64;
     }
@@ -148,8 +265,10 @@ static iodev_id_t sc64_detect(void) {
 }
 
 static iodev_result_t sc64_sd_init(void) {
+    /* The SD DMA scratch is now the dedicated RW data buffer (0x1FFE0000), so
+     * no ROM_WRITE_ENABLE is needed -- writes land without touching ROM. */
     return sc64_execute_cmd(SC64_CMD_SD_CARD_OP,
-                            0,         /* arg0: pi_address (unused for INIT) */
+                            0,    /* arg0: pi_address (unused for INIT) */
                             SD_OP_INIT,
                             0, 0);
 }
@@ -181,8 +300,8 @@ static iodev_result_t sc64_sd_read_sectors(uint32_t lba, uint32_t count, void *b
     OSIoMesg mb;  /* Stack-local OK: __osDevMgrMain finishes touching mb
                    * before osRecvMesg unblocks. */
 
-    if (count == 0 || count > 128) {
-        return IODEV_ERR_PARAM;  /* > 128 exceeds our 64 KiB DMA scratch */
+    if (count == 0 || count > SC64_SD_DMA_MAX_SECTORS) {
+        return IODEV_ERR_PARAM;  /* exceeds the 8 KiB SD DMA data buffer */
     }
     if (((uintptr_t)buf) & 7u) {
         return IODEV_ERR_PARAM;  /* PI DMA needs 8-byte alignment (iodev.h) */
@@ -215,7 +334,7 @@ static iodev_result_t sc64_sd_write_sectors(uint32_t lba, uint32_t count, const 
     OSIoMesg mb;  /* Stack-local OK: __osDevMgrMain finishes touching mb
                    * before osRecvMesg unblocks. */
 
-    if (count == 0 || count > 128) {
+    if (count == 0 || count > SC64_SD_DMA_MAX_SECTORS) {
         return IODEV_ERR_PARAM;
     }
     if (((uintptr_t)buf) & 7u) {

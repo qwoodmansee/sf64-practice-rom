@@ -5,9 +5,10 @@
  * turn route to the SC64 or ED64 backend depending on which flashcart
  * was detected at boot.
  *
- * iodev caps reads/writes at 128 sectors per call (the SC64 backend's
- * 64 KiB DMA scratch limit). FatFs may request larger transfers, so we
- * chunk them here. */
+ * iodev caps reads/writes per call at its DMA buffer size (the SC64 backend
+ * uses the 8 KiB data buffer == 16 sectors). FatFs may request larger
+ * transfers, so we chunk them here at IODEV_MAX_CHUNK_SECTORS. */
+#define IODEV_MAX_CHUNK_SECTORS 16u
 
 #include "ff.h"
 #include "diskio.h"
@@ -47,6 +48,37 @@ static int sFatfsDiskInited = 0;
  * would silently no-op via the project's macros.h __attribute__ stub). */
 static uint64_t sBounceWords[64];   /* 64 * 8 = 512 bytes */
 #define sBounce ((unsigned char *) sBounceWords)
+
+/* Read-back verify buffer for the metadata write path (see disk_write). */
+static uint64_t sVerifyWords[64];
+#define sVerify ((unsigned char *) sVerifyWords)
+
+/* Metadata write durability: the SC64 SD path has been observed to ACK a
+ * single-sector (directory/FAT) write that never becomes readable -- the
+ * hardware symptom was f_rename returning FR_NO_FILE for a file whose
+ * create+write+close all reported success (diagnostic code "444"). The
+ * firmware's SD_WRITE is synchronous (it waits for CPU_BUSY to clear), so a
+ * clean ACK is not proof of persistence. For the small, scattered metadata
+ * sectors we therefore read each one back and compare; a mismatch means the
+ * write did not land and we retry. Bulk file data (the aligned fast path
+ * below) is left unverified to keep saves fast. */
+#define META_WRITE_RETRIES 5
+
+/* Classify a metadata verify failure: first differing byte offset, the byte we
+ * wrote there, the byte that read back, and the byte that read back at the
+ * adjacent (byte-swapped) offset. Lets the caller show it on screen and tell
+ * apart: R==0 (write didn't persist / erased to 0), R==255 (erased), S==W
+ * (16-bit byte-swap on read), else random corruption. -1 offset = none. */
+static int sVfyOff = -1, sVfyW = 0, sVfyR = 0, sVfyS = 0;
+int disk_last_verify_off(void)   { return sVfyOff; }
+int disk_last_verify_wrote(void) { return sVfyW; }
+int disk_last_verify_read(void)  { return sVfyR; }
+int disk_last_verify_swap(void)  { return sVfyS; }
+
+/* Clear the metadata-verify diagnostics so a caller can attribute any
+ * subsequent retry to a specific operation (used by the SD self-test fixture
+ * to isolate its rename round-trip from boot-time directory writes). */
+void disk_verify_reset(void) { sVfyOff = -1; sVfyW = 0; sVfyR = 0; sVfyS = 0; }
 
 #define IS_ALIGNED8(p) ((((uintptr_t)(const void *)(p)) & 7u) == 0)
 
@@ -109,9 +141,9 @@ DRESULT disk_read(BYTE pdrv, BYTE *buff, LBA_t sector, UINT count) {
         return RES_OK;
     }
 
-    /* Aligned: chunk at iodev's 128-sector cap and drive the device direct. */
+    /* Aligned: chunk at iodev's per-call cap and drive the device direct. */
     while (count > 0) {
-        chunk = (count > 128u) ? 128u : count;
+        chunk = (count > IODEV_MAX_CHUNK_SECTORS) ? IODEV_MAX_CHUNK_SECTORS : count;
         r = iodev_sd_read_sectors((uint32_t)sector, (uint32_t)chunk, buff);
         if (r != IODEV_OK) return iodev_to_dresult(r);
         sector += chunk;
@@ -130,10 +162,36 @@ DRESULT disk_write(BYTE pdrv, const BYTE *buff, LBA_t sector, UINT count) {
     if (!buff) return RES_PARERR;
 
     if (!IS_ALIGNED8(buff)) {
-        /* Misaligned caller buffer; bounce one sector at a time. */
+        /* Misaligned caller buffer == FATFS.win[]/FIL.buf[] == directory/FAT
+         * metadata. Bounce one sector at a time AND verify each landed (see
+         * META_WRITE_RETRIES note above). */
         while (count > 0) {
+            UINT attempt;
             memcpy(sBounce, buff, 512);
-            r = iodev_sd_write_sectors((uint32_t)sector, 1, sBounce);
+            r = IODEV_ERR_IO;
+            for (attempt = 0; attempt < META_WRITE_RETRIES; attempt++) {
+                r = iodev_sd_write_sectors((uint32_t)sector, 1, sBounce);
+                if (r != IODEV_OK) continue;  /* hard write error -> retry */
+                /* Confirm persistence by reading the sector back. */
+                r = iodev_sd_read_sectors((uint32_t)sector, 1, sVerify);
+                if (r != IODEV_OK) continue;  /* read error -> retry */
+                if (memcmp(sVerify, sBounce, 512) == 0) break;  /* durable */
+                /* Mismatch: capture the first differing byte for diagnosis,
+                 * then retry the write. */
+                {
+                    int k;
+                    for (k = 0; k < 512; k++) {
+                        if (sBounce[k] != sVerify[k]) {
+                            sVfyOff = k;
+                            sVfyW   = sBounce[k];
+                            sVfyR   = sVerify[k];
+                            sVfyS   = sVerify[k ^ 1];  /* swapped-position byte */
+                            break;
+                        }
+                    }
+                }
+                r = IODEV_ERR_IO;             /* mismatch -> retry the write */
+            }
             if (r != IODEV_OK) return iodev_to_dresult(r);
             sector++;
             buff   += 512;
@@ -142,9 +200,9 @@ DRESULT disk_write(BYTE pdrv, const BYTE *buff, LBA_t sector, UINT count) {
         return RES_OK;
     }
 
-    /* Aligned: chunk at iodev's 128-sector cap and drive the device direct. */
+    /* Aligned: chunk at iodev's per-call cap and drive the device direct. */
     while (count > 0) {
-        chunk = (count > 128u) ? 128u : count;
+        chunk = (count > IODEV_MAX_CHUNK_SECTORS) ? IODEV_MAX_CHUNK_SECTORS : count;
         r = iodev_sd_write_sectors((uint32_t)sector, (uint32_t)chunk, buff);
         if (r != IODEV_OK) return iodev_to_dresult(r);
         sector += chunk;

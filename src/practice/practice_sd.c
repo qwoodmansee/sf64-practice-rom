@@ -11,7 +11,48 @@
 #include "ui/file_browser.h"
 #include "iodev/iodev.h"
 #include "fatfs/ff.h"
+#include "fatfs/diskio.h"
 #include "slot_manager.h"
+#include "sf64thread.h"  /* gAudioThread */
+#include "PR/os.h"        /* osStopThread / osStartThread */
+
+/* SD operations run during gameplay (the pause menu). osSyncPrintf calls
+ * __osPiGetAccess and runs a cart-bus rp/wp drain dance; with no host draining
+ * IS-Viewer each call stalls (200k-retry drain) and, on hardware, contends on
+ * PI access with the SD command path -- a confirmed wedge source and a
+ * violation of the project rule "never osSyncPrintf during gameplay". Redirect
+ * every osSyncPrintf in this file to a no-op (C89-safe object-like macro, since
+ * IDO has no variadic macros). Re-enable a single trace by calling osSyncPrintf
+ * directly via (osSyncPrintf) if ever needed under an IS-Viewer session. */
+#undef osSyncPrintf
+#define osSyncPrintf sSdTraceNoop
+static void sSdTraceNoop(const char *fmt, ...) { (void)fmt; }
+
+/* Defense in depth: SC64 cart-bus race fixes in lib/iodev/iodev_sc64.c
+ * (PI_WAIT + cart_lock with PI timing save/restore) are necessary but
+ * empirically not sufficient on SF64 — the audio thread's frequent
+ * BGM/SFX soundbank DMAs starve the SC64 firmware faster than gz's OoT
+ * pattern alone can handle. Hard-stop the audio thread for the duration
+ * of the SD command burst. Brief audio glitch (~1-2s), but eliminates
+ * the race window entirely so the cart_lock pattern can do its work.
+ *
+ * EXPERIMENT (2026-06-07): audio-pause DISABLED to test whether
+ * osStopThread(&gAudioThread) is itself stranding PI access and causing the
+ * intermittent cart_lock wedge (save freezing at the INIT execute_cmd entry
+ * breadcrumb). osStopThread can suspend the audio thread mid-PI-transaction;
+ * the next __osPiGetAccess in sc64_cart_lock then blocks forever. If saves
+ * stop wedging with these no-oped, the audio stop is the cause and we need a
+ * cooperative quiesce instead. Re-enable by restoring the osStop/StartThread
+ * calls once confirmed. Set SD_DISABLE_AUDIO_PAUSE to 0 to restore. */
+#define SD_DISABLE_AUDIO_PAUSE 1
+#if SD_DISABLE_AUDIO_PAUSE
+static void sd_audio_pause(void)  { /* experiment: do not stop audio thread */ }
+static void sd_audio_resume(void) { }
+#else
+static void sd_audio_pause(void) { osStopThread(&gAudioThread); }
+static void sd_audio_resume(void) { osStartThread(&gAudioThread); }
+#endif
+
 
 #define SD_ROOT     "0:/sageraces"
 #define SD_APP      SD_ROOT "/sf64"
@@ -57,8 +98,7 @@ static void on_save_name_confirmed(const char *name, void *ud) {
     int res, j;
     int i = 0;
     FRESULT rr, ra, rd;
-    FRESULT st1, st2, st3;
-    FILINFO finfo;
+    int iodev_res;
     (void)ud;
 
     for (j = 0; SD_DIR[j] && i < SD_PATH_MAX - 1; j++) { sSavePath[i++] = SD_DIR[j]; }
@@ -68,21 +108,24 @@ static void on_save_name_confirmed(const char *name, void *ud) {
     sSavePath[i] = '\0';
     osSyncPrintf("[sd] save path=%s\n", sSavePath);
 
-    /* Single acquire+lazy-mount like the load path; no intermediate remounts. */
+    /* SD self-heal: DEINIT+INIT clears any poisoned controller state from prior
+     * host sd-upload runs. Audio pause held across the burst for a quiet cart-bus. */
+    sd_audio_pause();
+    osSyncPrintf("[sd] release<\n");
+    (void)iodev_sd_release();
+    osSyncPrintf("[sd] acquire<\n");
+    iodev_res = iodev_sd_acquire();
+    osSyncPrintf("[sd] acquire> r=%d\n", iodev_res);
     sd_op_begin();
     rr = f_mkdir(SD_ROOT);
     ra = f_mkdir(SD_APP);
     rd = f_mkdir(SD_DIR);
     osSyncPrintf("[sd] mkdir root=%d app=%d dir=%d (0=ok 8=exist)\n",
                  (int)rr, (int)ra, (int)rd);
-    st1 = f_stat("0:/sageraces", &finfo);
-    st2 = f_stat("0:/sageraces/sf64", &finfo);
-    st3 = f_stat("0:/sageraces/sf64/states", &finfo);
-    osSyncPrintf("[sd] stat root=%d app=%d dir=%d\n", (int)st1, (int)st2, (int)st3);
-
     res = slot_manager_save_sd_named(sSavePath);
     osSyncPrintf("[sd] slot_save=%d\n", res);
     sd_op_end();
+    sd_audio_resume();
 
     Practice_Menu_Close();
     if (res == SLOT_MANAGER_OK) {
@@ -93,9 +136,31 @@ static void on_save_name_confirmed(const char *name, void *ud) {
             case SLOT_MANAGER_ERR_PARAM:       msg = "SD ERR PARAM";   break;
             case SLOT_MANAGER_ERR_NO_STORAGE:  msg = "SD NO SCRATCH";  break;
             case SLOT_MANAGER_ERR_OVERFLOW:    msg = "SD OVERFLOW";    break;
-            case SLOT_MANAGER_ERR_IO_OPEN:     msg = "SD OPEN FAIL";   break;
-            case SLOT_MANAGER_ERR_IO_WRITE:    msg = "SD WRITE FAIL";  break;
-            case SLOT_MANAGER_ERR_IO_RENAME:   msg = "SD RENAME FAIL"; break;
+            case SLOT_MANAGER_ERR_IO_OPEN:
+                sprintf(sSdStatus, "SD OPEN FAIL %d", slot_manager_last_fatfs_err());
+                msg = sSdStatus;
+                break;
+            case SLOT_MANAGER_ERR_IO_WRITE:
+                /* If a metadata verify failed, show what read back vs what we
+                 * wrote: O=first diff offset, W=wrote, R=read, S=read at the
+                 * swapped byte. R:0=not persisted, R:255=erased, S==W=byteswap,
+                 * else corruption. */
+                if (disk_last_verify_off() >= 0) {
+                    sprintf(sSdStatus, "WR%d O%d W%d R%d S%d",
+                            slot_manager_last_fatfs_err(),
+                            disk_last_verify_off(), disk_last_verify_wrote(),
+                            disk_last_verify_read(), disk_last_verify_swap());
+                } else {
+                    sprintf(sSdStatus, "SD WRITE FAIL %d", slot_manager_last_fatfs_err());
+                }
+                msg = sSdStatus;
+                break;
+            case SLOT_MANAGER_ERR_IO_RENAME:
+                /* Code = unlink_FRESULT*10 + rename_FRESULT (see slot_manager.c).
+                 * e.g. 41 = dest absent + rename DISK_ERR; X7 = rename DENIED. */
+                sprintf(sSdStatus, "SD RENAME FAIL %d", slot_manager_last_fatfs_err());
+                msg = sSdStatus;
+                break;
             default:
                 sprintf(sSdStatus, "SD ERR %d", res);
                 msg = sSdStatus;
@@ -113,11 +178,20 @@ static void on_save_canceled(void *ud) {
 static void on_load_file_selected(const char *path, void *ud) {
     int res;
     const char *msg;
+    int iodev_res;
     (void)ud;
     osSyncPrintf("[sd] load path=%s\n", path);
+    sd_audio_pause();
+    /* SD self-heal: DEINIT+INIT clears any poisoned controller state. */
+    osSyncPrintf("[sd] release<\n");
+    (void)iodev_sd_release();
+    osSyncPrintf("[sd] acquire<\n");
+    iodev_res = iodev_sd_acquire();
+    osSyncPrintf("[sd] acquire> r=%d\n", iodev_res);
     sd_op_begin();
     res = slot_manager_load_sd_named(path);
     sd_op_end();
+    sd_audio_resume();
     osSyncPrintf("[sd] slot_load=%d\n", res);
     Practice_Menu_Close();
     osSyncPrintf("[sd] menu_closed\n");
@@ -156,17 +230,10 @@ static void on_load_canceled(void *ud) {
 
 void Practice_Sd_Init(void) {
     FRESULT r;
-    /* SD1 PINK: Practice_Sd_Init entered. */
-    Lib_DebugFillScreen(0xFB1F);
-    osSyncPrintf("[sd_init] osk_close enter\n");
     osk_close();
-    osSyncPrintf("[sd_init] osk_close exit; file_browser_close enter\n");
     file_browser_close();
-    osSyncPrintf("[sd_init] file_browser_close exit; iodev_sd_was_ok enter\n");
     sSdAvailable = iodev_sd_was_ok();
-    osSyncPrintf("[sd_init] iodev_sd_was_ok=%d\n", (s32) sSdAvailable);
-    /* SD2 WHITE: early closes + sSdAvailable check done. */
-    Lib_DebugFillScreen(0xFFFF);
+    osSyncPrintf("[si] ok=%d\n", (s32)sSdAvailable);
     if (!sSdAvailable) {
         iodev_id_t cart = iodev_detect();
         int res = iodev_sd_init_result();
@@ -177,33 +244,20 @@ void Practice_Sd_Init(void) {
             sprintf(sSdStatus, "SC SD ERR %d", res);
             sNoSdMsg = sSdStatus;
         } else {
-            /* IODEV_NONE: show raw EDID upper 16 bits for hardware diagnosis.
-             * 0xED64 = magic present but wrong BITLEN/detection bug.
-             * 0x0000 = registers locked or PI write dropped.
-             * 0xFFFF = open bus (cart not present / address wrong). */
             sprintf(sSdStatus, "NO SD ID %04X",
                     (unsigned int)((iodev_ed64_raw_edid() >> 16) & 0xFFFFu));
             sNoSdMsg = sSdStatus;
         }
     }
     if (sSdAvailable) {
-        /* Create the save directory tree at ROM boot so the first save never
-         * stalls on fresh directory allocation mid-game. */
-        osSyncPrintf("[sd_init] sd_op_begin (f_mount) enter\n");
         sd_op_begin();
-        osSyncPrintf("[sd_init] sd_op_begin exit; f_mkdir SD_ROOT enter\n");
-        r = f_mkdir(SD_ROOT);
-        osSyncPrintf("[sd_init] f_mkdir SD_ROOT r=%d; f_mkdir SD_APP enter\n", (s32) r);
-        r = f_mkdir(SD_APP);
-        osSyncPrintf("[sd_init] f_mkdir SD_APP r=%d; f_mkdir SD_DIR enter\n", (s32) r);
+        (void)f_mkdir(SD_ROOT);
+        (void)f_mkdir(SD_APP);
         r = f_mkdir(SD_DIR);
-        osSyncPrintf("[sd_init] f_mkdir SD_DIR r=%d; sd_op_end enter\n", (s32) r);
+        (void)r;
         sd_op_end();
-        osSyncPrintf("[sd_init] sd_op_end exit\n");
     }
-    osSyncPrintf("[sd_init] slot_manager_set_sd_scratch enter\n");
     slot_manager_set_sd_scratch(Practice_Save_ScratchBase(), MAX_STATE_SIZE);
-    osSyncPrintf("[sd_init] slot_manager_set_sd_scratch exit (Practice_Sd_Init done)\n");
 }
 
 bool Practice_Sd_IsActive(void) {
@@ -221,42 +275,79 @@ bool Practice_Sd_IsActive(void) {
  * leaves sNoSdMsg as Practice_Sd_Init's boot-time error message. */
 static void Practice_Sd_LazyInit(void) {
     FRESULT r;
+    int initRes;
+    osSyncPrintf("[lz] in av=%d r=%d\n",
+                 (s32)sSdAvailable, iodev_sd_init_result());
     if (sSdAvailable || iodev_sd_init_result() != -99) {
+        osSyncPrintf("[lz] skip\n");
         return;
     }
+    sd_audio_pause();
+    osSyncPrintf("[lz] init<\n");
     (void)iodev_sd_init();
+    initRes = iodev_sd_init_result();
+    osSyncPrintf("[lz] init> r=%d\n", initRes);
     sSdAvailable = iodev_sd_was_ok();
+    osSyncPrintf("[lz] ok=%d\n", (s32)sSdAvailable);
     if (sSdAvailable) {
-        sd_op_begin();
-        (void)f_mkdir(SD_ROOT);
-        (void)f_mkdir(SD_APP);
+        osSyncPrintf("[lz] mnt<\n");
+        f_mount(&sFatfsWork, "0:", 0);
+        osSyncPrintf("[lz] mnt>\n");
+        r = f_mkdir(SD_ROOT);
+        osSyncPrintf("[lz] mk1=%d\n", (s32)r);
+        r = f_mkdir(SD_APP);
+        osSyncPrintf("[lz] mk2=%d\n", (s32)r);
         r = f_mkdir(SD_DIR);
-        (void)r;
-        sd_op_end();
+        osSyncPrintf("[lz] mk3=%d\n", (s32)r);
+        f_unmount("0:");
+        osSyncPrintf("[lz] umnt\n");
+    } else {
+        iodev_id_t cart = iodev_detect();
+        if (cart == IODEV_ED64) {
+            sprintf(sSdStatus, "ED SD ERR %d", initRes);
+            sNoSdMsg = sSdStatus;
+        } else if (cart == IODEV_SC64) {
+            sprintf(sSdStatus, "SC SD ERR %d", initRes);
+            sNoSdMsg = sSdStatus;
+        }
     }
+    sd_audio_resume();
+    osSyncPrintf("[lz] out av=%d\n", (s32)sSdAvailable);
 }
 
 void Practice_Sd_StartSave(void) {
+    osSyncPrintf("[sd] sv<\n");
     Practice_Sd_LazyInit();
     if (!sSdAvailable || gPracticeSaveDisabled) {
+        osSyncPrintf("[sd] sv abort av=%d dis=%d\n",
+                     (s32)sSdAvailable, (s32)gPracticeSaveDisabled);
         Practice_Hud_ShowStatus(sNoSdMsg, 255, 180, 80);
         return;
     }
+    osSyncPrintf("[sd] sv osk\n");
     osk_open("SD SAVE NAME:", "", OSK_MAX_TEXT,
               on_save_name_confirmed, on_save_canceled, NULL);
 }
 
 void Practice_Sd_StartLoad(void) {
     int r;
+    osSyncPrintf("[sd] ld<\n");
     Practice_Sd_LazyInit();
     if (!sSdAvailable || gPracticeSaveDisabled) {
+        osSyncPrintf("[sd] ld abort av=%d dis=%d\n",
+                     (s32)sSdAvailable, (s32)gPracticeSaveDisabled);
         Practice_Hud_ShowStatus(sNoSdMsg, 255, 180, 80);
         return;
     }
+    osSyncPrintf("[sd] ld mnt<\n");
+    sd_audio_pause();
     sd_op_begin();
+    osSyncPrintf("[sd] ld fb<\n");
     r = file_browser_open(FB_LOAD, SD_DIR, SD_EXT,
                           on_load_file_selected, on_load_canceled, NULL);
+    osSyncPrintf("[sd] ld fb> r=%d\n", r);
     sd_op_end();
+    sd_audio_resume();
     osSyncPrintf("[sd] load dir=%s r=%d count=%d\n",
                  SD_DIR, r, (int)gFileBrowser.count);
     if (r != 0) {

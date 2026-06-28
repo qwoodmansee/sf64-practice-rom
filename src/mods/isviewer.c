@@ -2,6 +2,7 @@
 #include "PR/rcp.h"
 #include "PR/os_internal.h"
 #include "libc/stdarg.h"
+#include "piint.h"  /* __osPiGetAccess / __osPiRelAccess / __osPiAccessQueueEnabled */
 
 // SummerCart64 IS-Viewer 64.
 //
@@ -29,9 +30,18 @@
  * for buffer-wraps and dumps as 64KB garbage to USB ("ZZZZZ" storm). */
 #define ISV_FAILURE_LIMIT        5
 
-#define PI_WRITE(addr, val)      do {                  \
-    IO_WRITE((addr), (val));                           \
-    (void) IO_READ(ISV_BASE + ISV_TOKEN_OFF);          \
+/* Wait for any in-flight PI DMA/IO to finish before raw access.
+ * Mirrors gz's __pi_wait() in src/gz/pi.h. Without this, our raw
+ * IO_WRITE collides with audio-thread DMA still in flight even after
+ * we acquired the PI access semaphore, wedging the cart-bus channel. */
+#define PI_WAIT() do {                                                  \
+    while (IO_READ(PI_STATUS_REG) & (PI_STATUS_IO_BUSY | PI_STATUS_DMA_BUSY)) \
+        ;                                                                \
+} while (0)
+
+#define PI_WRITE(addr, val)      do {                            \
+    PI_WAIT(); IO_WRITE((addr), (val));                          \
+    PI_WAIT(); (void) IO_READ(ISV_BASE + ISV_TOKEN_OFF);         \
 } while (0)
 
 static u8 sISViewerInitialized = 0;
@@ -68,6 +78,7 @@ static void ISViewer_Write(const u8* data, s32 len) {
     u32 rp;
     u32 wp;
     u32 saved_int_mask;
+    int pi_acquired = 0;
 
     if ((!sISViewerInitialized) || (len <= 0)) {
         return;
@@ -82,11 +93,22 @@ static void ISViewer_Write(const u8* data, s32 len) {
         len = ISV_MAX_FLUSH;
     }
 
+    /* Hold the PI access semaphore so audio thread DMA cannot interleave
+     * with our IS-Viewer rp/wp dance below. Without this guard, audio PI
+     * DMA fills the bus during our drain-wait poll, the SC64 firmware
+     * sees a stale wp value before our update lands, interprets the pair
+     * as wp<rp (wrap), and dumps 64KB of garbage to USB. After 5 such
+     * failures, this channel self-disables (sISViewerFailureCount limit).
+     * Pre-osInitialize the queue does not exist; fall back to bare
+     * __osDisableInt in that window. */
+    if (__osPiAccessQueueEnabled) {
+        __osPiGetAccess();
+        pi_acquired = 1;
+    }
+
     /* The rp/wp dance must be atomic from the SC64 firmware's POV. Any
-     * preemption (timer/SI/SP/DP interrupt, thread switch) that lands
-     * between PI writes can leave the firmware polling a torn (wp < rp)
-     * pair, which it interprets as a buffer wrap and dumps ~64KB of
-     * garbage to USB. Disable interrupts for the dance. __osDisableInt
+     * preemption (timer/SI/SP/DP interrupt) that lands between PI writes
+     * can leave the firmware polling a torn (wp < rp) pair. __osDisableInt
      * is a no-op pre-osInitialize and safe to call from any context. */
     saved_int_mask = __osDisableInt();
 
@@ -105,6 +127,9 @@ static void ISViewer_Write(const u8* data, s32 len) {
          * eventually disable the channel if it stays wedged. */
         sISViewerFailureCount++;
         __osRestoreInt(saved_int_mask);
+        if (pi_acquired) {
+            __osPiRelAccess();
+        }
         return;
     }
     sISViewerFailureCount = 0;
@@ -132,6 +157,9 @@ static void ISViewer_Write(const u8* data, s32 len) {
     PI_WRITE(ISV_BASE + ISV_WRITE_PTR_OFF, len);
 
     __osRestoreInt(saved_int_mask);
+    if (pi_acquired) {
+        __osPiRelAccess();
+    }
 }
 
 // Accumulator state passed through _Printf as the prout callback's "arg".

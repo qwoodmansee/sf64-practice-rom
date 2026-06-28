@@ -18,6 +18,25 @@
  * We access it directly to clear isWaitingForFonts before a BGM rescue play. */
 extern ActiveSequence sActiveSequences[];
 
+/* Audio command queue cursors — defined in audio_general.c / audio_thread.c
+ * but not declared in a header. Setting read = write atomically drains the
+ * queue without processing, which is the gz `load_state` fix for the
+ * "FPE crashes due to dangling pointers in queued audio commands" problem
+ * (gz src/gz/state.c:1406-1413). We must call this BEFORE Snapshot_ApplyToGame
+ * overwrites gPlayer/gActors/etc., because queued audio commands hold
+ * pointers into those structs; processing them post-apply with stale
+ * pointers floods gPlayer floats with NaN and the HUD shows "---". */
+extern u8 sSeqCmdReadPos;
+extern u8 sSeqCmdWritePos;
+extern u8 gThreadCmdReadPos;
+extern u8 gThreadCmdWritePos;
+
+/* GFX task queue — defined in sys_main.c, not in any header. We block on
+ * its mesg AFTER state bcopy AND before audio resume (gz state.c:1470-1471)
+ * so the in-flight RSP display list referencing pre-apply state completes
+ * before the new state's data hits the audio path. */
+extern OSMesgQueue gGfxTaskMesgQueue;
+
 #ifndef PRACTICE_SAVE_SELFTEST
 #define PRACTICE_SAVE_SELFTEST 1
 #endif
@@ -544,11 +563,28 @@ static uint32_t Practice_Save_Cb(void *buf, uint32_t buf_size) {
     return wr_sz;
 }
 
+/* gz `load_state` pattern (src/gz/state.c:1405-1413). Drain audio
+ * command queues and stop active SFX BEFORE any state bcopy. Queued
+ * audio commands hold pointers into game state structs we are about
+ * to overwrite. Processing them post-apply with stale pointers causes
+ * FPE / NaN propagation that the HUD surfaces as "---" on
+ * gPlayer[0].baseSpeed/boostSpeed. The audio thread is already
+ * CPU-stopped by the Practice_Sd code, but the queues themselves still
+ * hold work that will fire on audio thread resume. */
+static void Snapshot_DrainAudioForApply(void) {
+    sSeqCmdReadPos = sSeqCmdWritePos;
+    gThreadCmdReadPos = gThreadCmdWritePos;
+    Audio_ClearVoice();
+}
+
 static void Snapshot_ApplyToGame(const PracticeSnapshot *sn) {
     s32 i;
     s32 nplayer;
 
     SAVE_TR_STAGE("apply begin");
+    Snapshot_DrainAudioForApply();
+    SAVE_TR_STAGE("apply after audio drain");
+
     nplayer = gCamCount;
     if (nplayer > 4) {
         nplayer = 4;
@@ -560,6 +596,16 @@ static void Snapshot_ApplyToGame(const PracticeSnapshot *sn) {
         gPlayer[i] = sn->playerData[i];
     }
     SAVE_TR_STAGE("apply after players");
+
+#if PRACTICE_SAVE_TRACE
+    /* Bug B disambiguation: sn = loaded snapshot bytes, gp = what landed in
+     * gPlayer. valid baseSpeed ~40.0 = 0x42200000; NaN exponent = 0xFF. */
+    osSyncPrintf("[apply] sn.bs=%08x sn.boost=%08x gp.bs=%08x gp.boost=%08x\n",
+                 *(const u32 *)&sn->playerData[0].baseSpeed,
+                 *(const u32 *)&sn->playerData[0].boostSpeed,
+                 *(const u32 *)&gPlayer[0].baseSpeed,
+                 *(const u32 *)&gPlayer[0].boostSpeed);
+#endif
     bcopy(sn->actors, gActors, sizeof(sn->actors));
     bcopy(sn->bosses, gBosses, sizeof(sn->bosses));
     bcopy(sn->scenery, gScenery, sizeof(sn->scenery));
@@ -669,8 +715,7 @@ static void Snapshot_ApplyToGame(const PracticeSnapshot *sn) {
     Practice_Hud_Reset();
     SAVE_TR_STAGE("apply after Practice_Hud_Reset");
 
-    Audio_ClearVoice();
-    SAVE_TR_STAGE("apply after Audio_ClearVoice");
+    /* Audio_ClearVoice() now runs at the START of apply (gz pattern). */
     /* Defer audio reapply until the audio thread is ready. Cross-scene
      * loads already had Audio_SetAudioSpec fired by request_load, and
      * Audio_SetAudioSpec queues SEQCMD_RESET_AUDIO_HEAP. Calling another
@@ -681,6 +726,17 @@ static void Snapshot_ApplyToGame(const PracticeSnapshot *sn) {
     gPracticeBgmPendingSeqId = sn->scalars.bgmSeqId;
     gPracticeBgmPending = true;
     SAVE_TR_STAGE("apply queued AUDIO_PLAY_BGM");
+
+    /* gz state.c:1470-1471 pattern. Wait for the in-flight GFX RSP task
+     * to finish processing the OLD state's display list before we let
+     * audio resume (caller does sd_audio_resume). Without this drain,
+     * the RSP's working FP regs can write back NaN-tainted values that
+     * propagate into gPlayer floats on the next frame's matrix build.
+     * The send-back-to-queue keeps the audio/graphics thread loop alive
+     * (it expects the queue to always have one pending mesg). */
+    osRecvMesg(&gGfxTaskMesgQueue, NULL, OS_MESG_BLOCK);
+    osSendMesg(&gGfxTaskMesgQueue, NULL, OS_MESG_NOBLOCK);
+    SAVE_TR_STAGE("apply after gfx drain");
 }
 
 static int Practice_Load_Cb(const void *buf, uint32_t size) {
@@ -1400,6 +1456,26 @@ void Practice_Save_Init(void) {
     gPracticeCrossLoadStartFrame = 0;
     gPracticeBgmPending = false;
     gPracticeBgmPendingSeqId = 0;
+
+    /* Bug C: explicitly clear the SD cross-scene load state. A cold boot
+     * has IPL3 zero BSS for us, but a soft reset (SC64 reboot / reset button)
+     * leaves RDRAM -- and therefore these file statics -- holding whatever the
+     * previous session left behind. A stale sSdCrossPending==true makes
+     * Practice_Save_Tick fire a phantom load at the next level entry,
+     * surfacing as "SD XLD T/O" with no user action. Reset here so warm-reset
+     * state is always clean. Runs before the stock-4MB early return because
+     * these statics live in .main_bss and are valid on stock RAM too. */
+    sSdCrossPending    = false;
+    sSdCrossLevel      = 0;
+    sSdCrossPhase      = 0;
+    sSdCrossStartFrame = 0;
+    sSdCrossOvSrc      = NULL;
+    sSdCrossOvLen      = 0;
+    sSdCrossOvBuildId  = 0;
+    sSdCrossOvVram     = 0;
+    sSdCrossHaveSegs   = false;
+    sSdCrossXBld       = false;
+    sSdLastLoadWasXBld = false;
 
     if (gPracticeRamSlotCount == 0) {
         /* Stock 4 MB: save/load not supported. */

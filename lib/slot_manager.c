@@ -25,6 +25,14 @@ typedef struct {
 
 static slot_manager_state_t sSlotManager;
 
+/* Diagnostic: raw FRESULT from the most recent failing SD FatFs operation, so
+ * the caller can surface the exact cause on screen when there is no
+ * IS-Viewer/osSyncPrintf channel. -1 = nothing recorded yet. Values follow
+ * FatFs's FRESULT enum (1=DISK_ERR, 4=NO_FILE, 7=DENIED, 8=EXIST, ...). */
+static int sLastFatfsErr = -1;
+
+int slot_manager_last_fatfs_err(void) { return sLastFatfsErr; }
+
 static void slot_zero(void *dst, uint32_t len) {
     uint8_t *p = (uint8_t *)dst;
 
@@ -300,6 +308,7 @@ int slot_manager_save_sd_named(const char *path) {
 #else
     FIL      fp;
     FRESULT  res;
+    FRESULT  rc;
     UINT     written;
     uint8_t *base;
     uint8_t *payload;
@@ -314,9 +323,35 @@ int slot_manager_save_sd_named(const char *path) {
         sSlotManager.sd_scratch_size < sSlotManager.max_state_size)
         return SLOT_MANAGER_ERR_NO_STORAGE;
 
-    base        = sSlotManager.sd_scratch;
+    /* Stage the serialized image in the RAM slot pool, NOT sd_scratch.
+     *
+     * The save_cb may fill a working snapshot into sd_scratch and serialize
+     * OUT of it (the practice ROM's Practice_Save_Cb does exactly this via
+     * Practice_SaveScratch()). If the serializer's destination is sd_scratch
+     * (base), the large early tags (e.g. overlay bytes) overwrite the
+     * snapshot's later fields before their own tags are emitted -- writing
+     * code/garbage into the file. Hardware symptom: the restored player array
+     * read back as MIPS opcode bytes (corrupt baseSpeed) and the next game
+     * frame faulted on (s32)NaN.
+     *
+     * storage (slot pool) and sd_scratch are separate allocations, so staging
+     * in storage keeps the serializer's source (sd_scratch) and destination
+     * (storage) disjoint. This mirrors the load path's identical fix. We
+     * clobber slot 0's RAM image (mark it invalid), same as load. Fall back to
+     * sd_scratch only when no distinct storage is configured -- in that case
+     * the caller's save_cb must not read from sd_scratch. */
+    if (sSlotManager.storage &&
+        sSlotManager.storage_size >= sSlotManager.max_state_size &&
+        sSlotManager.storage != sSlotManager.sd_scratch) {
+        base        = sSlotManager.storage;
+        payload_cap = sSlotManager.max_state_size - SLOT_MANAGER_HEADER_SIZE;
+        sSlotManager.slot_valid[0] = false;
+        sSlotManager.slot_size[0]  = 0;
+    } else {
+        base        = sSlotManager.sd_scratch;
+        payload_cap = sSlotManager.sd_scratch_size - SLOT_MANAGER_HEADER_SIZE;
+    }
     payload     = base + SLOT_MANAGER_HEADER_SIZE;
-    payload_cap = sSlotManager.sd_scratch_size - SLOT_MANAGER_HEADER_SIZE;
 
     slot_zero(base, sSlotManager.max_state_size);
     payload_size = sSlotManager.save_cb(payload, payload_cap);
@@ -340,25 +375,41 @@ int slot_manager_save_sd_named(const char *path) {
     write_path = atomic ? sSlotTmpPath : path;
 
     res = f_open(&fp, write_path, FA_WRITE | FA_CREATE_ALWAYS);
-    if (res != FR_OK) return SLOT_MANAGER_ERR_IO_OPEN;
+    if (res != FR_OK) { sLastFatfsErr = (int)res; return SLOT_MANAGER_ERR_IO_OPEN; }
 
     res = f_write(&fp, base, total_size, &written);
-    f_close(&fp);
+    /* f_close performs the final sync: it flushes the file's directory entry
+     * (final size + first cluster) and the FAT. Its result was previously
+     * dropped -- a failed close leaves the tmp's directory entry uncommitted,
+     * which then surfaces downstream as f_rename FR_NO_FILE. Capture it. */
+    rc = f_close(&fp);
 
-    if (res != FR_OK || written != total_size) {
+    if (res != FR_OK || written != total_size || rc != FR_OK) {
+        /* Encoding: 1xx = short write (xx = 00), 2xx = close FRESULT (xx),
+         * otherwise xx = write FRESULT. */
+        sLastFatfsErr = (res != FR_OK) ? (int)res
+                      : (rc  != FR_OK) ? 200 + (int)rc
+                      : 100;
         f_unlink(write_path);
         return SLOT_MANAGER_ERR_IO_WRITE;
     }
 
     if (atomic) {
         /* f_rename refuses to overwrite, so unlink any prior file at
-         * `path` first. Both unlink and rename are best-effort: if
-         * unlink fails because the file didn't exist, that's fine; if
-         * rename then fails the tmp file is left behind and reported
-         * as IO_RENAME so the caller can show a clear error. */
-        (void)f_unlink(path);
+         * `path` first. Both unlink and rename are best-effort.
+         *
+         * Diagnostic encoding for sLastFatfsErr (3 digits): hundreds =
+         * f_stat(tmp) FRESULT (is the file we just wrote findable on disk?),
+         * tens = f_unlink(dest) FRESULT, ones = f_rename FRESULT.
+         * Examples: 444 = tmp NOT found by stat AND rename -> the tmp's
+         * directory entry never committed (write/sync transport problem);
+         * 044 = stat found tmp(0) but rename can't(4) -> rename-internal
+         * lookup/LFN issue; xx7 = rename DENIED (dest still present). */
+        FRESULT rs = f_stat(sSlotTmpPath, 0);
+        FRESULT ru = f_unlink(path);
         res = f_rename(sSlotTmpPath, path);
         if (res != FR_OK) {
+            sLastFatfsErr = ((int)rs * 100) + ((int)ru * 10) + (int)res;
             f_unlink(sSlotTmpPath);
             return SLOT_MANAGER_ERR_IO_RENAME;
         }

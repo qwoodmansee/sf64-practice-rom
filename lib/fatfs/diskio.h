@@ -70,6 +70,15 @@ DRESULT disk_ioctl (BYTE pdrv, BYTE cmd, void* buff);
 #define ATA_GET_MODEL		21	/* Get model name */
 #define ATA_GET_SN			22	/* Get serial number */
 
+/* Diagnostic: details of the most recent metadata write-verify failure
+ * (see diskio.c). off = first differing byte offset (-1 if none); wrote/read
+ * = the bytes there; swap = the readback byte at the byte-swapped position. */
+int disk_last_verify_off(void);
+int disk_last_verify_wrote(void);
+int disk_last_verify_read(void);
+int disk_last_verify_swap(void);
+void disk_verify_reset(void);
+
 #ifdef __cplusplus
 }
 #endif
