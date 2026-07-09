@@ -103,28 +103,49 @@ Those DMA-table addresses name ROM/physical storage, not normal RDRAM, and a
 save callback can fault if it tries to CRC those bytes. Use small overlay
 metadata or already-loaded RDRAM only.
 
-## CRITICAL: Don't co-locate unrelated features in `.practice_late_core` with SD/iodev code
+## CRITICAL: SD save/load is a hardware-tuned timing race, not just logic — two ways v0.7.0 broke it
 
-`.practice_late_core` (RAM `0x80720000`, Pak-only) holds both the SD/iodev
-stack (`lib/iodev/*.o`, `lib/sd_host/*.o`, `sd_crc.o`, `serial.o`) and a small
-set of level-select-only textures (`practice_logo_tex`, `practice_owl_tex`).
-Adding a third, unrelated texture object (`practice_icon_tex`, added for the
-v0.7.0 ROM-headroom fix on 2026-07-09) to reclaim main ROM budget broke SD
-save/load and reintroduced the Zoness crash on real hardware — confirmed via
-an A/B test (same tree, only `practice_icon_tex`'s segment placement changed)
-against a hardware-flashed ROM. mupen64plus's full functional suite (213/213)
-passed in both the broken and fixed configurations; this class of bug is
-hardware-only and the emulator will not catch it.
+`lib/iodev/iodev_sc64.c`'s `sc64_settle()` exists because the SC64/audio-thread
+PI-bus race is real and was only accidentally masked before by IS-Viewer debug
+prints serializing the bus between FatFs steps (see the comment above
+`sc64_settle()`). It replaces that accidental timing with an explicit,
+`osGetCount()`-based delay. This makes the whole SD save/load path more
+fragile than it looks: mupen64plus's full functional suite (213/213) passed
+in *every* broken configuration described below — this class of bug is
+hardware-only and the emulator will not catch it. Any change here must be
+hardware-tested (SD save/load, and a previously-crash-prone level like
+Zoness) before shipping, not just invariant/emulator-verified.
 
-`practice_icon_tex` now lives permanently in `main`, not `.practice_late_core`.
-Before adding anything new to `.practice_late_core` to solve a ROM-budget
-problem, prefer trace-stripping (`PRACTICE_SD_TRACE`/`PRACTICE_SAVE_TRACE`
-patterns) or string dedup in `main` first — for v0.7.0 those alone freed far
-more headroom (~297 KB margin under the `0xFC000` cap) than the icon texture
-migration would have. If a genuinely new object must go into
-`.practice_late_core`, hardware-test SD save/load and a previously-crash-prone
-level (e.g. Zoness) on real hardware before shipping — do not rely on
-mupen64plus alone for this segment.
+Two independent regressions hit this in the same v0.7.0 release cycle:
+
+1. **Segment co-location.** `.practice_late_core` (RAM `0x80720000`,
+   Pak-only) holds both the SD/iodev stack (`lib/iodev/*.o`,
+   `lib/sd_host/*.o`, `sd_crc.o`, `serial.o`) and level-select-only textures
+   (`practice_logo_tex`, `practice_owl_tex`). Adding a third, unrelated
+   texture object (`practice_icon_tex`) there to reclaim main ROM budget
+   broke SD save/load and reintroduced the Zoness crash. Fixed by keeping
+   `practice_icon_tex` in `main` permanently — it was never actually
+   necessary; `PRACTICE_SD_TRACE`/`PRACTICE_SAVE_TRACE`-style trace-stripping
+   and string dedup in `main` reclaimed far more headroom on their own
+   (~297 KB margin under the `0xFC000` cap).
+
+2. **`iodev_sc64.c` code-size/layout sensitivity.** Later in the same
+   session, adding diagnostic breadcrumbs (`BC()` calls, runtime-gated by a
+   default-NULL function pointer — a pure no-op at runtime) to `sc64_detect()`
+   in `iodev_sc64.c` broke SD save/load *again*, even with `practice_icon_tex`
+   correctly back in `main`. The breadcrumbs never fired, but they still
+   added real instructions to `sc64_detect()`, shifting the compiled address
+   of everything placed after `iodev_sc64.o` in `.practice_late_core`
+   (`sd_host.o` and the rest of the SD command path included). That was
+   enough to perturb the timing `sc64_settle()` is tuned against. Isolated by
+   reverting files one at a time against the hardware-confirmed-working
+   `a892870` tree until the crash disappeared — reverting `practice_sd.c`
+   alone was *not* sufficient; `iodev_sc64.c` had to be reverted too. Lesson:
+   any change to `iodev_sc64.c` — even inert, never-executed diagnostic
+   hooks — can move this needle. Prefer adding diagnostics in a file that
+   doesn't share `.practice_late_core` placement with the SD command path,
+   or budget a full hardware SD save/load retest for any `iodev_sc64.c` edit,
+   no matter how inert it looks.
 
 ## MIPS float safety
 

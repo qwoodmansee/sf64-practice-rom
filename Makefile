@@ -158,15 +158,9 @@ PRACTICE_HEAP_AUDIT ?= 1
 # Save/load TLV + snapshot ISV trace ([save_tr]). Build with PRACTICE_SAVE_TRACE=1 for HW triage.
 PRACTICE_SAVE_TRACE ?= 0
 
-# iodev_detect()/sc64_detect() boot-time breadcrumb bars (visual, no ISV
-# needed). Build with PRACTICE_IODEV_TRACE=1 to pin down a suspected
-# PI-bus wedge in the eager boot-time iodev_detect() call.
-PRACTICE_IODEV_TRACE ?= 0
-
 ifeq ($(PRACTICE_ROM),1)
     BUILD_DEFINES   += -DPRACTICE_ROM=1 -DAVOID_UB -DPRACTICE_HEAP_AUDIT=$(PRACTICE_HEAP_AUDIT) \
-                       -DPRACTICE_SAVE_TRACE=$(PRACTICE_SAVE_TRACE) \
-                       -DPRACTICE_IODEV_TRACE=$(PRACTICE_IODEV_TRACE)
+                       -DPRACTICE_SAVE_TRACE=$(PRACTICE_SAVE_TRACE)
     # Extra ad-hoc defines for one-off builds (e.g. the HIL wedge fixture
     # passes PRACTICE_CPPFLAGS="-DMODS_ISVIEWER_OVERRIDE=0"). Empty by default.
     BUILD_DEFINES   += $(PRACTICE_CPPFLAGS)

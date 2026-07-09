@@ -9,20 +9,7 @@ PracticeScreen gPracticeScreen;
 PracticeConfig gPracticeConfig;
 PracticeMenuState gPracticeMenuState;
 
-#if PRACTICE_IODEV_TRACE
-/* Wires sc64_detect()'s BC() breadcrumbs (see lib/iodev/iodev_sc64.c) to the
- * visual boot-bar strip via the interrupt-safe Lib_DebugBar. Diagnostic only
- * -- build with PRACTICE_IODEV_TRACE=1 to triage a suspected PI-bus wedge in
- * the eager boot-time iodev_detect() call. No-op / not linked otherwise. */
-static void Practice_IodevTraceBc(int code) {
-    Lib_DebugBar((u16)(0x8001 | ((u32)code * 0x1111)));
-}
-#endif
-
 void Practice_Init(void) {
-#if PRACTICE_IODEV_TRACE
-    gIodevBreadcrumb = Practice_IodevTraceBc;
-#endif
     Practice_Late_Init();
     /* P1 BLUE (royal): Practice_Late_Init returned. */
     Lib_DebugFillScreen(0x003F);
