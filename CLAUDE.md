@@ -103,6 +103,29 @@ Those DMA-table addresses name ROM/physical storage, not normal RDRAM, and a
 save callback can fault if it tries to CRC those bytes. Use small overlay
 metadata or already-loaded RDRAM only.
 
+## CRITICAL: Don't co-locate unrelated features in `.practice_late_core` with SD/iodev code
+
+`.practice_late_core` (RAM `0x80720000`, Pak-only) holds both the SD/iodev
+stack (`lib/iodev/*.o`, `lib/sd_host/*.o`, `sd_crc.o`, `serial.o`) and a small
+set of level-select-only textures (`practice_logo_tex`, `practice_owl_tex`).
+Adding a third, unrelated texture object (`practice_icon_tex`, added for the
+v0.7.0 ROM-headroom fix on 2026-07-09) to reclaim main ROM budget broke SD
+save/load and reintroduced the Zoness crash on real hardware — confirmed via
+an A/B test (same tree, only `practice_icon_tex`'s segment placement changed)
+against a hardware-flashed ROM. mupen64plus's full functional suite (213/213)
+passed in both the broken and fixed configurations; this class of bug is
+hardware-only and the emulator will not catch it.
+
+`practice_icon_tex` now lives permanently in `main`, not `.practice_late_core`.
+Before adding anything new to `.practice_late_core` to solve a ROM-budget
+problem, prefer trace-stripping (`PRACTICE_SD_TRACE`/`PRACTICE_SAVE_TRACE`
+patterns) or string dedup in `main` first — for v0.7.0 those alone freed far
+more headroom (~297 KB margin under the `0xFC000` cap) than the icon texture
+migration would have. If a genuinely new object must go into
+`.practice_late_core`, hardware-test SD save/load and a previously-crash-prone
+level (e.g. Zoness) on real hardware before shipping — do not rely on
+mupen64plus alone for this segment.
+
 ## MIPS float safety
 
 On MIPS, converting a NaN or uninitialized float to integer (`(s32)value`)

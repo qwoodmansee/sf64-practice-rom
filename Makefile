@@ -158,9 +158,15 @@ PRACTICE_HEAP_AUDIT ?= 1
 # Save/load TLV + snapshot ISV trace ([save_tr]). Build with PRACTICE_SAVE_TRACE=1 for HW triage.
 PRACTICE_SAVE_TRACE ?= 0
 
+# iodev_detect()/sc64_detect() boot-time breadcrumb bars (visual, no ISV
+# needed). Build with PRACTICE_IODEV_TRACE=1 to pin down a suspected
+# PI-bus wedge in the eager boot-time iodev_detect() call.
+PRACTICE_IODEV_TRACE ?= 0
+
 ifeq ($(PRACTICE_ROM),1)
     BUILD_DEFINES   += -DPRACTICE_ROM=1 -DAVOID_UB -DPRACTICE_HEAP_AUDIT=$(PRACTICE_HEAP_AUDIT) \
-                       -DPRACTICE_SAVE_TRACE=$(PRACTICE_SAVE_TRACE)
+                       -DPRACTICE_SAVE_TRACE=$(PRACTICE_SAVE_TRACE) \
+                       -DPRACTICE_IODEV_TRACE=$(PRACTICE_IODEV_TRACE)
     # Extra ad-hoc defines for one-off builds (e.g. the HIL wedge fixture
     # passes PRACTICE_CPPFLAGS="-DMODS_ISVIEWER_OVERRIDE=0"). Empty by default.
     BUILD_DEFINES   += $(PRACTICE_CPPFLAGS)
@@ -551,8 +557,15 @@ practice-compressed:
 	$(MAKE) PRACTICE_ROM=1 compress
 	$(MAKE) PRACTICE_ROM=1 COMPARE=0 compressed
 
-practice-patch: practice-compressed
-	npm --prefix tools/patcher run create-release -- --source $(CURDIR)/$(BASEROM) --target $(CURDIR)/$(ROMC) --assets-dir $(CURDIR)/$(RELEASE_ASSETS_DIR) --version $(PATCH_VERSION)
+# tools/comptool.py (see practice-compressed above) has no awareness of the
+# .practice_late_core / .practice_late_pak segments and will scramble their
+# content into the compressed ROM's late-core address range, producing a
+# patch that boots to a black screen on real hardware (v0.6.0 shipped this
+# way; fixed by hand for v0.6.1 in commit f1ecd45fb but the Makefile default
+# was never updated, so v0.7.0 regressed right back into it). Target the
+# uncompressed ROM instead -- it preserves the linker's real layout.
+practice-patch: practice
+	npm --prefix tools/patcher run create-release -- --source $(CURDIR)/$(BASEROM) --target $(CURDIR)/$(ROM) --assets-dir $(CURDIR)/$(RELEASE_ASSETS_DIR) --version $(PATCH_VERSION)
 
 # --- HIL (hardware-in-the-loop) testing -------------------------------------
 # See tests/hil/SETUP.md and docs/superpowers/plans/2026-05-30-n64-hil-testing.md

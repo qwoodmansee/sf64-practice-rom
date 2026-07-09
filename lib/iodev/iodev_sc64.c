@@ -247,16 +247,41 @@ unlock:
     return result;
 }
 
+/* Detect-path breadcrumbs use a distinct 20s range so they don't get
+ * confused with sc64_execute_cmd's 1-8 codes in a boot log -- the two
+ * paths never interleave, but the codes are read by a human. Added to
+ * pin down a boot-time hang suspected to be the same "PI bus raced by
+ * audio thread's first DMA, SC64 firmware wedges" class of bug that
+ * iodev_sd_init() was deferred to first-use to avoid (see CLAUDE.md);
+ * iodev_detect() -> sc64_detect() was never given the same treatment
+ * and is called unconditionally and eagerly during Practice_Init(). */
 static iodev_id_t sc64_detect(void) {
     uint32_t ident;
 
+    BC(20);                 /* entry: about to take PI access (cart_lock) */
     sc64_cart_lock();
+    BC(21);                 /* PI access acquired -- cart_lock returned */
     PI_WRITE_FLUSH(SC64_REG_KEY, SC64_KEY_RESET);
+    BC(22);                 /* wrote KEY_RESET (first PI_WAIT survived) */
     PI_WRITE_FLUSH(SC64_REG_KEY, SC64_KEY_UNLOCK_1);
+    BC(23);                 /* wrote KEY_UNLOCK_1 */
     PI_WRITE_FLUSH(SC64_REG_KEY, SC64_KEY_UNLOCK_2);
+    BC(24);                 /* wrote KEY_UNLOCK_2 */
     PI_WAIT();
+    BC(25);                 /* final PI_WAIT survived */
     ident = IO_READ(SC64_REG_IDENT);
+    BC(26);                 /* IDENT read back */
     sc64_cart_unlock();
+    BC(27);                 /* cart_unlock done. Reading the trace: 20 but
+                              * not 21 -> cart_lock's __osPiGetAccess() (the
+                              * software PI-manager queue wait) wedged --
+                              * the exact class of bug iodev_sd_init() was
+                              * deferred to avoid. 21 but not 22 -> the first
+                              * PI_WRITE_FLUSH's internal PI_WAIT() (raw
+                              * PI_STATUS_IO_BUSY/DMA_BUSY poll) never
+                              * cleared -- SC64 firmware itself wedged.
+                              * 26 but not 27 -> cart_unlock/__osPiRelAccess
+                              * wedged. */
 
     if (ident == SC64_V2_IDENTIFIER) {
         return IODEV_SC64;

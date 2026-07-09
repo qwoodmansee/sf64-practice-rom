@@ -37,8 +37,17 @@ PRACTICE_OBJS = [
     "practice_hitbox",
     "practice_minimap",
     "practice_freecam",
-    # practice_logo_tex / practice_owl_tex / practice_icon_tex moved to
-    # PRACTICE_LATE_CORE_PRACTICE_OBJS (2026-06-07 / 2026-07-08): level-select-only
+    # practice_icon_tex: hardware-confirmed 2026-07-09 that co-locating it in
+    # .practice_late_core with the SD/iodev objects (iodev_sc64.o etc.) broke
+    # SD save/load and reintroduced the Zoness crash on real hardware -- an
+    # A/B test (icon_tex in main vs. in late-core, everything else held
+    # constant) isolated it cleanly. Kept in main permanently; the
+    # PRACTICE_SD_TRACE gating + SD path string dedup below reclaimed far
+    # more ROM budget than icon_tex's ~700 bytes needed anyway (main_ROM_END
+    # landed ~297 KB under the 0xFC000 cap with icon_tex back in main).
+    "practice_icon_tex",
+    # practice_logo_tex / practice_owl_tex moved to
+    # PRACTICE_LATE_CORE_PRACTICE_OBJS (2026-06-07): level-select-only
     # textures were pushing the vanilla audio tables at the top of main past the
     # IPL boot-staging boundary, freezing Macbeth on hardware. See
     # check_boot_main_rom_budget.
@@ -125,8 +134,6 @@ PRACTICE_LATE_CORE_SD_HOST_OBJS = [
 PRACTICE_LATE_CORE_PRACTICE_OBJS = [
     "practice_logo_tex",  # HIT64 logo, level-select only (Practice_Logo_Draw, Pak-gated)
     "practice_owl_tex",   # owl, level-select only (Practice_Owl_Draw, Pak-gated)
-    "practice_icon_tex",  # bomb/life icons, level-select only (Practice_DrawBombIcon /
-                           # Practice_DrawArwingLifeIcon, Pak-gated); added 2026-07-08
 ]
 
 ANCHOR = "build/src/engine/fox_save.o"
