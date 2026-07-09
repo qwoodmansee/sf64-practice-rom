@@ -115,13 +115,12 @@ void Practice_TestFatfs(void) {
 
     /* --- T10-T13: temp-file + rename durability round-trip ---------------
      * This is the path that reproduced the SC64 metadata-durability bug.
-     * Reset the verify diagnostics first so any retry we report below is
-     * attributable to THIS round-trip, not the boot-time writes above. */
-    disk_verify_reset();
-
-    /* Clean slate: ignore FR_NO_FILE (nothing to remove on first run). */
+     * Clean slate first (f_unlink can itself trigger metadata writes that
+     * would contaminate the verify counters), then reset diagnostics so any
+     * retry we report below is attributable to THIS round-trip only. */
     (void)f_unlink(SD_SELF_DAT);
     (void)f_unlink(SD_SELF_TMP);
+    disk_verify_reset();
 
     bw = 0;
     fr_close = FR_OK;

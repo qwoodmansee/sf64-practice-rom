@@ -28,30 +28,14 @@
 #define osSyncPrintf sSdTraceNoop
 static void sSdTraceNoop(const char *fmt, ...) { (void)fmt; }
 
-/* Defense in depth: SC64 cart-bus race fixes in lib/iodev/iodev_sc64.c
- * (PI_WAIT + cart_lock with PI timing save/restore) are necessary but
- * empirically not sufficient on SF64 — the audio thread's frequent
- * BGM/SFX soundbank DMAs starve the SC64 firmware faster than gz's OoT
- * pattern alone can handle. Hard-stop the audio thread for the duration
- * of the SD command burst. Brief audio glitch (~1-2s), but eliminates
- * the race window entirely so the cart_lock pattern can do its work.
- *
- * EXPERIMENT (2026-06-07): audio-pause DISABLED to test whether
- * osStopThread(&gAudioThread) is itself stranding PI access and causing the
- * intermittent cart_lock wedge (save freezing at the INIT execute_cmd entry
- * breadcrumb). osStopThread can suspend the audio thread mid-PI-transaction;
- * the next __osPiGetAccess in sc64_cart_lock then blocks forever. If saves
- * stop wedging with these no-oped, the audio stop is the cause and we need a
- * cooperative quiesce instead. Re-enable by restoring the osStop/StartThread
- * calls once confirmed. Set SD_DISABLE_AUDIO_PAUSE to 0 to restore. */
-#define SD_DISABLE_AUDIO_PAUSE 1
-#if SD_DISABLE_AUDIO_PAUSE
-static void sd_audio_pause(void)  { /* experiment: do not stop audio thread */ }
+/* Audio pause is intentionally a no-op: osStopThread(&gAudioThread) combined
+ * with sc64_cart_lock() -> __osPiGetAccess() creates a deadlock — if the audio
+ * thread is suspended mid-PI-transaction it holds the PI access token and
+ * cart_lock blocks forever. Serialization is handled by cart_lock + PI_WAIT
+ * in lib/iodev/iodev_sc64.c instead, which is sufficient with the self-heal
+ * DEINIT+INIT clearing any poisoned SC64 controller state. */
+static void sd_audio_pause(void)  { }
 static void sd_audio_resume(void) { }
-#else
-static void sd_audio_pause(void) { osStopThread(&gAudioThread); }
-static void sd_audio_resume(void) { osStartThread(&gAudioThread); }
-#endif
 
 
 #define SD_ROOT     "0:/sageraces"

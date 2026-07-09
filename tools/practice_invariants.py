@@ -319,6 +319,8 @@ def check_iodev_sc64():
     if src.count("count > SC64_SD_DMA_MAX_SECTORS") < 2:
         error(f"{path}: both sd_read_sectors and sd_write_sectors must enforce "
               "count > SC64_SD_DMA_MAX_SECTORS -> ERR_PARAM (SD DMA buffer is 8 KiB / 16 sectors)")
+    if not re.search(r"#define\s+SC64_SD_DMA_MAX_SECTORS\s+16(?:[uU]?[lL]{0,2})?\b", src):
+        error(f"{path}: SC64_SD_DMA_MAX_SECTORS must remain 16 (8 KiB data buffer / 512 B per sector)")
 
     # sc64_detect MUST issue the unlock key sequence BEFORE reading IDENT.
     # In user-ROM mode (post-handoff from SC64 bootloader) the register
@@ -444,7 +446,7 @@ def check_sc64_sd_scratch_placement():
     """
     path = os.path.join("lib", "iodev", "iodev_sc64.c")
     src = read(path)
-    m = re.search(r"#define\s+SC64_SD_DMA_SCRATCH\s+(0x[0-9A-Fa-f]+)", src)
+    m = re.search(r"#define\s+SC64_SD_DMA_SCRATCH\s+\(?\s*(0x[0-9A-Fa-f]+)(?:[uU]?[lL]{0,2})?\s*\)?", src)
     if not m:
         error(f"{path}: SC64_SD_DMA_SCRATCH define not found "
               "(check_sc64_sd_scratch_placement)")
