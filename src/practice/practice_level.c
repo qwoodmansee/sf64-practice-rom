@@ -396,8 +396,14 @@ void Practice_LevelSelect_Draw(void) {
                (gPracticeConfig.laserStrength == LASERS_TWIN)   ? "TWIN"   : "HYPER";
     Practice_DrawText(20,  204, "LASER:");
     Practice_DrawTextColor(72,  204, laserStr, 255, 255, 100);
-    Practice_DrawBombIcon(136.0f, 199.0f);
-    Practice_DrawArwingLifeIcon(174.0f, 199.0f);
+    /* The bomb/life icon textures live in .practice_late_core (RAM 0x80720000+),
+     * which is only DMA'd in on Expansion Pak systems. On stock 4 MB that RAM
+     * does not exist, so the draws (which read the texture data) must be gated
+     * by osMemSize -- otherwise the RDP texture load faults. */
+    if (osMemSize >= 0x00800000U) {
+        Practice_DrawBombIcon(136.0f, 199.0f);
+        Practice_DrawArwingLifeIcon(174.0f, 199.0f);
+    }
     Practice_DrawNumber(154, 204, gPracticeConfig.bombCount);
     Practice_DrawNumber(192, 204, gPracticeConfig.lifeCount);
 

@@ -37,11 +37,11 @@ PRACTICE_OBJS = [
     "practice_hitbox",
     "practice_minimap",
     "practice_freecam",
-    # practice_logo_tex / practice_owl_tex moved to PRACTICE_LATE_CORE_PRACTICE_OBJS
-    # (2026-06-07): level-select-only textures were pushing the vanilla audio
-    # tables at the top of main past the IPL boot-staging boundary, freezing
-    # Macbeth on hardware. See check_boot_main_rom_budget.
-    "practice_icon_tex",
+    # practice_logo_tex / practice_owl_tex / practice_icon_tex moved to
+    # PRACTICE_LATE_CORE_PRACTICE_OBJS (2026-06-07 / 2026-07-08): level-select-only
+    # textures were pushing the vanilla audio tables at the top of main past the
+    # IPL boot-staging boundary, freezing Macbeth on hardware. See
+    # check_boot_main_rom_budget.
     "practice_test_fatfs",  # Phase 2: gated by IODEV_DIAG_FATFS, otherwise empty .o
     "practice_sd",          # Phase 6: OSK + file browser rendering and glue
     "practice_frame_advance",  # Frame advance / pause feature
@@ -125,6 +125,8 @@ PRACTICE_LATE_CORE_SD_HOST_OBJS = [
 PRACTICE_LATE_CORE_PRACTICE_OBJS = [
     "practice_logo_tex",  # HIT64 logo, level-select only (Practice_Logo_Draw, Pak-gated)
     "practice_owl_tex",   # owl, level-select only (Practice_Owl_Draw, Pak-gated)
+    "practice_icon_tex",  # bomb/life icons, level-select only (Practice_DrawBombIcon /
+                           # Practice_DrawArwingLifeIcon, Pak-gated); added 2026-07-08
 ]
 
 ANCHOR = "build/src/engine/fox_save.o"
@@ -669,13 +671,52 @@ def patch():
     # LOAD segment before the NOLOAD Pak segments jump it to 0x80400000+.
     #
     # Self-heal: if a stale .practice_late_core block exists (e.g. from an
-    # earlier patcher version that used the 0x801F4000 VRAM), excise it so
-    # the fresh block at 0x80720000 can be reinjected. The block runs from
-    # the `/* practice_late_core:` comment through the next
-    # `practice_late_core_VRAM_END = .;` line.
+    # earlier patcher version that used the 0x801F4000 VRAM, OR one that
+    # predates a since-added entry in one of the PRACTICE_LATE_CORE_*_OBJS
+    # lists), excise it so a fresh block reflecting the current membership
+    # can be reinjected. The block runs from the `/* practice_late_core:`
+    # comment through the next `practice_late_core_VRAM_END = .;` line.
+    #
+    # The membership check matters: the old code only checked "does the
+    # block exist at all", not "does it contain every currently-configured
+    # object". That let a new PRACTICE_LATE_CORE_PRACTICE_OBJS entry silently
+    # fail to get patched into a stale local .ld -- the object would vanish
+    # from both .main and .practice_late_core, producing an undefined
+    # reference at link time (bit a previous session with
+    # Practice_Owl_Draw/Practice_Logo_Draw).
     PRACTICE_LATE_CORE_EXPECTED_VRAM = "practice_late_core_VRAM = 0x80720000;"
-    if (".practice_late_core" in content
-            and PRACTICE_LATE_CORE_EXPECTED_VRAM not in content):
+
+    def _find_late_core_block(text):
+        start = text.find("/* practice_late_core:")
+        if start < 0:
+            return None
+        end_marker = "practice_late_core_VRAM_END = .;"
+        end_pos = text.find(end_marker, start)
+        if end_pos < 0:
+            return None
+        return text[start:end_pos + len(end_marker)]
+
+    late_core_stale = False
+    if ".practice_late_core" in content:
+        if PRACTICE_LATE_CORE_EXPECTED_VRAM not in content:
+            late_core_stale = True
+        else:
+            existing_block = _find_late_core_block(content)
+            if existing_block is None:
+                late_core_stale = True
+            else:
+                configured_late_objs = (
+                    [f"build/lib/iodev/{o}.o" for o in PRACTICE_LATE_CORE_IODEV_OBJS]
+                    + [f"build/lib/{o}.o" for o in PRACTICE_LATE_CORE_LIB_OBJS]
+                    + [f"build/lib/sd_host/{o}.o" for o in PRACTICE_LATE_CORE_SD_HOST_OBJS]
+                    + [f"build/src/practice/{o}.o" for o in PRACTICE_LATE_CORE_PRACTICE_OBJS]
+                )
+                for obj_path in configured_late_objs:
+                    if obj_path not in existing_block:
+                        late_core_stale = True
+                        break
+
+    if late_core_stale:
         stale_block = re.compile(
             r"[ \t]*/\* practice_late_core:.*?practice_late_core_VRAM_END = \.;\n",
             re.DOTALL,

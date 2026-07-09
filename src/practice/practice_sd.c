@@ -20,13 +20,16 @@
  * __osPiGetAccess and runs a cart-bus rp/wp drain dance; with no host draining
  * IS-Viewer each call stalls (200k-retry drain) and, on hardware, contends on
  * PI access with the SD command path -- a confirmed wedge source and a
- * violation of the project rule "never osSyncPrintf during gameplay". Redirect
- * every osSyncPrintf in this file to a no-op (C89-safe object-like macro, since
- * IDO has no variadic macros). Re-enable a single trace by calling osSyncPrintf
- * directly via (osSyncPrintf) if ever needed under an IS-Viewer session. */
-#undef osSyncPrintf
-#define osSyncPrintf sSdTraceNoop
-static void sSdTraceNoop(const char *fmt, ...) { (void)fmt; }
+ * violation of the project rule "never osSyncPrintf during gameplay". Every
+ * osSyncPrintf call in this file is gated by PRACTICE_SD_TRACE (default 0,
+ * same pattern as PRACTICE_SAVE_TRACE in practice_save.c) so a release build
+ * compiles the calls out entirely instead of routing them through a no-op --
+ * the format strings and call-site marshalling were pure ROM-byte waste with
+ * PRACTICE_SD_TRACE=0 (see check_boot_main_rom_budget). Set PRACTICE_SD_TRACE
+ * to 1 locally to re-enable tracing under an IS-Viewer session. */
+#ifndef PRACTICE_SD_TRACE
+#define PRACTICE_SD_TRACE 0
+#endif
 
 /* Audio pause is intentionally a no-op: osStopThread(&gAudioThread) combined
  * with sc64_cart_lock() -> __osPiGetAccess() creates a deadlock — if the audio
@@ -38,10 +41,19 @@ static void sd_audio_pause(void)  { }
 static void sd_audio_resume(void) { }
 
 
-#define SD_ROOT     "0:/sageraces"
-#define SD_APP      SD_ROOT "/sf64"
-#define SD_DIR      SD_APP  "/states"
-#define SD_EXT      ".SF64ST"
+/* These are shared const storage (not macros) so every f_mkdir()/path-build
+ * call site references the same bytes instead of the compiler emitting a
+ * fresh string literal per usage -- IDO does not pool identical literals,
+ * and SD_ROOT/SD_APP/SD_DIR were each duplicated 3-6x across this file
+ * before this change (see check_boot_main_rom_budget). */
+static const char sSdRoot[] = "0:/sageraces";
+static const char sSdApp[]  = "0:/sageraces/sf64";
+static const char sSdDir[]  = "0:/sageraces/sf64/states";
+static const char sSdExt[]  = ".SF64ST";
+#define SD_ROOT     sSdRoot
+#define SD_APP      sSdApp
+#define SD_DIR      sSdDir
+#define SD_EXT      sSdExt
 #define SD_PATH_MAX (FB_PATH_MAX)
 
 static FATFS sFatfsWork;
@@ -90,24 +102,36 @@ static void on_save_name_confirmed(const char *name, void *ud) {
     for (j = 0; name[j] && i < SD_PATH_MAX - 1; j++) { sSavePath[i++] = name[j]; }
     for (j = 0; SD_EXT[j] && i < SD_PATH_MAX - 1; j++) { sSavePath[i++] = SD_EXT[j]; }
     sSavePath[i] = '\0';
+#if PRACTICE_SD_TRACE
     osSyncPrintf("[sd] save path=%s\n", sSavePath);
+#endif
 
     /* SD self-heal: DEINIT+INIT clears any poisoned controller state from prior
      * host sd-upload runs. Audio pause held across the burst for a quiet cart-bus. */
     sd_audio_pause();
+#if PRACTICE_SD_TRACE
     osSyncPrintf("[sd] release<\n");
+#endif
     (void)iodev_sd_release();
+#if PRACTICE_SD_TRACE
     osSyncPrintf("[sd] acquire<\n");
+#endif
     iodev_res = iodev_sd_acquire();
+#if PRACTICE_SD_TRACE
     osSyncPrintf("[sd] acquire> r=%d\n", iodev_res);
+#endif
     sd_op_begin();
     rr = f_mkdir(SD_ROOT);
     ra = f_mkdir(SD_APP);
     rd = f_mkdir(SD_DIR);
+#if PRACTICE_SD_TRACE
     osSyncPrintf("[sd] mkdir root=%d app=%d dir=%d (0=ok 8=exist)\n",
                  (int)rr, (int)ra, (int)rd);
+#endif
     res = slot_manager_save_sd_named(sSavePath);
+#if PRACTICE_SD_TRACE
     osSyncPrintf("[sd] slot_save=%d\n", res);
+#endif
     sd_op_end();
     sd_audio_resume();
 
@@ -164,21 +188,33 @@ static void on_load_file_selected(const char *path, void *ud) {
     const char *msg;
     int iodev_res;
     (void)ud;
+#if PRACTICE_SD_TRACE
     osSyncPrintf("[sd] load path=%s\n", path);
+#endif
     sd_audio_pause();
     /* SD self-heal: DEINIT+INIT clears any poisoned controller state. */
+#if PRACTICE_SD_TRACE
     osSyncPrintf("[sd] release<\n");
+#endif
     (void)iodev_sd_release();
+#if PRACTICE_SD_TRACE
     osSyncPrintf("[sd] acquire<\n");
+#endif
     iodev_res = iodev_sd_acquire();
+#if PRACTICE_SD_TRACE
     osSyncPrintf("[sd] acquire> r=%d\n", iodev_res);
+#endif
     sd_op_begin();
     res = slot_manager_load_sd_named(path);
     sd_op_end();
     sd_audio_resume();
+#if PRACTICE_SD_TRACE
     osSyncPrintf("[sd] slot_load=%d\n", res);
+#endif
     Practice_Menu_Close();
+#if PRACTICE_SD_TRACE
     osSyncPrintf("[sd] menu_closed\n");
+#endif
     if (res == SLOT_MANAGER_OK) {
         if (Practice_Sd_LoadIsPending()) {
             Practice_Hud_ShowStatus("XSCENE WAIT", 220, 220, 80);
@@ -187,7 +223,9 @@ static void on_load_file_selected(const char *path, void *ud) {
         } else {
             Practice_Hud_ShowStatus("SD LOAD OK", 80, 255, 120);
         }
+#if PRACTICE_SD_TRACE
         osSyncPrintf("[sd] load_cb done pending=%d\n", (s32)Practice_Sd_LoadIsPending());
+#endif
         return;
     }
     switch (res) {
@@ -217,7 +255,9 @@ void Practice_Sd_Init(void) {
     osk_close();
     file_browser_close();
     sSdAvailable = iodev_sd_was_ok();
+#if PRACTICE_SD_TRACE
     osSyncPrintf("[si] ok=%d\n", (s32)sSdAvailable);
+#endif
     if (!sSdAvailable) {
         iodev_id_t cart = iodev_detect();
         int res = iodev_sd_init_result();
@@ -260,31 +300,53 @@ bool Practice_Sd_IsActive(void) {
 static void Practice_Sd_LazyInit(void) {
     FRESULT r;
     int initRes;
+#if PRACTICE_SD_TRACE
     osSyncPrintf("[lz] in av=%d r=%d\n",
                  (s32)sSdAvailable, iodev_sd_init_result());
+#endif
     if (sSdAvailable || iodev_sd_init_result() != -99) {
+#if PRACTICE_SD_TRACE
         osSyncPrintf("[lz] skip\n");
+#endif
         return;
     }
     sd_audio_pause();
+#if PRACTICE_SD_TRACE
     osSyncPrintf("[lz] init<\n");
+#endif
     (void)iodev_sd_init();
     initRes = iodev_sd_init_result();
+#if PRACTICE_SD_TRACE
     osSyncPrintf("[lz] init> r=%d\n", initRes);
+#endif
     sSdAvailable = iodev_sd_was_ok();
+#if PRACTICE_SD_TRACE
     osSyncPrintf("[lz] ok=%d\n", (s32)sSdAvailable);
+#endif
     if (sSdAvailable) {
+#if PRACTICE_SD_TRACE
         osSyncPrintf("[lz] mnt<\n");
+#endif
         f_mount(&sFatfsWork, "0:", 0);
+#if PRACTICE_SD_TRACE
         osSyncPrintf("[lz] mnt>\n");
+#endif
         r = f_mkdir(SD_ROOT);
+#if PRACTICE_SD_TRACE
         osSyncPrintf("[lz] mk1=%d\n", (s32)r);
+#endif
         r = f_mkdir(SD_APP);
+#if PRACTICE_SD_TRACE
         osSyncPrintf("[lz] mk2=%d\n", (s32)r);
+#endif
         r = f_mkdir(SD_DIR);
+#if PRACTICE_SD_TRACE
         osSyncPrintf("[lz] mk3=%d\n", (s32)r);
+#endif
         f_unmount("0:");
+#if PRACTICE_SD_TRACE
         osSyncPrintf("[lz] umnt\n");
+#endif
     } else {
         iodev_id_t cart = iodev_detect();
         if (cart == IODEV_ED64) {
@@ -296,44 +358,64 @@ static void Practice_Sd_LazyInit(void) {
         }
     }
     sd_audio_resume();
+#if PRACTICE_SD_TRACE
     osSyncPrintf("[lz] out av=%d\n", (s32)sSdAvailable);
+#endif
 }
 
 void Practice_Sd_StartSave(void) {
+#if PRACTICE_SD_TRACE
     osSyncPrintf("[sd] sv<\n");
+#endif
     Practice_Sd_LazyInit();
     if (!sSdAvailable || gPracticeSaveDisabled) {
+#if PRACTICE_SD_TRACE
         osSyncPrintf("[sd] sv abort av=%d dis=%d\n",
                      (s32)sSdAvailable, (s32)gPracticeSaveDisabled);
+#endif
         Practice_Hud_ShowStatus(sNoSdMsg, 255, 180, 80);
         return;
     }
+#if PRACTICE_SD_TRACE
     osSyncPrintf("[sd] sv osk\n");
+#endif
     osk_open("SD SAVE NAME:", "", OSK_MAX_TEXT,
               on_save_name_confirmed, on_save_canceled, NULL);
 }
 
 void Practice_Sd_StartLoad(void) {
     int r;
+#if PRACTICE_SD_TRACE
     osSyncPrintf("[sd] ld<\n");
+#endif
     Practice_Sd_LazyInit();
     if (!sSdAvailable || gPracticeSaveDisabled) {
+#if PRACTICE_SD_TRACE
         osSyncPrintf("[sd] ld abort av=%d dis=%d\n",
                      (s32)sSdAvailable, (s32)gPracticeSaveDisabled);
+#endif
         Practice_Hud_ShowStatus(sNoSdMsg, 255, 180, 80);
         return;
     }
+#if PRACTICE_SD_TRACE
     osSyncPrintf("[sd] ld mnt<\n");
+#endif
     sd_audio_pause();
     sd_op_begin();
+#if PRACTICE_SD_TRACE
     osSyncPrintf("[sd] ld fb<\n");
+#endif
     r = file_browser_open(FB_LOAD, SD_DIR, SD_EXT,
                           on_load_file_selected, on_load_canceled, NULL);
+#if PRACTICE_SD_TRACE
     osSyncPrintf("[sd] ld fb> r=%d\n", r);
+#endif
     sd_op_end();
     sd_audio_resume();
+#if PRACTICE_SD_TRACE
     osSyncPrintf("[sd] load dir=%s r=%d count=%d\n",
                  SD_DIR, r, (int)gFileBrowser.count);
+#endif
     if (r != 0) {
         Practice_Hud_ShowStatus("NO SD SAVES", 180, 180, 80);
     }
