@@ -11,13 +11,21 @@ export function pageRadialMenu() {
   inlineBody([
     'Press ', ['CR', '+', 'START'], ' to open the menu. Tilt the control stick toward any option, ' +
     'then press ', ['A'], ' to confirm. ' +
-    'Options are arranged like a compass -- stick up selects RESTART, stick right selects SAVE, etc.',
+    'Options are arranged like a compass -- stick up selects RESTART, stick right selects AUDIO, etc. ' +
+    'The down-right diagonal is intentionally empty.',
   ]);
   vspace(4);
 
   const diagCY = doc.y + 108;
   radialDiagram(W / 2, diagCY, RADIAL_SLICES, 88);
   doc.y = diagCY + 88 + 26;
+
+  vspace(2);
+  inlineBody([
+    'Position save/load are not on this menu -- use the ', ['DL'], ' / ', ['DR'],
+    ' hotkeys for instant RAM saves (see the Save States page), or the SD CARD option above ' +
+    'for SD card saves.',
+  ]);
 
   vspace(4);
   sectionHeader('MENU OPTIONS');

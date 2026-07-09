@@ -3,21 +3,22 @@ import { C, ML, PW, FONTS } from '../theme';
 import { sectionHeader, vspace, callout, bullet, inlineBody } from '../widgets/typography';
 
 export function pageSDCard() {
-  newPage('SD Card (In Development)');
+  newPage('SD Card (Early Alpha)');
 
   const y0 = doc.y;
-  const wH = 76;
+  const wH = 84;
   doc.rect(ML, y0, PW, wH).fill('#280008');
   doc.rect(ML, y0, PW, wH).strokeColor(C.red).lineWidth(1.2).stroke();
   doc.rect(ML, y0, 6, wH).fill(C.red);
   doc.fillColor(C.red).font(FONTS.mono).fontSize(13)
-     .text('(!) SD CARD SAVING NOT AVAILABLE', ML + 14, y0 + 10, { width: PW - 20, lineBreak: false });
+     .text('(!) SD CARD SAVING: EARLY ALPHA', ML + 14, y0 + 10, { width: PW - 20, lineBreak: false });
   doc.fillColor('#FFB0B8').font('Helvetica').fontSize(9.5)
      .text(
-       'SD card save states are in active development and DO NOT work on any cart hardware ' +
-       'at this time, including SummerCart64 and EverDrive. The SD CARD option appears in ' +
-       'the menu, but any save or load will silently fail. Do not rely on SD card saves for ' +
-       'practice sessions.',
+       'SD card save states are in early alpha. They have been tested and are working on ' +
+       'SummerCart64, but crashes have been observed and are still possible -- use with caution ' +
+       'and keep RAM save states as your backup for anything you care about. EverDrive X7/X8 ' +
+       'support is written but unverified on real hardware. If you hit a crash, please send us ' +
+       'what you were doing (see REPORTING CRASHES below) -- that info directly helps us fix it.',
        ML + 14, y0 + 30, { width: PW - 22 }
      );
   doc.y = y0 + wH + 10;
@@ -25,14 +26,14 @@ export function pageSDCard() {
   sectionHeader('CURRENT STATUS');
   bullet([
     'SD card interface: implemented and visible in the menu',
-    'SummerCart64 support: not working at this time',
+    'SummerCart64 support: early alpha -- tested and working, but crashes have been observed',
     'EverDrive X7 / X8 support: written but UNVERIFIED on real hardware',
-    'Status: not safe to use -- data loss or crash possible',
-    'RAM save states are fully functional -- use those instead (cleared on power-off)',
+    'Status: usable with caution -- not yet fully stable, crashes are possible',
+    'RAM save states are fully functional and crash-free -- use those for anything critical',
   ]);
 
   vspace(6);
-  sectionHeader('WHAT SD SAVES WILL DO (WHEN READY)');
+  sectionHeader('WHAT SD SAVES DO');
   bullet([
     'Save states to the SD card inside your cart (SummerCart64 / EverDrive) -- no Controller Pak needed',
     'States persist across power cycles',
@@ -41,11 +42,11 @@ export function pageSDCard() {
   ]);
 
   vspace(6);
-  sectionHeader('IN THE MEANTIME: RAM SAVES');
+  sectionHeader('FOR ANYTHING CRITICAL: RAM SAVES');
   inlineBody([
     'Use ', ['DL'], ' to save and ', ['DR'],
-    ' to load -- instant, every frame, on all hardware. Slots survive across levels ' +
-    'but are cleared on power-off.',
+    ' to load -- instant, every frame, on all hardware, and does not carry the crash risk ' +
+    'SD saves currently do. Slots survive across levels but are cleared on power-off.',
   ]);
   vspace(2);
   bullet([
@@ -55,9 +56,19 @@ export function pageSDCard() {
   ]);
 
   vspace(6);
+  sectionHeader('REPORTING CRASHES');
+  bullet([
+    'Note the level/scene you were on and exactly what you were doing (saving, loading, browsing files).',
+    'Note your cart hardware (SummerCart64 or EverDrive) and SD card size/format if known.',
+    'Video or screenshot clips of the crash are very helpful.',
+    'Send reports directly to the project maintainer -- see REPORTING BUGS on the Welcome page.',
+    'SD save/load crashes are top priority -- this info is what moves SD saving out of alpha.',
+  ]);
+
+  vspace(6);
   callout(
-    'For updates on SD card support, check staging.sageraces.com/practice-roms. ' +
-    'When SD saving goes live, a new ROM version will be released at sageraces.com.',
+    'SD card saving is under active development. For updates, check staging.sageraces.com/practice-roms. ' +
+    'Stability fixes will be released as new ROM versions at sageraces.com.',
     'info'
   );
 

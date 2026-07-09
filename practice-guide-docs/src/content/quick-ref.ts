@@ -51,7 +51,6 @@ export const PATTERN_CARDS: PatternCard[] = [
       { btns: ['L', '/', 'R'],    text: 'Cycle active slot (in menu)' },
       { btns: ['DL'],             text: 'Save to active slot' },
       { btns: ['DR'],             text: 'Load from active slot' },
-      { dim: true,                text: 'Open SAVE option to browse all slots' },
     ],
   },
   {
@@ -95,9 +94,10 @@ export const PATTERN_CARDS: PatternCard[] = [
     title: 'SAVE TO SD CARD', color: '#FB1A32',
     steps: [
       { btns: ['CR', '+', 'START'],  text: 'Open menu' },
-      { btns: ['Z'],             text: 'Save state to SD' },
-      { btns: ['Z', '+', 'B'],   text: 'Load state from SD' },
-      { dim: true,               text: '(!) NOT WORKING ON ANY CART' },
+      { dim: true,               text: 'Stick UP-LEFT  -> SD CARD, press A' },
+      { dim: true,               text: 'Stick LEFT/RIGHT  -> SD SAVE / SD LOAD' },
+      { btns: ['A'],             text: 'Confirm' },
+      { dim: true,               text: '(!) EARLY ALPHA -- SummerCart64 only, may crash' },
     ],
   },
 ];

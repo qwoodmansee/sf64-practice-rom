@@ -1,5 +1,5 @@
 import { newPage } from '../renderer';
-import { sectionHeader, subHeader, bodyText, vspace, callout, bullet, iconCtrlTable, ctrlTable, inlineBody } from '../widgets/typography';
+import { sectionHeader, subHeader, bodyText, vspace, callout, bullet, iconCtrlTable, inlineBody } from '../widgets/typography';
 
 export function pageSaveStates() {
   newPage('Save States');
@@ -20,10 +20,6 @@ export function pageSaveStates() {
   subHeader('SLOT MANAGEMENT  (menu open)');
   iconCtrlTable([
     { btns: ['L', '/', 'R'], val: 'Cycle to the previous / next save slot' },
-  ]);
-  ctrlTable([
-    { key: 'SAVE option', val: 'Open full save menu -- browse slots, save to a specific slot' },
-    { key: 'LOAD option', val: 'Load from the active slot directly' },
   ]);
 
   vspace(2);
@@ -57,13 +53,14 @@ export function pageSaveStates() {
   vspace(6);
   sectionHeader('SD CARD SAVES  (!)');
   callout(
-    '(!) SD card saving is NOT functional on any cart hardware (SummerCart64 or EverDrive). ' +
-    'The SD CARD option is visible in the menu but saving/loading to SD will silently fail. ' +
-    'Use RAM save slots instead -- they work on all hardware but are cleared on power-off.',
+    '(!) SD card saving is in EARLY ALPHA -- tested and working on SummerCart64, but crashes ' +
+    'are possible. EverDrive support is written but unverified on real hardware. ' +
+    'Use RAM save slots for anything critical -- they work on all hardware and are crash-free, ' +
+    'but are cleared on power-off. See the SD Card page for details and how to report a crash.',
     'warning'
   );
   vspace(2);
-  bodyText('SD card saves will eventually allow:', 4);
+  bodyText('SD card saves additionally offer:', 4);
   bullet([
     'Persistent save states that survive power cycles (RAM saves do not)',
     'Sharing save files between consoles',

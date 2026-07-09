@@ -21,5 +21,5 @@ export const WELCOME_FEATURES: Feature[] = [
   { name: 'LEVEL SELECT',   desc: 'Warp to any stage or checkpoint directly from the practice menu.' },
   { name: 'LOADOUT EDITOR', desc: 'Change laser, bombs, lives, rings, health bar, and wingman status mid-run.' },
   { name: 'INPUT MACROS',   desc: 'Record and replay button sequences for routing analysis.' },
-  { name: 'SD CARD SAVES',  desc: '(In development) Save states to SD card for persistent run history.' },
+  { name: 'SD CARD SAVES',  desc: '(Early alpha, SummerCart64) Save states to SD card for persistent run history.' },
 ];
