@@ -78,6 +78,14 @@
  */
 #define MODS_ISVIEWER 1
 
+/* HIL wedge fixture only: `make hil-wedge-fixture` passes
+ * PRACTICE_CPPFLAGS="-DMODS_ISVIEWER_OVERRIDE=0" to build a deliberately
+ * ISV-silent ROM for cart-wedge detection tests. Never set in normal builds. */
+#ifdef MODS_ISVIEWER_OVERRIDE
+#undef MODS_ISVIEWER
+#define MODS_ISVIEWER MODS_ISVIEWER_OVERRIDE
+#endif
+
 /* ************************* */
 
 #if MODS_LEVEL_SELECT == 1

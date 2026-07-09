@@ -1,25 +1,14 @@
-"""Bug repro: Zoness crashes/freezes after ~5-10 seconds of gameplay.
+"""Regression: Zoness must not freeze during the first ~15s of gameplay.
 
-Steps to reproduce manually:
-  1. Boot practice ROM to level select
-  2. Launch Zoness
-  3. Wait ~5-10 seconds — game freezes
+History: Zoness used to crash/freeze ~5-10 seconds in. Originally an inverted
+bug-repro test (passed while the bug was present); flipped to regression format
+2026-06-12 after the fixed ROM ran the full 900-frame window in emulator.
 
 Test approach:
   Launch Zoness via direct memory write. Let the level run for 15 seconds (900
   frames) past the PLAY_UPDATE point. Compare gGameFrameCount before and after —
   if the game froze, the counter stops advancing far short of 900.
-
-  Bug confirmed = test PASSES. Bug fixed = test FAILS.
-
-This test ASSERTS THE BUG IS PRESENT. It will flip to FAIL once fixed.
 """
-
-_GAME_STATE       = 0x00195fe4   # gGameState (s32)
-_PLAY_STATE       = 0x00196004   # gPlayState (s32)
-_GAME_FRAME_COUNT = 0x00196568   # gGameFrameCount (s32)
-_NEXT_LEVEL_WORD  = 0x001801e0   # gNextLevel (u16 hi) | gNextGameState (u16 lo)
-_PRACTICE_SCREEN  = 0x00197220   # gPracticeScreen (s32)
 
 GSTATE_MAP       = 4
 GSTATE_PLAY      = 7
@@ -35,6 +24,14 @@ def _read_s32(h, addr):
 
 def run(ctx):
     h = ctx.harness
+    S = ctx.syms.addrs
+
+    # Resolve symbol addresses from the map file so the test survives BSS shifts.
+    _GAME_STATE       = S["gGameState"]
+    _PLAY_STATE       = S["gPlayState"]
+    _GAME_FRAME_COUNT = S["gGameFrameCount"]
+    _NEXT_LEVEL_WORD  = S["gNextLevel"]     # u16 (gNextGameState is u16 right after)
+    _PRACTICE_SCREEN  = S["gPracticeScreen"]
 
     ok = h.wait_for(_GAME_STATE, GSTATE_MAP, 60000)
     ctx.assert_true(ok, "Booted to level select")
@@ -70,9 +67,9 @@ def run(ctx):
 
     game_state = h.read32(_GAME_STATE)
 
-    # Bug confirmed: game froze — far fewer than 900 game frames actually ran
+    # Healthy: the game-frame counter kept pace with the 900 VI frames we ran
     ctx.assert_true(
-        frames_advanced < 750,
-        f"Bug: Zoness froze after {frames_advanced}/900 frames "
+        frames_advanced >= 750,
+        f"Zoness froze after {frames_advanced}/900 frames "
         f"(gGameState=0x{game_state:08x})",
     )

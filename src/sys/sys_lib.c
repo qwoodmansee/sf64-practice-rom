@@ -157,7 +157,10 @@ void Lib_FillScreen(u8 setFill) {
 
 static u8 sDebugBcCursor = 0;
 
-void Lib_DebugFillScreen(u16 color) {
+/* Paint the next stripe into the repeat-row and flush it to RDRAM. Does NOT
+ * touch any VI register or OS structure, so it is safe to call from inside a
+ * critical section (interrupts disabled, PI bus held). */
+static void sDebugBcPaint(u16 color) {
     s32 i;
     u16 *slot;
 
@@ -171,9 +174,36 @@ void Lib_DebugFillScreen(u16 color) {
         }
     }
     sDebugBcCursor++;
-
     osWritebackDCacheAll();
+}
+
+void Lib_DebugFillScreen(u16 color) {
+    sDebugBcPaint(color);
     osViSwapBuffer(&gFillBuffer[SCREEN_WIDTH]);
     osViRepeatLine(true);
     gFillScreen = true;
+}
+
+/* Critical-section-safe breadcrumb. Paints the next stripe but performs NO
+ * VI manipulation -- doing osViSwapBuffer/osViRepeatLine with interrupts
+ * disabled (as inside sc64_execute_cmd's cart_lock) can corrupt the VI and
+ * blank the screen. A prior Lib_DebugFillScreen must have already pointed the
+ * VI at the repeat-row; the VI hardware then scans it independently of CPU
+ * interrupts, so stripes painted here still appear even mid-wedge. */
+void Lib_DebugBar(u16 color) {
+    sDebugBcPaint(color);
+}
+
+/* Diagnostic-only: wipe the breadcrumb repeat-row back to background and
+ * rewind the cursor to slot 0, so a fresh sequence of Lib_DebugFillScreen
+ * calls paints from the left edge again. Used to give the SD save path its
+ * own clean 16-slot strip after boot has already consumed ~10 slots. */
+void Lib_DebugResetBars(void) {
+    s32 i;
+
+    for (i = 0; i < SCREEN_WIDTH; i++) {
+        gFillBuffer[SCREEN_WIDTH + i] = DEBUG_BC_BG_COLOR;
+    }
+    sDebugBcCursor = 0;
+    osWritebackDCacheAll();
 }

@@ -29,6 +29,8 @@ void Lib_InitOrtho(Gfx** dList);
 void Lib_DmaRead(void* src, void* dst, s32 size);
 void Lib_FillScreen(u8 setFill);
 void Lib_DebugFillScreen(u16 color);
+void Lib_DebugBar(u16 color);
+void Lib_DebugResetBars(void);
 
 void Memory_FreeAll(void);
 void* Memory_Allocate(s32);

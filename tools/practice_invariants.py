@@ -313,10 +313,14 @@ def check_iodev_sc64():
         if cmd_byte not in src:
             error(f"{path}: SC64 command byte {cmd_byte} ({name}) missing - wire protocol broken")
 
-    # The 128-sector cap must remain in both read and write - it's the 64 KiB DMA scratch limit.
-    # A future "simplify" that drops it would silently corrupt memory past the scratch buffer.
-    if src.count("count > 128") < 2:
-        error(f"{path}: both sd_read_sectors and sd_write_sectors must enforce count > 128 -> ERR_PARAM (DMA scratch is 64 KiB / 128 sectors)")
+    # The per-call sector cap must remain in both read and write - it bounds the
+    # SD DMA scratch (the SC64 8 KiB data buffer == 16 sectors). A future
+    # "simplify" that drops it would corrupt memory past the buffer.
+    if src.count("count > SC64_SD_DMA_MAX_SECTORS") < 2:
+        error(f"{path}: both sd_read_sectors and sd_write_sectors must enforce "
+              "count > SC64_SD_DMA_MAX_SECTORS -> ERR_PARAM (SD DMA buffer is 8 KiB / 16 sectors)")
+    if not re.search(r"#define\s+SC64_SD_DMA_MAX_SECTORS\s+16(?:[uU]?[lL]{0,2})?\b", src):
+        error(f"{path}: SC64_SD_DMA_MAX_SECTORS must remain 16 (8 KiB data buffer / 512 B per sector)")
 
     # sc64_detect MUST issue the unlock key sequence BEFORE reading IDENT.
     # In user-ROM mode (post-handoff from SC64 bootloader) the register
@@ -425,6 +429,44 @@ def check_sd_host():
     # want surfaced (fixes belong in sd_crc.c so all callers benefit).
     if "sd_crc7(" not in c:
         error(f"{c_path}: must reuse sd_crc7() from lib/sd_crc.c (do not inline CRC7)")
+
+
+def check_sc64_sd_scratch_placement():
+    """The SC64 SD DMA scratch must be the dedicated RW data buffer.
+
+    HARDWARE LESSON (2026-06-08): the scratch must be the SC64's dedicated
+    8 KiB *data buffer* at PI 0x1FFE0000 -- exactly what gz uses (BUFFER_BASE
+    0xBFFE0000). The earlier 0x10F00000 lived in the ROM/SDRAM region, which is
+    READ-ONLY from the N64 side unless ROM_WRITE_ENABLE is set, so SD *write*
+    DMAs were silently dropped and never persisted (reads worked, which masked
+    it for months). The data buffer is RW with no config, needs no ROM clobber,
+    and is the firmware's intended SD DMA target. The buffer is 8 KiB and the
+    SC64 register block starts right after at 0x1FFF0000, so the scratch window
+    (16 sectors * 512 = 8 KiB) must stay within [0x1FFE0000, 0x1FFF0000).
+    """
+    path = os.path.join("lib", "iodev", "iodev_sc64.c")
+    src = read(path)
+    m = re.search(r"#define\s+SC64_SD_DMA_SCRATCH\s+\(?\s*(0x[0-9A-Fa-f]+)(?:[uU]?[lL]{0,2})?\s*\)?", src)
+    if not m:
+        error(f"{path}: SC64_SD_DMA_SCRATCH define not found "
+              "(check_sc64_sd_scratch_placement)")
+        return
+
+    scratch = int(m.group(1), 16)
+    DATA_BUF_BASE = 0x1FFE0000   # SC64 dedicated 8 KiB data buffer (RW, BlockRAM)
+    REGS_BASE     = 0x1FFF0000   # SC64 register block (must not be reached)
+    SCRATCH_WIN   = 0x2000       # 8 KiB == 16 sectors * 512 (the call cap)
+
+    if scratch < DATA_BUF_BASE:
+        error(f"{path}: SC64_SD_DMA_SCRATCH 0x{scratch:08X} is below the SC64 "
+              f"data buffer base 0x{DATA_BUF_BASE:08X} -- the ROM region is "
+              "read-only without ROM_WRITE_ENABLE, so writes would be dropped "
+              "(check_sc64_sd_scratch_placement)")
+    if scratch + SCRATCH_WIN > REGS_BASE:
+        error(f"{path}: SC64_SD_DMA_SCRATCH window "
+              f"0x{scratch:08X}..0x{scratch + SCRATCH_WIN:08X} reaches the SC64 "
+              f"register block at 0x{REGS_BASE:08X} "
+              "(check_sc64_sd_scratch_placement)")
 
 
 def check_iodev_ed64():
@@ -985,6 +1027,31 @@ def check_phase5_state_machine_lifecycle():
         error(
             f"{PRACTICE_MAIN_INIT}: Practice_Update must call Practice_Save_Tick "
             "(check_phase5_state_machine_lifecycle)"
+        )
+
+
+def check_save_init_clears_sd_cross_state():
+    """Bug C: Practice_Save_Init must explicitly clear sSdCrossPending.
+
+    A soft reset (SC64 reboot / reset button) does not re-run IPL3's BSS
+    clear, so file statics keep whatever the previous session left in RDRAM.
+    A stale sSdCrossPending==true makes Practice_Save_Tick fire a phantom load
+    at the next level entry ("SD XLD T/O" with no user action). Init must zero
+    it so warm-reset state is deterministic.
+    """
+    save_src = read(PRACTICE_SAVE_C)
+    init_body = find_c_function(save_src, "Practice_Save_Init")
+    if init_body is None:
+        error(
+            f"{PRACTICE_SAVE_C}: Practice_Save_Init not found "
+            "(check_save_init_clears_sd_cross_state)"
+        )
+        return
+    if not re.search(r"sSdCrossPending\s*=\s*false", init_body):
+        error(
+            f"{PRACTICE_SAVE_C}: Practice_Save_Init must set "
+            "`sSdCrossPending = false` to clear stale warm-reset state "
+            "(check_save_init_clears_sd_cross_state)"
         )
 
 
@@ -2578,6 +2645,7 @@ def main():
     check_hit_count_cap_raised()
     check_isviewer_sc64()
     check_iodev_sc64()
+    check_sc64_sd_scratch_placement()
     check_iodev_ed64()
     check_spawn_zone_typing()
     check_level_select_bgm_ready_gate()
@@ -2601,6 +2669,7 @@ def main():
     check_bgm_rescue_restores_main_volume()
     check_bgm_jukebox_coverage()
     check_phase5_state_machine_lifecycle()
+    check_save_init_clears_sd_cross_state()
     check_phase3_ram_detection()
     check_practice_pool_placement()
     check_practice_pool_no_overlay_overlap()

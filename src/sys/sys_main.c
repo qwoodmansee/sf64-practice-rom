@@ -557,4 +557,10 @@ void bootproc(void) {
 
 #if MODS_ISVIEWER == 1
 #include "../mods/isviewer.c"
+#else
+/* Silent stub so unguarded osSyncPrintf callers still link when IS-Viewer is
+ * compiled out (e.g. the HIL wedge-fixture build, -DMODS_ISVIEWER_OVERRIDE=0). */
+void osSyncPrintf(const char* fmt, ...) {
+    (void) fmt;
+}
 #endif

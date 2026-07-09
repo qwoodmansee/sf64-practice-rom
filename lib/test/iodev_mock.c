@@ -21,11 +21,31 @@
 
 static int sMockFd = -1;
 
+/* Cached result of the most-recent iodev_sd_init(), mirroring the real
+ * lib/iodev/iodev.c semantics so diskio.c's lazy-init path behaves
+ * identically on the host. -99 = never attempted. */
+static int sMockInitResult = -99;
+
+/* Non-durable-write fault injection. Models the observed SC64 symptom where a
+ * single-sector metadata write returns a clean ACK but never becomes readable
+ * (see diskio.c's META_WRITE_RETRIES note). When armed, the next sDropWrites
+ * writes targeting LBA sDropLba report IODEV_OK *without* actually persisting,
+ * so a subsequent read-back returns the stale contents -- exactly what
+ * diskio.c's verify-retry loop is built to catch. */
+static uint32_t sDropLba = 0;
+static int      sDropWrites = 0;
+
+void iodev_mock_drop_writes(uint32_t lba, int count) {
+    sDropLba = lba;
+    sDropWrites = count;
+}
+
 void iodev_mock_set_image(const char *path) {
     if (sMockFd >= 0) {
         close(sMockFd);
         sMockFd = -1;
     }
+    sMockInitResult = -99;  /* fresh "card" -> re-run the lazy init path */
     sMockFd = open(path, O_RDWR);
     if (sMockFd < 0) {
         fprintf(stderr, "iodev_mock_set_image('%s'): %s\n", path, strerror(errno));
@@ -38,6 +58,7 @@ void iodev_mock_close(void) {
         close(sMockFd);
         sMockFd = -1;
     }
+    sMockInitResult = -99;
 }
 
 iodev_id_t iodev_detect(void) {
@@ -45,7 +66,16 @@ iodev_id_t iodev_detect(void) {
 }
 
 iodev_result_t iodev_sd_init(void) {
-    return (sMockFd >= 0) ? IODEV_OK : IODEV_ERR_NO_DEVICE;
+    sMockInitResult = (sMockFd >= 0) ? IODEV_OK : IODEV_ERR_NO_DEVICE;
+    return (iodev_result_t)sMockInitResult;
+}
+
+int iodev_sd_was_ok(void) {
+    return (sMockInitResult == IODEV_OK);
+}
+
+int iodev_sd_init_result(void) {
+    return sMockInitResult;
 }
 
 iodev_result_t iodev_sd_read_sectors(uint32_t lba, uint32_t count, void *buf) {
@@ -73,6 +103,12 @@ iodev_result_t iodev_sd_write_sectors(uint32_t lba, uint32_t count, const void *
     if (!buf || count == 0) return IODEV_ERR_PARAM;
     if (((uintptr_t)buf) & 7u) return IODEV_ERR_PARAM;
     if (count > 128) return IODEV_ERR_PARAM;
+
+    /* Fault injection: ACK but don't persist (non-durable write). */
+    if (sDropWrites > 0 && lba == sDropLba) {
+        sDropWrites--;
+        return IODEV_OK;
+    }
 
     off = (off_t)lba * 512;
     n = pwrite(sMockFd, buf, (size_t)count * 512, off);

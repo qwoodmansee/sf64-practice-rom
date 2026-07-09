@@ -1,6 +1,10 @@
 #include "iodev.h"
 #include "iodev_internal.h"
 
+/* Diagnostic breadcrumb hook (see iodev.h). Defaults to NULL so production
+ * builds and non-instrumented paths pay nothing. */
+iodev_breadcrumb_fn gIodevBreadcrumb = 0;
+
 /* Cached after first detection (lazy-initialized).
  * After iodev_detect() runs once, gIodevActive points at exactly one of:
  *   iodev_backend_sc64() / iodev_backend_ed64() / iodev_backend_stub()

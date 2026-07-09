@@ -69,4 +69,9 @@ void slot_manager_set_sd_scratch(void *buf, uint32_t buf_size);
 int slot_manager_save_sd_named(const char *path);
 int slot_manager_load_sd_named(const char *path);
 
+/* Diagnostic: raw FRESULT-derived code from the most recent failing SD
+ * operation (see slot_manager.c). -1 if none. Lets callers display the exact
+ * FatFs cause on screen when no IS-Viewer/printf channel is available. */
+int slot_manager_last_fatfs_err(void);
+
 #endif /* LIB_SLOT_MANAGER_H */
