@@ -33,6 +33,15 @@ export function pageSDCard() {
   ]);
 
   vspace(6);
+  callout(
+    '(!) KNOWN ISSUE: attempting an SD save within the first few seconds after ' +
+    'booting/resetting the console can freeze the game, requiring a power cycle to ' +
+    'recover. Wait about 10 seconds after boot before your first SD save or load -- ' +
+    'once the console has settled, SD saves work normally for the rest of the session.',
+    'warning'
+  );
+
+  vspace(6);
   sectionHeader('WHAT SD SAVES DO');
   bullet([
     'Save states to the SD card inside your cart (SummerCart64 / EverDrive) -- no Controller Pak needed',
