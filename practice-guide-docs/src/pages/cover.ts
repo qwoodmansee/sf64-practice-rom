@@ -50,13 +50,14 @@ export function pageCover() {
   doc.rect(ML, wY, PW, wH).strokeColor(C.red).lineWidth(0.9).stroke();
   doc.rect(ML, wY, 5, wH).fill(C.red);
   doc.fillColor(C.red).font(FONTS.mono).fontSize(10.5)
-     .text('(!) SD CARD SAVING: NOT WORKING ON ANY HARDWARE', ML + 14, wY + 11, { width: PW - 20, lineBreak: false });
+     .text('(!) SD CARD SAVING: EARLY ALPHA', ML + 14, wY + 11, { width: PW - 20, lineBreak: false });
   doc.moveTo(ML + 14, wY + 28).lineTo(ML + PW - 8, wY + 28).strokeColor('#6B0010').lineWidth(0.5).stroke();
   doc.fillColor('#FFB0B8').font('Helvetica').fontSize(9.5)
      .text(
-       'SD card save states are in development and do NOT function on any cart at this time, ' +
-       'including SummerCart64 and EverDrive. RAM save states (D-pad shortcuts) work on all ' +
-       'hardware but are cleared on power-off. See the SD Card section for full details.',
+       'SD card save states are tested and working on SummerCart64, but crashes are still ' +
+       'possible -- EverDrive support is unverified. RAM save states (D-pad shortcuts) work on ' +
+       'all hardware and are crash-free but are cleared on power-off. See the SD Card section ' +
+       'for full details and how to report a crash.',
        ML + 14, wY + 36, { width: PW - 22 }
      );
 
