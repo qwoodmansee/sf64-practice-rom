@@ -229,6 +229,111 @@ typedef struct PracticeSnapshot {
 
 typedef char PracticeSnapshotFitsScratch[(sizeof(PracticeSnapshot) <= MAX_STATE_SIZE) ? 1 : -1];
 
+/* Diagnostics for the 2026-07-09 Zoness hardware crash: a restored actor's
+ * info.hitbox held 0x2484bb18 and the engine's cull path did
+ * (s32)hitbox[0] -> TLB exception on load (hardware only; mupen tolerates
+ * wild reads). ObjectInfo's draw/dList, action, and hitbox are absolute
+ * pointers baked at spawn time (Object_SetInfo does SEGMENTED_TO_VIRTUAL),
+ * so a snapshot restored into a launch whose segment/asset layout differs
+ * from the save's -- or a snapshot that captured garbage -- crashes the
+ * engine. These counters are test-visible via the linker map. */
+s32 gPracticeSnapSanitized;   /* entities dropped by the last apply */
+s32 gPracticeSnapDirtyAtSave; /* entities with insane info at last slot save */
+
+/* NULL is fine; otherwise require a 4-aligned KSEG0 RDRAM pointer. Both
+ * data (hitbox arrays, display lists) and code (draw/action) live there.
+ * Anything else TLB-faults or FPEs the moment the engine touches it. */
+static bool Snapshot_PtrSane(const void *p) {
+    u32 v = (u32)(uintptr_t)p;
+
+    if (v == 0) {
+        return true;
+    }
+    if ((v & 3) != 0) {
+        return false;
+    }
+    if (v < 0x80000000U) {
+        return false;
+    }
+    if (v >= (0x80000000U + (u32)osMemSize)) {
+        return false;
+    }
+    return true;
+}
+
+static bool Snapshot_InfoPtrsSane(const ObjectInfo *info) {
+    return Snapshot_PtrSane((const void *)info->draw) && Snapshot_PtrSane((const void *)info->action) &&
+           Snapshot_PtrSane((const void *)info->hitbox);
+}
+
+#define SNAP_SANITIZE_PRINT_CAP 6
+
+/* Walk one entity array (all six share the {Object obj; ObjectInfo info;}
+ * prefix). fix != 0: drop insane entities (status = OBJ_FREE) so the engine
+ * never dereferences their pointers. fix == 0: report only (save-side probe).
+ * Returns the number of insane entities found. */
+static s32 Snapshot_ScanEntityArray(void *base, u32 stride, s32 count, const char *name, s32 fix, s32 *printBudget) {
+    s32 bad = 0;
+    s32 i;
+    u8 *p = (u8 *)base;
+
+    for (i = 0; i < count; i++, p += stride) {
+        Object *obj = (Object *)p;
+        ObjectInfo *info = (ObjectInfo *)(p + sizeof(Object));
+
+        if (obj->status == OBJ_FREE) {
+            continue;
+        }
+        if (Snapshot_InfoPtrsSane(info)) {
+            continue;
+        }
+        bad++;
+        if (*printBudget > 0) {
+            (*printBudget)--;
+            osSyncPrintf("[practice_save] WARN %s %s[%d] id=%d st=%d dr=%x ac=%x hb=%x\n",
+                         fix ? "sanitize" : "dirty-at-save", name, i, (s32)obj->id, (s32)obj->status,
+                         (u32)(uintptr_t)info->draw, (u32)(uintptr_t)info->action, (u32)(uintptr_t)info->hitbox);
+        }
+        if (fix) {
+            obj->status = OBJ_FREE;
+        }
+    }
+    return bad;
+}
+
+static s32 Snapshot_ScanEntities(const PracticeSnapshot *sn, s32 fix) {
+    s32 bad = 0;
+    s32 printBudget = SNAP_SANITIZE_PRINT_CAP;
+
+    /* fix != 0 operates on the live game arrays (post-apply); fix == 0
+     * operates on the snapshot scratch (pre-serialize probe, read-only). */
+    if (fix) {
+        bad += Snapshot_ScanEntityArray(gActors, sizeof(Actor), ARRAY_COUNT(sn->actors), "gActors", 1, &printBudget);
+        bad += Snapshot_ScanEntityArray(gBosses, sizeof(Boss), ARRAY_COUNT(sn->bosses), "gBosses", 1, &printBudget);
+        bad += Snapshot_ScanEntityArray(gScenery, sizeof(Scenery), ARRAY_COUNT(sn->scenery), "gScenery", 1, &printBudget);
+        bad += Snapshot_ScanEntityArray(gSprites, sizeof(Sprite), ARRAY_COUNT(sn->sprites), "gSprites", 1, &printBudget);
+        bad += Snapshot_ScanEntityArray(gEffects, sizeof(Effect), ARRAY_COUNT(sn->effects), "gEffects", 1, &printBudget);
+        bad += Snapshot_ScanEntityArray(gItems, sizeof(Item), ARRAY_COUNT(sn->items), "gItems", 1, &printBudget);
+    } else {
+        bad += Snapshot_ScanEntityArray((void *)sn->actors, sizeof(Actor), ARRAY_COUNT(sn->actors), "actors", 0, &printBudget);
+        bad += Snapshot_ScanEntityArray((void *)sn->bosses, sizeof(Boss), ARRAY_COUNT(sn->bosses), "bosses", 0, &printBudget);
+        bad += Snapshot_ScanEntityArray((void *)sn->scenery, sizeof(Scenery), ARRAY_COUNT(sn->scenery), "scenery", 0, &printBudget);
+        bad += Snapshot_ScanEntityArray((void *)sn->sprites, sizeof(Sprite), ARRAY_COUNT(sn->sprites), "sprites", 0, &printBudget);
+        bad += Snapshot_ScanEntityArray((void *)sn->effects, sizeof(Effect), ARRAY_COUNT(sn->effects), "effects", 0, &printBudget);
+        bad += Snapshot_ScanEntityArray((void *)sn->items, sizeof(Item), ARRAY_COUNT(sn->items), "items", 0, &printBudget);
+    }
+    return bad;
+}
+
+static void Snapshot_SanitizeRestoredEntities(const PracticeSnapshot *sn) {
+    s32 bad = Snapshot_ScanEntities(sn, 1);
+
+    gPracticeSnapSanitized = bad;
+    if (bad > 0) {
+        osSyncPrintf("[practice_save] WARN sanitize dropped %d restored entities (stale segment pointers?)\n", bad);
+    }
+}
+
 /* Too large for the game thread stack. The backing store is in
  * practice_save_slotpool.c so it stays above the stock 4 MB window. */
 static PracticeSnapshot* Practice_SaveScratch(void) {
@@ -403,6 +508,14 @@ static uint32_t Practice_Save_Cb(void *buf, uint32_t buf_size) {
 #endif
     Snapshot_FillFromGame(snap);
     SAVE_TR_STAGE("cb after Snapshot_FillFromGame");
+
+    /* Read-only probe: were any live entities already carrying insane info
+     * pointers at capture time? Distinguishes "garbage existed in the game
+     * arrays before the save" from "the save/load pipeline corrupted it". */
+    gPracticeSnapDirtyAtSave = Snapshot_ScanEntities(snap, 0);
+    if (gPracticeSnapDirtyAtSave > 0) {
+        osSyncPrintf("[practice_save] WARN %d entities dirty at save time\n", gPracticeSnapDirtyAtSave);
+    }
 
     serial_writer_init(&wr, buf, buf_size);
     SAVE_TR_STAGE("cb serial_writer_init ok");
@@ -617,6 +730,16 @@ static void Snapshot_ApplyToGame(const PracticeSnapshot *sn) {
     bcopy(sn->radarMarks, gRadarMarks, sizeof(sn->radarMarks));
     bcopy(sn->bonusText, gBonusText, sizeof(sn->bonusText));
     SAVE_TR_STAGE("apply after world arrays");
+
+    /* Drop any restored entity whose ObjectInfo pointers are not sane RDRAM
+     * addresses. Restored info.draw/action/hitbox are absolute pointers baked
+     * at spawn (SEGMENTED_TO_VIRTUAL against that launch's segment layout);
+     * a snapshot applied into a launch with different segment placement, or a
+     * snapshot carrying garbage, TLB-faults/FPEs the engine within frames
+     * (hardware-confirmed 2026-07-09: Zoness load, gActors info.hitbox
+     * 0x2484bb18, TLB exception in Actor_PracticeShouldCountCullEscape). */
+    Snapshot_SanitizeRestoredEntities(sn);
+    SAVE_TR_STAGE("apply after entity sanitize");
 
     gPathProgress = sn->scalars.pathProgress;
     gSavedPathProgress = sn->scalars.savedPathProgress;
@@ -1257,7 +1380,7 @@ static int Practice_Load_Cb(const void *buf, uint32_t size) {
     if ((overlay_src != NULL) && (overlay_len > 0)) {
         u32 xbld_cur = practice_overlay_build_id((LevelId)tlv_level_id);
         if (tlv_ov_build_id != xbld_cur) {
-            osSyncPrintf("[practice_save] WARN xbld: saved=%08x cur=%08x, clearing entity arrays\n",
+            osSyncPrintf("[practice_save] WARN xbld: saved=%x cur=%x, clearing entity arrays\n",
                          tlv_ov_build_id, xbld_cur);
             bzero(sn->actors,      sizeof(sn->actors));
             bzero(sn->bosses,      sizeof(sn->bosses));
@@ -1295,6 +1418,31 @@ static int Practice_Load_Cb(const void *buf, uint32_t size) {
         return 0;
     }
 
+    /* Stale-save refusal: if the saved segment layout differs from the
+     * current launch's, every absolute pointer inside the snapshot (player,
+     * entities, ObjectInfo) references RAM that now holds different data.
+     * Half-applying such a state is what produced the pc=0 jump-to-NULL and
+     * garbage-entity hardware crashes; refuse BEFORE any game state or
+     * overlay bytes are touched. The user re-saves with the current build /
+     * launch and everything matches again. */
+    if (have_segments) {
+        s32 seg;
+        s32 mismatches = 0;
+
+        for (seg = 0; seg < 16; seg++) {
+            if (segments_copy[seg] != gSegments[seg]) {
+                osSyncPrintf("[practice_save] WARN seg mismatch idx=%d saved=%x cur=%x\n", seg,
+                             segments_copy[seg], (u32)gSegments[seg]);
+                mismatches++;
+            }
+        }
+        if (mismatches != 0) {
+            osSyncPrintf("[practice_save] REFUSE stale save: %d segment mismatches\n", mismatches);
+            Practice_Hud_ShowStatus("STALE SAVE - RESAVE", 255, 180, 80);
+            return -1;
+        }
+    }
+
     SAVE_TR_STAGE("load before overlay restore");
     if ((overlay_src != NULL) && (overlay_len > 0)) {
         void *dst;
@@ -1308,7 +1456,7 @@ static int Practice_Load_Cb(const void *buf, uint32_t size) {
             if ((tlv_ov_build_id == cur_build) && (tlv_ov_vram_u32 == cur_va) && (overlay_len == ds)) {
                 bcopy((void *)overlay_src, dst, ds);
             } else if (overlay_len != 0) {
-                osSyncPrintf("[practice_save] WARN partial overlay skipped (tlv_build=%08x cur=%08x)\n",
+                osSyncPrintf("[practice_save] WARN partial overlay skipped (tlv_build=%x cur=%x)\n",
                              tlv_ov_build_id, cur_build);
             }
         }
@@ -1321,7 +1469,8 @@ static int Practice_Load_Cb(const void *buf, uint32_t size) {
      * updated (e.g. during a preceding cross-scene load), causing an audio
      * RSP fault on the next audio frame. Segments are still restored in the
      * cross-scene path (sd_cross_apply_now), where Play_Init just ran and
-     * the overlay's segment registers need to be set up. */
+     * the overlay's segment registers need to be set up. Mismatched layouts
+     * were already refused above. */
 
     SAVE_TR_STAGE("load before Snapshot_ApplyToGame");
     Snapshot_ApplyToGame(sn);
@@ -1715,6 +1864,24 @@ static void sd_cross_apply_now(void) {
     u32      ds;
     u32      cur_va;
     u32      cur_bld;
+
+    /* Same stale-save refusal as the same-scene path: restoring saved
+     * segment registers over a launch whose asset data lives at different
+     * addresses points every segment lookup at the wrong memory. */
+    if (sSdCrossHaveSegs) {
+        s32 seg;
+
+        for (seg = 0; seg < 16; seg++) {
+            if (sSdCrossSegs[seg] != gSegments[seg]) {
+                osSyncPrintf("[practice_save] REFUSE stale cross save: seg idx=%d saved=%x cur=%x\n", seg,
+                             sSdCrossSegs[seg], (u32)gSegments[seg]);
+                sSdCrossPending = false;
+                sSdCrossXBld = false;
+                Practice_Hud_ShowStatus("STALE SAVE - RESAVE", 255, 180, 80);
+                return;
+            }
+        }
+    }
 
     if ((sSdCrossOvSrc != NULL) && (sSdCrossOvLen > 0)) {
         if (practice_overlay_get_region(gCurrentLevel, &dst, &ds) == 0) {

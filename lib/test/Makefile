@@ -33,8 +33,8 @@ test_sd_host: test_sd_host.c ../sd_host/sd_host.c ../sd_host/sd_host.h \
 test_serial: test_serial.c ../serial.c ../serial.h ../lib_types.h
 	$(CC) $(CFLAGS) $(INCLUDES) test_serial.c ../serial.c -o $@
 
-test_slot_manager: test_slot_manager.c ../slot_manager.c ../slot_manager.h ../lib_types.h
-	$(CC) $(CFLAGS) $(INCLUDES) test_slot_manager.c ../slot_manager.c -o $@
+test_slot_manager: test_slot_manager.c ../slot_manager.c ../slot_manager.h ../crc32.c ../crc32.h ../lib_types.h
+	$(CC) $(CFLAGS) $(INCLUDES) test_slot_manager.c ../slot_manager.c ../crc32.c -o $@
 
 test_crc32: test_crc32.c ../crc32.c ../crc32.h ../lib_types.h
 	$(CC) $(CFLAGS) $(INCLUDES) test_crc32.c ../crc32.c -o $@
@@ -65,10 +65,10 @@ test_fatfs_smoke: test_fatfs_smoke.c iodev_mock.c ../fatfs/diskio.c ../fatfs/ff.
 
 # SD round-trip: uses diskio_ram.c instead of diskio.c / iodev_mock.c
 test_slot_manager_sd: test_slot_manager_sd.c ../slot_manager.c diskio_ram.c \
-                      ../fatfs/ff.c ../fatfs/ffunicode.c ../fatfs/ff_libc.c
+                      ../fatfs/ff.c ../fatfs/ffunicode.c ../fatfs/ff_libc.c ../crc32.c
 	$(CC) $(CFLAGS) $(INCLUDES) -DPRACTICE_ROM -DSLOT_MANAGER_USE_FATFS=1 -I.. \
 		test_slot_manager_sd.c ../slot_manager.c diskio_ram.c \
-		../fatfs/ff.c ../fatfs/ffunicode.c ../fatfs/ff_libc.c \
+		../fatfs/ff.c ../fatfs/ffunicode.c ../fatfs/ff_libc.c ../crc32.c \
 		-o $@
 
 # Auto-create a fresh 64 MiB FAT32 test image. macOS uses newfs_msdos

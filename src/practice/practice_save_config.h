@@ -18,8 +18,11 @@
 /* Header version embedded in every slot. Bump = breaking change. */
 #define STATE_VERSION         1
 
-/* Companion library version (slot_manager codec). */
-#define LIB_VERSION           1
+/* Companion library version (slot_manager codec).
+ * v2 (2026-07-10): payload CRC32 added at header offset 0x0C. Pre-CRC files
+ * are refused with LOAD VERSION -- they predate the stale-save/corruption
+ * defenses and were crashing on load; users must re-save. */
+#define LIB_VERSION           2
 
 /* Worst-case bytes per slot (TLV stream, including header).
  * 512 KB required: ovl_i3 (Aquas/Zoness/Solar/Area 6) is 235 KB alone;

@@ -132,6 +132,15 @@ int main(void) {
     ASSERT_EQ(slot_manager_load_ram(2), SLOT_MANAGER_ERR_CORRUPT, "T6b impossible total_size refused");
     ASSERT_EQ(load_calls, 0, "T6c corrupt size does not call load callback");
 
+    /* T6d: a corrupted PAYLOAD byte (valid header) is refused via CRC32.
+     * SD transports on real hardware corrupted payloads in flight; magic +
+     * version + size cannot see that, the payload CRC at header 0x0C can. */
+    ASSERT_EQ(slot_manager_save_ram(2), SLOT_MANAGER_OK, "T6d-a resave slot 2");
+    load_calls = 0;
+    storage[2 * 128 + SLOT_MANAGER_HEADER_SIZE] ^= 0xFF;
+    ASSERT_EQ(slot_manager_load_ram(2), SLOT_MANAGER_ERR_CORRUPT, "T6d-b payload byte flip refused (CRC)");
+    ASSERT_EQ(load_calls, 0, "T6d-c corrupt payload does not call load callback");
+
     /* T7: callback payload overflow rejects the save and leaves slot invalid. */
     slot_manager_clear_ram(2);
     save_size_override = 500;
