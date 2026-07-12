@@ -59,12 +59,18 @@ def run(ctx):
     # Let the level settle before starting the timed soak.
     h.advance(60)
 
-    total_chunks = TOTAL_FRAMES // CHUNK_FRAMES
     frame_prev = read_s32(h, _GAME_FRAME_COUNT)
     all_healthy = True
 
-    for chunk in range(1, total_chunks + 1):
-        h.advance(CHUNK_FRAMES)
+    # Walk the soak in CHUNK_FRAMES steps, honoring a partial final chunk so
+    # e.g. ZONESS_SOAK_FRAMES=500 still soaks 500 frames and asserts once --
+    # the old TOTAL_FRAMES // CHUNK_FRAMES loop silently ran ZERO iterations
+    # (no assertions at all) whenever the requested total was under one chunk.
+    frames_done = 0
+    while frames_done < TOTAL_FRAMES:
+        step = min(CHUNK_FRAMES, TOTAL_FRAMES - frames_done)
+        frames_done += step
+        h.advance(step)
 
         game_state = h.read32(_GAME_STATE)
         play_state = h.read32(_PLAY_STATE)
@@ -72,9 +78,14 @@ def run(ctx):
         advanced = frame_now - frame_prev
         frame_prev = frame_now
 
-        elapsed_s = chunk * CHUNK_FRAMES // 60
+        # Same lag slack per chunk as the original 500/600 threshold, scaled
+        # to a partial final chunk (floor of 1 so a tiny soak still asserts
+        # real progress).
+        min_frames = max(1, step - (CHUNK_FRAMES - MIN_FRAMES_PER_CHUNK))
+
+        elapsed_s = frames_done // 60
         print(f"  [{elapsed_s:3d}s] gGameFrameCount={frame_now} "
-              f"(+{advanced}/{CHUNK_FRAMES}) gGameState={game_state} "
+              f"(+{advanced}/{step}) gGameState={game_state} "
               f"gPlayState={play_state}", flush=True)
 
         # gGameFrameCount legitimately RESETS mid-soak: an unattended run
@@ -91,13 +102,13 @@ def run(ctx):
         healthy = (
             game_state == GSTATE_PLAY
             and play_state == PLAY_UPDATE
-            and (advanced >= MIN_FRAMES_PER_CHUNK or counter_reset)
+            and (advanced >= min_frames or counter_reset)
         )
         ctx.assert_true(
             healthy,
             f"Zoness alive at {elapsed_s}s "
             f"(gGameState={game_state}, gPlayState={play_state}, "
-            f"advanced={advanced}/{CHUNK_FRAMES})",
+            f"advanced={advanced}/{step})",
         )
         if not healthy:
             all_healthy = False

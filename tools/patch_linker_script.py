@@ -468,6 +468,29 @@ def strip_late_core_objs_from_main(content,
     return before_late + late_block + after_late
 
 
+def restore_split_bss_in_main(content, split_practice_objs):
+    """Ensure each split-placement object's .bss line exists in .main_bss.
+
+    A stale .practice_late_core block may have wrongly carried a split
+    object's .bss (engine-visible globals in unmapped Pak RAM on stock
+    4 MB). Excising that block deletes the line along with the rest of it,
+    so re-inject it anchored on the object's PRACTICE_OBJS predecessor.
+    No-op when the line is already present (the normal case).
+    """
+    for obj in split_practice_objs:
+        line = f"        build/src/practice/{obj}.o(.bss);\n"
+        if line in content:
+            continue
+        idx = PRACTICE_OBJS.index(obj)
+        predecessor = PRACTICE_OBJS[idx - 1]
+        anchor_line = f"build/src/practice/{predecessor}.o(.bss);"
+        content = _replace_after_anchor(
+            content, anchor_line,
+            f"        build/src/practice/{obj}.o(.bss);",
+        )
+    return content
+
+
 def chain_predecessor(prefix_pairs, fallback):
     """Walk an ordered sequence of (prefix, list) pairs and return the
     formatted predecessor string from the first non-empty list.
@@ -857,26 +880,56 @@ def patch():
             return None
         return text[start:end_pos + len(end_marker)]
 
+    def _block_membership_current(block, full_objs, split_objs=()):
+        """Section-exact staleness test for a late block.
+
+        A block that merely MENTIONS an object somewhere is not current:
+        full members need all four section lines present; split members
+        need .text/.data/.rodata present AND must NOT place .bss here --
+        a stale block carrying e.g. practice_save.o(.bss) would park
+        engine-visible globals (gPracticeSaveDisabled, ...) in unmapped
+        Pak RAM on stock 4 MB.
+        """
+        for obj_path in full_objs:
+            for sec in (".text", ".data", ".rodata", ".bss"):
+                if f"{obj_path}({sec});" not in block:
+                    return False
+        for obj_path in split_objs:
+            for sec in (".text", ".data", ".rodata"):
+                if f"{obj_path}({sec});" not in block:
+                    return False
+            if f"{obj_path}(.bss);" in block:
+                return False
+        return True
+
+    # Gate staleness on the BLOCK, not a bare ".practice_late_core"
+    # substring: the .main placement comments ("moved to .practice_late_core")
+    # contain that substring, so substring gating both misdetects staleness
+    # and -- worse -- suppresses re-injection after an excise, leaving the
+    # script with no late_core block at all.
+    existing_block = _find_late_core_block(content)
     late_core_stale = False
-    if ".practice_late_core" in content:
-        if PRACTICE_LATE_CORE_EXPECTED_VRAM not in content:
+    if existing_block is not None:
+        full_late_objs = (
+            [f"build/lib/iodev/{o}.o" for o in PRACTICE_LATE_CORE_IODEV_OBJS]
+            + [f"build/lib/{o}.o" for o in PRACTICE_LATE_CORE_LIB_OBJS]
+            + [f"build/lib/sd_host/{o}.o" for o in PRACTICE_LATE_CORE_SD_HOST_OBJS]
+            + [f"build/src/practice/{o}.o" for o in PRACTICE_LATE_CORE_PRACTICE_OBJS]
+        )
+        split_late_objs = [
+            f"build/src/practice/{o}.o"
+            for o in PRACTICE_LATE_CORE_SPLIT_PRACTICE_OBJS
+        ]
+        if (PRACTICE_LATE_CORE_EXPECTED_VRAM not in existing_block
+                or not _block_membership_current(existing_block,
+                                                 full_late_objs,
+                                                 split_late_objs)):
             late_core_stale = True
-        else:
-            existing_block = _find_late_core_block(content)
-            if existing_block is None:
-                late_core_stale = True
-            else:
-                configured_late_objs = (
-                    [f"build/lib/iodev/{o}.o" for o in PRACTICE_LATE_CORE_IODEV_OBJS]
-                    + [f"build/lib/{o}.o" for o in PRACTICE_LATE_CORE_LIB_OBJS]
-                    + [f"build/lib/sd_host/{o}.o" for o in PRACTICE_LATE_CORE_SD_HOST_OBJS]
-                    + [f"build/src/practice/{o}.o" for o in PRACTICE_LATE_CORE_SPLIT_PRACTICE_OBJS]
-                    + [f"build/src/practice/{o}.o" for o in PRACTICE_LATE_CORE_PRACTICE_OBJS]
-                )
-                for obj_path in configured_late_objs:
-                    if obj_path not in existing_block:
-                        late_core_stale = True
-                        break
+    elif "practice_late_core_VRAM =" in content:
+        # Segment symbols present without a well-formed block (comment
+        # marker or VRAM_END anchor missing) -- let the excise below fail
+        # loudly rather than injecting a duplicate.
+        late_core_stale = True
 
     if late_core_stale:
         stale_block = re.compile(
@@ -892,7 +945,7 @@ def patch():
             )
         content = new_content
 
-    if ".practice_late_core" not in content:
+    if _find_late_core_block(content) is None:
         anchor_line = "    dma_table_VRAM_END = .;"
         needle = anchor_line + "\n"
         segment_text = emit_practice_late_core_segment(
@@ -925,6 +978,12 @@ def patch():
         PRACTICE_LATE_CORE_SPLIT_PRACTICE_OBJS,
     )
 
+    # If a stale late_core excise removed a split object's misplaced .bss,
+    # its home in .main_bss must be restored (engine-visible globals).
+    content = restore_split_bss_in_main(
+        content, PRACTICE_LATE_CORE_SPLIT_PRACTICE_OBJS
+    )
+
     # Inject .practice_late_pak (LOAD) + .practice_late_pak_bss (NOLOAD)
     # immediately after the .practice_late_core block so ROM order is
     # main -> ... -> late_core -> late_pak and late_core's ROM offset never
@@ -943,25 +1002,22 @@ def patch():
             return None
         return text[start:end_pos + len(end_marker)]
 
+    # Same block-not-substring gating as late_core above.
+    existing_pak_block = _find_late_pak_block(content)
     late_pak_stale = False
-    if ".practice_late_pak" in content:
-        if PRACTICE_LATE_PAK_EXPECTED_VRAM not in content:
+    if existing_pak_block is not None:
+        configured_pak_objs = (
+            [f"build/src/practice/{o}.o" for o in PRACTICE_LATE_PAK_PRACTICE_OBJS]
+            + [f"build/lib/{o}.o" for o in PRACTICE_LATE_PAK_LIB_OBJS]
+            + [f"build/lib/fatfs/{o}.o" for o in PRACTICE_LATE_PAK_FATFS_OBJS]
+            + [f"build/lib/ui/{o}.o" for o in PRACTICE_LATE_PAK_UI_OBJS]
+        )
+        if (PRACTICE_LATE_PAK_EXPECTED_VRAM not in existing_pak_block
+                or not _block_membership_current(existing_pak_block,
+                                                 configured_pak_objs)):
             late_pak_stale = True
-        else:
-            existing_pak_block = _find_late_pak_block(content)
-            if existing_pak_block is None:
-                late_pak_stale = True
-            else:
-                configured_pak_objs = (
-                    [f"build/src/practice/{o}.o" for o in PRACTICE_LATE_PAK_PRACTICE_OBJS]
-                    + [f"build/lib/{o}.o" for o in PRACTICE_LATE_PAK_LIB_OBJS]
-                    + [f"build/lib/fatfs/{o}.o" for o in PRACTICE_LATE_PAK_FATFS_OBJS]
-                    + [f"build/lib/ui/{o}.o" for o in PRACTICE_LATE_PAK_UI_OBJS]
-                )
-                for obj_path in configured_pak_objs:
-                    if obj_path not in existing_pak_block:
-                        late_pak_stale = True
-                        break
+    elif "practice_late_pak_VRAM =" in content:
+        late_pak_stale = True
 
     if late_pak_stale:
         stale_pak_block = re.compile(
@@ -976,7 +1032,7 @@ def patch():
             )
         content = new_content
 
-    if ".practice_late_pak" not in content:
+    if _find_late_pak_block(content) is None:
         anchor_marker = "    practice_late_core_VRAM_END = .;"
         needle = anchor_marker + "\n"
         pak_segment_text = emit_practice_late_pak_segment(
