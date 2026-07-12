@@ -2,8 +2,10 @@
 
 #ifdef PRACTICE_ROM
 
-#define INPUT_DISP_X 6
-#define INPUT_DISP_Y 200
+/* Panel spans (baseX-4 .. baseX+114, baseY-14 .. baseY+24). Keep >=12px off
+ * the left/bottom screen edges so CRT overscan doesn't clip it. */
+#define INPUT_DISP_X 16
+#define INPUT_DISP_Y 190
 
 static void Practice_InputDisplay_DrawStick(s32 cx, s32 cy, s32 radius, s8 stickX, s8 stickY) {
     s32 dotX;

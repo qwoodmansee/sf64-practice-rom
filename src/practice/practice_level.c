@@ -145,7 +145,8 @@ static bool sBgmPlayPending = false;
 static bool sBgmMuted = false;
 static u16 sBgmLastSpecPacked = 0xFFFF;
 
-f32 gPracticeCheckpointProgress = 0.0f;
+/* gPracticeCheckpointProgress moved to practice_shim.c: engine hooks read it
+ * and this object is Pak-resident (.practice_late_pak). */
 
 static u16 Practice_BgmSpecPacked(const BgmEntry* e) {
     return (u16)(((u16)e->sfxLayout << 8) | (u16)e->audioSpec);
@@ -182,7 +183,7 @@ static void Practice_ServiceLevelSelectBgm(void) {
     sBgmAudioDirty = false;
 }
 
-void Practice_LevelSelect_OnEnter(void) {
+void Practice_LevelSelect_OnEnter_PakImpl(void) {
     f32 r;
 
     r = Rand_ZeroOne();

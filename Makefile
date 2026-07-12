@@ -551,8 +551,15 @@ practice-compressed:
 	$(MAKE) PRACTICE_ROM=1 compress
 	$(MAKE) PRACTICE_ROM=1 COMPARE=0 compressed
 
-practice-patch: practice-compressed
-	npm --prefix tools/patcher run create-release -- --source $(CURDIR)/$(BASEROM) --target $(CURDIR)/$(ROMC) --assets-dir $(CURDIR)/$(RELEASE_ASSETS_DIR) --version $(PATCH_VERSION)
+# tools/comptool.py (see practice-compressed above) has no awareness of the
+# .practice_late_core / .practice_late_pak segments and will scramble their
+# content into the compressed ROM's late-core address range, producing a
+# patch that boots to a black screen on real hardware (v0.6.0 shipped this
+# way; fixed by hand for v0.6.1 in commit f1ecd45fb but the Makefile default
+# was never updated, so v0.7.0 regressed right back into it). Target the
+# uncompressed ROM instead -- it preserves the linker's real layout.
+practice-patch: practice
+	npm --prefix tools/patcher run create-release -- --source $(CURDIR)/$(BASEROM) --target $(CURDIR)/$(ROM) --assets-dir $(CURDIR)/$(RELEASE_ASSETS_DIR) --version $(PATCH_VERSION)
 
 # --- HIL (hardware-in-the-loop) testing -------------------------------------
 # See tests/hil/SETUP.md and docs/superpowers/plans/2026-05-30-n64-hil-testing.md

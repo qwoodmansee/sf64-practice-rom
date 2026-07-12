@@ -28,7 +28,8 @@ static s32 sStatusTimer = 0;
 static u8 sStatusR = 255;
 static u8 sStatusG = 255;
 static u8 sStatusB = 255;
-PracticeStats gPracticeStats;
+/* gPracticeStats moved to practice_shim.c: engine hooks write it and this
+ * object is Pak-resident (.practice_late_pak). */
 
 void Practice_Hud_Reset(void) {
     Practice_ChargeAssist_Reset();

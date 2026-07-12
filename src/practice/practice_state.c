@@ -114,7 +114,7 @@ static const LevelId sPrevPlanetIds[PREV_PLANETS_COUNT] = {
     LEVEL_ZONESS,   LEVEL_SECTOR_Z, LEVEL_AREA_6,
 };
 
-bool Practice_StateMenuIsOpen(void) {
+bool Practice_StateMenuIsOpen_PakImpl(void) {
     return sStateMenuOpen;
 }
 

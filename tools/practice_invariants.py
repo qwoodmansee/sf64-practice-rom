@@ -290,6 +290,38 @@ def check_isviewer_sc64():
     if "__osDisableInt" not in isv or "__osRestoreInt" not in isv:
         error("isviewer.c rp/wp dance must run with interrupts masked (__osDisableInt/__osRestoreInt); without it a timer/SP/DP IRQ landing mid-dance leaves the firmware polling a torn (wp<rp) pair and triggers a 64KB garbage dump to USB ('ZZZZ' storm)")
 
+def check_fault_isv_dump():
+    """The fault handler must dump the crash context over IS-Viewer immediately.
+
+    With MODS_AUTO_DEBUGGER=0 the stock handler waits for a 15-step button code
+    before drawing anything and never prints, so a hardware crash leaves the
+    sc64deployer debug terminal silent. Fault_IsvDump makes every caught CPU
+    exception emit pc/cause/badvaddr/ra + a stack window, which is the primary
+    way hardware-only crashes (e.g. Zoness) get localized against the .map.
+    """
+    fault = read("src/sys/sys_fault.c")
+    body = find_c_function(fault, "Fault_IsvDump")
+    if body is None:
+        error("sys_fault.c must define Fault_IsvDump (IS-Viewer crash-context dump)")
+        return
+    for field in ("pc", "cause", "badvaddr", "ra", "sp"):
+        if not re.search(r"context->%s\b" % field, body):
+            error("Fault_IsvDump must print context->%s" % field)
+    entry = find_c_function(fault, "Fault_ThreadEntry")
+    if entry is None or "Fault_IsvDump(faultedThread)" not in entry:
+        error("Fault_ThreadEntry must call Fault_IsvDump(faultedThread) before waiting for the debug button code")
+
+    # The PRENMI RDP-FIFO hexdump reads a 0x200 window around DPC_CURRENT,
+    # which can sit near the top of RDRAM (framebuffers). Without clamping
+    # the window below osMemSize the reset diagnostic itself bus-errors.
+    dump = find_c_function(fault, "Fault_DumpAllThreads")
+    if dump is None:
+        error("sys_fault.c must define Fault_DumpAllThreads (PRENMI thread dump)")
+    elif not re.search(r"base\s*>\s*\(\(u32\)\s*osMemSize\s*-\s*0x200U?\)", dump):
+        error("Fault_DumpAllThreads must clamp the DPC FIFO hexdump window to "
+              "osMemSize - 0x200 (reads past mapped RDRAM bus-error on hardware)")
+
+
 def check_iodev_sc64():
     """SC64 iodev backend must preserve hard-won SC64 protocol invariants.
 
@@ -937,6 +969,98 @@ def check_radial_menu_save_allowed():
         )
 
 
+def check_boot_clears_bss_tail():
+    """bootproc must clear the practice ROM's BSS beyond the retail size.
+
+    entry.s (splat-extracted, handwritten boot stub) zeroes exactly 0x9B1F0
+    bytes of BSS from gControllerHold -- the RETAIL main BSS size, hardcoded.
+    The practice ROM's main BSS is larger; without an explicit tail clear the
+    excess (FatFs statics, slot manager, UI, gDmaTable) boots as RDRAM
+    power-on noise on cold boots. Hardware-confirmed 2026-07-10: FatFs[0]
+    booted as 0xad762e00 at frame 0, wedging/crashing the first f_mount.
+    The Pak-only .practice_late_core_bss has the same requirement.
+    """
+    main = read("src/sys/sys_main.c")
+    boot = find_c_function(main, "bootproc")
+    if boot is None:
+        error("sys_main.c must define bootproc")
+        return
+    if "0x9B1F0" not in boot or "main_BSS_END" not in boot:
+        error("bootproc must bzero the main BSS tail beyond entry.s's hardcoded 0x9B1F0 retail clear")
+    if "practice_late_core_BSS_START" not in boot:
+        error("bootproc must bzero .practice_late_core_bss after osInitialize (Pak-gated)")
+    entry = read("asm/us/rev1/entry.s") if os.path.isfile("asm/us/rev1/entry.s") else ""
+    if entry and "0x9B1F0" not in entry:
+        error("entry.s no longer clears 0x9B1F0 bytes; update bootproc's tail-clear base to match")
+
+
+def check_slot_payload_crc():
+    """Slot saves must carry a payload CRC32 and loads must verify it.
+
+    Header magic+version+size cannot detect in-flight payload corruption,
+    which the SD transport produced on real hardware (2026-07: garbage
+    actor bytes applied into game state). Both the RAM and SD paths must
+    compute the CRC at save and refuse mismatches at load, and the
+    same-scene load path must refuse stale saves whose gSegments layout
+    differs from the current launch (absolute pointers inside the snapshot
+    are meaningless across layouts; half-applying crashed with pc=0).
+    """
+    sm = read("lib/slot_manager.c")
+    if "SLOT_HDR_CRC_OFF" not in sm:
+        error("slot_manager.c must define SLOT_HDR_CRC_OFF (payload CRC header slot)")
+    for fn in ("slot_manager_save_ram", "slot_manager_load_ram",
+               "slot_manager_save_sd_named", "slot_manager_load_sd_named"):
+        body = find_c_function(sm, fn)
+        if body is None or "crc32(" not in body:
+            error(f"{fn} must compute/verify the payload crc32")
+    save = read(os.path.join(SRC_PRACTICE, "practice_save.c"))
+    cb = find_c_function(save, "Practice_Load_Cb")
+    if cb is None or "REFUSE stale save" not in cb:
+        error("Practice_Load_Cb must refuse loads whose saved gSegments mismatch the current launch")
+    cross = find_c_function(save, "sd_cross_apply_now")
+    if cross is None or "REFUSE stale cross save" not in cross:
+        error("sd_cross_apply_now must refuse cross-scene applies with mismatched saved segments")
+
+
+def check_snapshot_apply_sanitizes_entities():
+    """Snapshot apply must sanitize restored ObjectInfo pointers.
+
+    ObjectInfo.draw/action/hitbox are absolute pointers baked at spawn via
+    SEGMENTED_TO_VIRTUAL against that launch's segment layout. A snapshot
+    restored into a launch with different segment placement (or carrying
+    garbage) plants wild pointers the engine dereferences within frames --
+    hardware-confirmed 2026-07-09 as a TLB exception on Zoness load
+    (info.hitbox == 0x2484bb18). The apply path must drop such entities
+    instead of handing them to the engine; mupen tolerates the wild reads so
+    only the sanitizer's counters make this testable in emulation.
+    """
+    save = read(os.path.join(SRC_PRACTICE, "practice_save.c"))
+    apply_fn = find_c_function(save, "Snapshot_ApplyToGame")
+    if apply_fn is None or "Snapshot_SanitizeRestoredEntities" not in apply_fn:
+        error("Snapshot_ApplyToGame must call Snapshot_SanitizeRestoredEntities after restoring entity arrays")
+    sane_fn = find_c_function(save, "Snapshot_InfoPtrsSane")
+    if sane_fn is None:
+        error("practice_save.c must define Snapshot_InfoPtrsSane")
+    else:
+        for field in ("draw", "action", "hitbox"):
+            if f"info->{field}" not in sane_fn:
+                error(f"Snapshot_InfoPtrsSane must validate info->{field}")
+    for counter in ("gPracticeSnapSanitized", "gPracticeSnapDirtyAtSave"):
+        if not re.search(rf"^s32 {counter};", save, re.MULTILINE):
+            error(f"practice_save.c must define test-visible counter {counter}")
+    # CPU-dereferenced entity pointers must be bounded by the fixed buffers
+    # line, not osMemSize: aligned garbage into stacks/gZBuffer/framebuffers/
+    # Pak passes an osMemSize bound and gets invoked/dereferenced by the
+    # engine after load. Every legit target lives below 0x80281000.
+    if not re.search(r"#define\s+SNAPSHOT_PTR_CEILING\s+0x80281000U?", save):
+        error("practice_save.c must define SNAPSHOT_PTR_CEILING 0x80281000 "
+              "(fixed buffers line; see check_scene_stack_fits_buffers)")
+    ptr_fn = find_c_function(save, "Snapshot_PtrSane")
+    if ptr_fn is None or "SNAPSHOT_PTR_CEILING" not in ptr_fn:
+        error("Snapshot_PtrSane must bound KSEG0 pointers by "
+              "SNAPSHOT_PTR_CEILING, not osMemSize")
+
+
 def check_snapshot_gplayers_use_cam_count():
     """gPlayer is MEM_ARRAY_ALLOCATE(Player, gCamCount)-sized — do not iterate 0..3 blindly."""
     src = read(PRACTICE_SAVE_C)
@@ -1273,6 +1397,60 @@ def check_practice_pool_placement():
                 "practice_save_slotpool.o(.bss) (check_practice_pool_placement)"
             )
 
+    # practice_save.o is SPLIT: .text/.data/.rodata belong inside the
+    # .practice_late_core block (main ROM budget headroom), never in .main.
+    # Modeled in the patcher via PRACTICE_LATE_CORE_SPLIT_PRACTICE_OBJS; this
+    # guards against a regenerated .ld silently reverting the split.
+    lc_start = ld.find("/* practice_late_core:")
+    lc_end = ld.find("practice_late_core_VRAM_END = .;", lc_start) if lc_start >= 0 else -1
+    if lc_start >= 0 and lc_end >= 0:
+        lc_block = ld[lc_start:lc_end]
+        outside = ld[:lc_start] + ld[lc_end:]
+        for sec in (".text", ".data", ".rodata"):
+            line = f"build/src/practice/practice_save.o({sec});"
+            if line not in lc_block:
+                error(
+                    f"{linker}: practice_save.o({sec}) must be inside "
+                    ".practice_late_core (check_practice_pool_placement)"
+                )
+            if line in outside:
+                error(
+                    f"{linker}: practice_save.o({sec}) also listed outside "
+                    ".practice_late_core -- duplicate placement grows main "
+                    "(check_practice_pool_placement)"
+                )
+    else:
+        error(
+            f"{linker}: .practice_late_core block not found while checking "
+            "practice_save.o split placement (check_practice_pool_placement)"
+        )
+
+
+def check_linker_patcher_selfheal():
+    """Run the linker patcher's self-heal simulation suite.
+
+    The other linker checks validate the ARTIFACT (the current .ld/.map);
+    they cannot see the patcher's behavior on degraded inputs -- a
+    splat-fresh .ld, a stale or truncated block -- because those heal
+    paths never execute in a green checkout. The suite in
+    tools/test_patch_linker_script.py reconstructs each degraded input
+    from the current canonical .ld and asserts the patcher converges on
+    the canonical layout or stops loudly without touching the file.
+    Pure Python, <1s, no emulator.
+    """
+    try:
+        import test_patch_linker_script as tp
+    except ImportError as e:
+        error(f"tools/test_patch_linker_script.py not importable: {e} "
+              "(check_linker_patcher_selfheal)")
+        return
+    failures = tp.run_all()
+    if failures is None:
+        return  # .ld not generated yet (pre-extract checkout)
+    for f in failures:
+        error(f"linker-patcher self-heal suite: {f} "
+              "(check_linker_patcher_selfheal)")
+
 
 def check_practice_pool_no_overlay_overlap():
     """Phase 3: practice BSS sections must not overlap the overlay load window.
@@ -1365,6 +1543,131 @@ def check_boot_main_rom_budget():
         )
 
 
+def check_scene_stack_fits_buffers():
+    """Every scene's asset stack must end below the fixed buffers segment.
+
+    The scene asset window (ovl_i1_VRAM) floats after `main` via splat's
+    follows_vram chain: every byte of practice code/data in `main` pushes all
+    level asset loads upward. The `buffers` segment (gDramStack, gOSYieldData,
+    gZBuffer, gTaskOutputBuffer, gAudioHeap, framebuffers) is FIXED at
+    0x80281000. A scene stack crossing that line gets its assets DMA'd over
+    the Z-buffer, which the RDP then shreds with depth writes every frame --
+    the level wedges ON HARDWARE ONLY (HLE emulators never write the Z-buffer
+    back to RDRAM, so mupen64plus structurally cannot catch this).
+
+    2026-07-11: this was the "Katt freeze" root cause. 10 scene setups
+    overflowed (Zoness +0xcb10; aKattShipDL landed inside gZBuffer and the
+    RSP executed z-clear values 0xfffc as her ship's display list). Full
+    writeup: docs/superpowers/specs/2026-07-11-scene-window-zbuffer-overlap.md
+
+    Scene end = ovl_i1_VRAM + overlay ROM size + overlay bss_size (yaml)
+    + sum of ROM_SEGMENT sizes from its table in fox_load_inits.c.
+    """
+    map_path = "build/starfox64.us.rev1.map"
+    inits_path = "src/engine/fox_load_inits.c"
+    yaml_path = "starfox64.us.rev1.yaml"
+    if not os.path.isfile(map_path):
+        return
+    if not (os.path.isfile(inits_path) and os.path.isfile(yaml_path)):
+        error(
+            "check_scene_stack_fits_buffers: missing "
+            f"{inits_path} or {yaml_path}"
+        )
+        return
+
+    BUFFERS_START = 0x80281000
+    WARN_MARGIN = 0x1000
+
+    map_src = read(map_path)
+
+    rom = {}
+    for m in re.finditer(
+        r"0x([0-9a-fA-F]+)\s+(\w+)_ROM_(START|END)\s*=\s*__romPos", map_src
+    ):
+        rom.setdefault(m.group(2), {})[m.group(3)] = int(m.group(1), 16)
+
+    vram_match = re.search(r"0x([0-9a-fA-F]+)\s+ovl_i1_VRAM\s*=", map_src)
+    if not vram_match:
+        error(
+            f"{map_path}: could not locate ovl_i1_VRAM "
+            "(check_scene_stack_fits_buffers)"
+        )
+        return
+    ovl_vram = int(vram_match.group(1), 16)
+
+    def rom_size(name):
+        entry = rom.get(name)
+        if not entry or "START" not in entry or "END" not in entry:
+            return None
+        return entry["END"] - entry["START"]
+
+    bss = {}
+    cur = None
+    for line in read(yaml_path).splitlines():
+        name_m = re.match(r"\s+- name: (\w+)", line)
+        if name_m:
+            cur = name_m.group(1)
+        bss_m = re.match(r"\s+bss_size: 0x([0-9A-Fa-f]+)", line)
+        if bss_m and cur:
+            bss[cur] = int(bss_m.group(1), 16)
+
+    inits_src = read(inits_path)
+    tables = re.findall(r"Scene (s\w+)\[\d+\] = \{(.*?)\n\};", inits_src, re.DOTALL)
+    if not tables:
+        error(
+            f"{inits_path}: no Scene tables found "
+            "(check_scene_stack_fits_buffers)"
+        )
+        return
+
+    checked = 0
+    for table_name, body in tables:
+        entries = re.findall(
+            r"OVERLAY_OFFSETS\((\w+)\),\s*\{(.*?)\}\s*\}", body, re.DOTALL
+        )
+        for idx, (ovl, segs) in enumerate(entries):
+            ovl_size = rom_size(ovl)
+            if ovl_size is None:
+                error(
+                    f"{map_path}: no ROM extents for overlay {ovl} "
+                    "(check_scene_stack_fits_buffers)"
+                )
+                continue
+            end = ovl_vram + ovl_size + bss.get(ovl, 0)
+            for seg_name in re.findall(r"ROM_SEGMENT\((\w+)\)", segs):
+                seg_size = rom_size(seg_name)
+                if seg_size is None:
+                    error(
+                        f"{map_path}: no ROM extents for segment {seg_name} "
+                        f"in {table_name}[{idx}] (check_scene_stack_fits_buffers)"
+                    )
+                    seg_size = 0
+                end += seg_size
+            checked += 1
+            if end > BUFFERS_START:
+                error(
+                    f"{table_name}[{idx}]: scene asset stack ends at "
+                    f"0x{end:08X}, overflowing the fixed buffers segment at "
+                    f"0x{BUFFERS_START:08X} by 0x{end - BUFFERS_START:X}. Its "
+                    "assets land inside gZBuffer and the level wedges on "
+                    "hardware. Shrink main (move practice code to a Pak "
+                    "segment) (check_scene_stack_fits_buffers)"
+                )
+            elif end > BUFFERS_START - WARN_MARGIN:
+                warning(
+                    f"{table_name}[{idx}]: scene asset stack ends at "
+                    f"0x{end:08X}, within 0x{BUFFERS_START - end:X} of the "
+                    "fixed buffers segment at 0x80281000 -- main is nearly "
+                    "out of RAM budget (check_scene_stack_fits_buffers)"
+                )
+
+    if checked == 0:
+        error(
+            f"{inits_path}: parsed Scene tables but found no scene entries "
+            "(check_scene_stack_fits_buffers)"
+        )
+
+
 def check_late_segment_addresses():
     """The .practice_late_core segment must land in the Pak-only region.
     Was originally at 0x801F4000, but that sits inside the ramPtr window
@@ -1453,6 +1756,95 @@ def check_late_segment_rom_budgets():
             "regenerate downstream of this. Shrink or split into _pak "
             "(check_late_segment_rom_budgets)"
         )
+
+
+def check_late_pak_segment():
+    """The .practice_late_pak segment (bulk practice feature code, added
+    2026-07-11 by the scene-window/z-buffer fix) must sit exactly at
+    0x80730000, ABOVE practice_late_core's end, with its BSS below the
+    0x80800000 Pak ceiling; and its ROM image must start at or after
+    practice_late_core_ROM_END so late_core's ROM placement (SD timing
+    tuned) never moves. Also: engine-referenced practice symbols must stay
+    main-resident -- spot-check the shim's globals and engine-called shims
+    resolve below 0x80281000 (the fixed buffers line, i.e. inside main)."""
+    map_path = "build/starfox64.us.rev1.map"
+    if not os.path.isfile(map_path):
+        return
+    src = read(map_path)
+
+    def sym(name):
+        m = re.search(rf"0x0*([0-9a-fA-F]+)\s+{name}\s*=", src)
+        return int(m.group(1), 16) if m else None
+
+    vram = sym("practice_late_pak_VRAM")
+    if vram is None:
+        error(f"{map_path}: practice_late_pak_VRAM not found (check_late_pak_segment)")
+        return
+    if vram != 0x80730000:
+        error(
+            f"{map_path}: practice_late_pak_VRAM = 0x{vram:08X} (expected "
+            "0x80730000) (check_late_pak_segment)"
+        )
+
+    core_bss_end = sym("practice_late_core_BSS_END")
+    if core_bss_end is None:
+        error(
+            f"{map_path}: practice_late_core_BSS_END not found -- cannot "
+            "verify late_pak does not overlap late_core (check_late_pak_segment)"
+        )
+    elif vram < core_bss_end:
+        error(
+            f"{map_path}: practice_late_pak_VRAM 0x{vram:08X} overlaps "
+            f"practice_late_core (BSS end 0x{core_bss_end:08X}) "
+            "(check_late_pak_segment)"
+        )
+
+    bss_end = sym("practice_late_pak_BSS_END")
+    if bss_end is None:
+        error(f"{map_path}: practice_late_pak_BSS_END not found (check_late_pak_segment)")
+    elif bss_end >= 0x80800000:
+        error(
+            f"{map_path}: practice_late_pak_BSS_END = 0x{bss_end:08X} "
+            "reached/exceeded Pak ceiling 0x80800000 (check_late_pak_segment)"
+        )
+
+    core_rom_end = sym("practice_late_core_ROM_END")
+    pak_rom_start = sym("practice_late_pak_ROM_START")
+    for name, val in (("practice_late_core_ROM_END", core_rom_end),
+                      ("practice_late_pak_ROM_START", pak_rom_start)):
+        if val is None:
+            error(
+                f"{map_path}: {name} not found -- cannot verify late_pak ROM "
+                "placement (SD timing invariant unenforced) "
+                "(check_late_pak_segment)"
+            )
+    if core_rom_end is not None and pak_rom_start is not None and pak_rom_start < core_rom_end:
+        error(
+            f"{map_path}: practice_late_pak_ROM_START 0x{pak_rom_start:X} is "
+            f"below practice_late_core_ROM_END 0x{core_rom_end:X}; late_core's "
+            "ROM placement must never move (SD timing) (check_late_pak_segment)"
+        )
+
+    # Engine-referenced practice symbols must be main-resident.
+    for name in ["gPracticeStats", "gPracticeForceCarrier",
+                 "gPracticeCheckpointProgress", "Practice_StateMenuIsOpen",
+                 "Practice_LevelSelect_OnEnter", "Practice_Menu_Close",
+                 "Practice_FreeCam_IsActive", "Practice_FreeCam_GetView",
+                 "Practice_FreeCam_DrawMarkers", "Practice_Hitbox_Draw"]:
+        m = re.search(rf"0x0*([0-9a-fA-F]+)\s+{name}$", src, re.M)
+        if not m:
+            error(
+                f"{map_path}: engine-referenced symbol {name} not found "
+                "(check_late_pak_segment)"
+            )
+            continue
+        addr = int(m.group(1), 16)
+        if not (0x80000000 <= addr < 0x80281000):
+            error(
+                f"{map_path}: engine-referenced symbol {name} at 0x{addr:08X} "
+                "is not main-resident (must be below 0x80281000; engine hooks "
+                "run without an Expansion Pak) (check_late_pak_segment)"
+            )
 
 
 def check_practice_text_glyphs():
@@ -1931,6 +2323,54 @@ def check_hit64_logo():
     h_src = read(INCLUDE_PRACTICE)
     if "Practice_Logo_Draw" not in h_src:
         error(f"{INCLUDE_PRACTICE}: Practice_Logo_Draw not declared")
+
+
+def check_input_display_safe_margins():
+    """Input-display panel must stay >=10px off the left/bottom screen edges.
+
+    Screen is 320x240. CRT overscan can clip several percent off any edge, so
+    HUD panels hugging x<10 or y>230 risk being cropped on real hardware even
+    though they render fine on emulators. See the 2026-07-11 practice-CLAUDE
+    scene-window writeup for the broader "hardware sees things emulators
+    don't" lesson; this is the display-geometry analog of that lesson.
+    """
+    disp_c = os.path.join(SRC_PRACTICE, "practice_input_display.c")
+    src = read(disp_c)
+
+    x_match = re.search(r"#define\s+INPUT_DISP_X\s+(-?\d+)", src)
+    y_match = re.search(r"#define\s+INPUT_DISP_Y\s+(-?\d+)", src)
+    if not x_match or not y_match:
+        error(f"{disp_c}: INPUT_DISP_X/INPUT_DISP_Y defines not found")
+        return
+
+    base_x = int(x_match.group(1))
+    base_y = int(y_match.group(1))
+
+    # Panel geometry from Practice_InputDisplay_Draw's Practice_DrawBox call:
+    # (baseX - 4, baseY - 14, 118, 38).
+    panel_left = base_x - 4
+    panel_right = panel_left + 118
+    panel_top = base_y - 14
+    panel_bottom = panel_top + 38
+
+    SAFE_MARGIN = 10
+    if panel_left < SAFE_MARGIN:
+        error(
+            f"{disp_c}: input display panel left edge at x={panel_left} is "
+            f"within {SAFE_MARGIN}px of the screen edge (overscan risk); "
+            "increase INPUT_DISP_X"
+        )
+    if (240 - panel_bottom) < SAFE_MARGIN:
+        error(
+            f"{disp_c}: input display panel bottom edge at y={panel_bottom} "
+            f"is within {SAFE_MARGIN}px of the screen edge (overscan risk); "
+            "decrease INPUT_DISP_Y"
+        )
+    if panel_top < 0 or panel_right > 320:
+        error(
+            f"{disp_c}: input display panel ({panel_left},{panel_top})-"
+            f"({panel_right},{panel_bottom}) exceeds the 320x240 screen bounds"
+        )
 
 
 def check_minimap_boss():
@@ -2644,6 +3084,7 @@ def main():
     check_cutscene_skip_hook()
     check_hit_count_cap_raised()
     check_isviewer_sc64()
+    check_fault_isv_dump()
     check_iodev_sc64()
     check_sc64_sd_scratch_placement()
     check_iodev_ed64()
@@ -2660,6 +3101,9 @@ def main():
     check_max_state_size_budget()
     check_radial_menu_save_allowed()
     check_sys_memory_practice_bump_getter()
+    check_boot_clears_bss_tail()
+    check_slot_payload_crc()
+    check_snapshot_apply_sanitizes_entities()
     check_snapshot_gplayers_use_cam_count()
     check_overlay_build_id_no_rom_read()
     check_overlay_build_id_eager_init()
@@ -2672,13 +3116,16 @@ def main():
     check_save_init_clears_sd_cross_state()
     check_phase3_ram_detection()
     check_practice_pool_placement()
+    check_linker_patcher_selfheal()
     check_practice_pool_no_overlay_overlap()
     check_sd_host()
     check_slot_manager_atomic_write()
     check_boot_main_rom_budget()
+    check_scene_stack_fits_buffers()
     check_late_segment_addresses()
     check_late_segment_ram_caps()
     check_late_segment_rom_budgets()
+    check_late_pak_segment()
     check_practice_text_glyphs()
     check_osk_declared()
     check_file_browser_declared()
@@ -2694,6 +3141,7 @@ def main():
     check_macro_buf_section()
     check_cs_tap_slot_baseline()
     check_hit64_logo()
+    check_input_display_safe_margins()
     check_owl_logo()
     check_minimap_boss()
     check_xbld_load_zeros_entities()

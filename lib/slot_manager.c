@@ -1,7 +1,16 @@
 #include "slot_manager.h"
+#include "crc32.h"
 #ifdef SLOT_MANAGER_USE_FATFS
 #include "fatfs/ff.h"
 #endif
+
+/* Header offset of the payload CRC32. The header (0x3C bytes) reserves
+ * everything after total_size (0x08) as zero; the CRC claims 0x0C..0x0F.
+ * Every save computes it over the payload; every load verifies it BEFORE
+ * handing bytes to load_cb. SD transports on real hardware have corrupted
+ * payloads in flight (2026-07: random garbage applied into game state),
+ * and magic+version+size alone cannot see that. */
+#define SLOT_HDR_CRC_OFF 0x0C
 
 #define SLOT_MAGIC_0 'S'
 #define SLOT_MAGIC_1 'F'
@@ -179,8 +188,10 @@ int slot_manager_save_ram(int slot) {
     slot_put_le16(&base[0x04], sSlotManager.lib_version);
     slot_put_le16(&base[0x06], sSlotManager.state_version);
     slot_put_le32(&base[0x08], total_size);
-    /* Header name, level_id, level_phase, and reserved bytes stay zero until
-     * game-side metadata lands with the real practice_save rewrite. */
+    slot_put_le32(&base[SLOT_HDR_CRC_OFF], crc32(payload, payload_size));
+    /* Header name, level_id, level_phase, and remaining reserved bytes stay
+     * zero until game-side metadata lands with the real practice_save
+     * rewrite. */
 
     sSlotManager.slot_size[slot] = total_size;
     sSlotManager.slot_valid[slot] = true;
@@ -224,6 +235,9 @@ int slot_manager_load_ram(int slot) {
     }
 
     payload_size = total_size - SLOT_MANAGER_HEADER_SIZE;
+    if (crc32(&base[SLOT_MANAGER_HEADER_SIZE], payload_size) != slot_get_le32(&base[SLOT_HDR_CRC_OFF])) {
+        return SLOT_MANAGER_ERR_CORRUPT;
+    }
     cb_result = sSlotManager.load_cb(&base[SLOT_MANAGER_HEADER_SIZE], payload_size);
     if (cb_result != 0) {
         return SLOT_MANAGER_ERR_CALLBACK;
@@ -365,6 +379,7 @@ int slot_manager_save_sd_named(const char *path) {
     slot_put_le16(&base[0x04], sSlotManager.lib_version);
     slot_put_le16(&base[0x06], sSlotManager.state_version);
     slot_put_le32(&base[0x08], total_size);
+    slot_put_le32(&base[SLOT_HDR_CRC_OFF], crc32(payload, payload_size));
 
     /* Atomic write: send data to "<path>.tmp" first, then rename to
      * <path> on success. If the ROM crashes mid-write, the user keeps
@@ -454,36 +469,54 @@ int slot_manager_load_sd_named(const char *path) {
         io_cap = sSlotManager.sd_scratch_size;
     }
 
-    res = f_open(&fp, path, FA_READ);
-    if (res != FR_OK) return SLOT_MANAGER_ERR_IO_OPEN;
+    /* Read + validate, with ONE retry on payload-CRC mismatch. The SD
+     * transport has corrupted payloads in flight on real hardware; a fresh
+     * reread recovers the transient case, a repeat mismatch means the file
+     * (or the bus) is genuinely bad and the load is refused. */
+    {
+        int attempt;
 
-    fsize = f_size(&fp);
-    if (fsize < SLOT_MANAGER_HEADER_SIZE || fsize > io_cap) {
-        f_close(&fp);
-        return SLOT_MANAGER_ERR_CORRUPT;
+        for (attempt = 0; attempt < 2; attempt++) {
+            res = f_open(&fp, path, FA_READ);
+            if (res != FR_OK) return SLOT_MANAGER_ERR_IO_OPEN;
+
+            fsize = f_size(&fp);
+            if (fsize < SLOT_MANAGER_HEADER_SIZE || fsize > io_cap) {
+                f_close(&fp);
+                return SLOT_MANAGER_ERR_CORRUPT;
+            }
+
+            res = f_read(&fp, base, (UINT)fsize, &bytes_read);
+            f_close(&fp);
+
+            if (res != FR_OK || bytes_read != (UINT)fsize) return SLOT_MANAGER_ERR_IO_READ;
+
+            if (base[0x00] != SLOT_MAGIC_0 || base[0x01] != SLOT_MAGIC_1 ||
+                base[0x02] != SLOT_MAGIC_2 || base[0x03] != SLOT_MAGIC_3) {
+                return SLOT_MANAGER_ERR_MAGIC;
+            }
+
+            if (slot_get_le16(&base[0x04]) != sSlotManager.lib_version ||
+                slot_get_le16(&base[0x06]) != sSlotManager.state_version) {
+                return SLOT_MANAGER_ERR_VERSION;
+            }
+
+            total_size = slot_get_le32(&base[0x08]);
+            if (total_size != (uint32_t)fsize || total_size < SLOT_MANAGER_HEADER_SIZE) {
+                return SLOT_MANAGER_ERR_CORRUPT;
+            }
+
+            payload_size = total_size - SLOT_MANAGER_HEADER_SIZE;
+            if (crc32(&base[SLOT_MANAGER_HEADER_SIZE], payload_size) ==
+                slot_get_le32(&base[SLOT_HDR_CRC_OFF])) {
+                break;
+            }
+            if (attempt == 1) {
+                return SLOT_MANAGER_ERR_CORRUPT;
+            }
+        }
     }
 
-    res = f_read(&fp, base, (UINT)fsize, &bytes_read);
-    f_close(&fp);
-
-    if (res != FR_OK || bytes_read != (UINT)fsize) return SLOT_MANAGER_ERR_IO_READ;
-
-    if (base[0x00] != SLOT_MAGIC_0 || base[0x01] != SLOT_MAGIC_1 ||
-        base[0x02] != SLOT_MAGIC_2 || base[0x03] != SLOT_MAGIC_3) {
-        return SLOT_MANAGER_ERR_MAGIC;
-    }
-
-    if (slot_get_le16(&base[0x04]) != sSlotManager.lib_version ||
-        slot_get_le16(&base[0x06]) != sSlotManager.state_version) {
-        return SLOT_MANAGER_ERR_VERSION;
-    }
-
-    total_size = slot_get_le32(&base[0x08]);
-    if (total_size != (uint32_t)fsize || total_size < SLOT_MANAGER_HEADER_SIZE) {
-        return SLOT_MANAGER_ERR_CORRUPT;
-    }
-
-    payload_size = total_size - SLOT_MANAGER_HEADER_SIZE;
     cb_result = sSlotManager.load_cb(&base[SLOT_MANAGER_HEADER_SIZE], payload_size);
     if (cb_result != 0) return SLOT_MANAGER_ERR_CALLBACK;
     return SLOT_MANAGER_OK;

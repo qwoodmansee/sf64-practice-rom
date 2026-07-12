@@ -3,7 +3,7 @@
 
 #ifdef PRACTICE_ROM
 
-#define PRACTICE_VERSION "V0.6.2"
+#define PRACTICE_VERSION "V0.7.0"
 
 #include "global.h"
 
@@ -181,6 +181,7 @@ void Practice_BossTest_Launch(s32 index);
 
 /* practice_level.c */
 void Practice_LevelSelect_OnEnter(void);
+void Practice_LevelSelect_OnEnter_PakImpl(void);
 void Practice_LevelSelect_Update(void);
 void Practice_LevelSelect_Draw(void);
 void Practice_LaunchLevel(LevelId levelId, s32 phase, f32 checkpointProgress);
@@ -208,6 +209,7 @@ void Practice_Audio_ResetAll(void);
 
 /* practice_state.c */
 bool Practice_StateMenuIsOpen(void);
+bool Practice_StateMenuIsOpen_PakImpl(void);
 void Practice_StateMenu_Open(PracticeSubMenu subMenu);
 void Practice_StateMenu_Close(void);
 void Practice_StateMenu_Update(void);
@@ -217,6 +219,7 @@ void Practice_StateMenu_Draw(void);
 void Practice_Menu_Open(void);
 void Practice_Menu_OpenFrozen(void);
 void Practice_Menu_Close(void);
+void Practice_Menu_Close_PakImpl(void);
 void Practice_Menu_Update(void);
 void Practice_Menu_Draw(void);
 
@@ -259,20 +262,24 @@ void Practice_Minimap_Draw(void);
 
 /* practice_hitbox.c */
 void Practice_Hitbox_Draw(void);
+void Practice_Hitbox_Draw_PakImpl(void);
 
 /* practice_enemy_health.c */
 void Practice_EnemyHealth_Draw(void);
 
 /* practice_freecam.c */
 bool Practice_FreeCam_IsActive(void);
+bool Practice_FreeCam_IsActive_PakImpl(void);
 bool Practice_FreeCam_OverlayVisible(void);
 PracticeFreeCamObject Practice_FreeCam_GetObject(void);
 void Practice_FreeCam_Enter(void);
 void Practice_FreeCam_Exit(void);
 void Practice_FreeCam_GetView(Vec3f* eye, Vec3f* at);
+void Practice_FreeCam_GetView_PakImpl(Vec3f* eye, Vec3f* at);
 void Practice_FreeCam_GetMapPos(f32* x, f32* z, f32* yaw_deg);
 void Practice_FreeCam_Update(void);
 void Practice_FreeCam_DrawMarkers(void);
+void Practice_FreeCam_DrawMarkers_PakImpl(void);
 void Practice_FreeCam_Draw(void);
 
 /* practice_save.c */

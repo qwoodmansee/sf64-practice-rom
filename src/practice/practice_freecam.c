@@ -247,7 +247,7 @@ static void Practice_FreeCam_DrawRadius(Vec3f* pos, f32 radius, u8 r, u8 g, u8 b
     Practice_FreeCam_DrawRing(pos, radius, 2);
 }
 
-bool Practice_FreeCam_IsActive(void) {
+bool Practice_FreeCam_IsActive_PakImpl(void) {
     return sActive;
 }
 
@@ -285,7 +285,7 @@ void Practice_FreeCam_GetMapPos(f32* x, f32* z, f32* yaw_deg) {
     *yaw_deg = sYaw;
 }
 
-void Practice_FreeCam_GetView(Vec3f* eye, Vec3f* at) {
+void Practice_FreeCam_GetView_PakImpl(Vec3f* eye, Vec3f* at) {
     f32 cosPitch = COS_DEG(sPitch);
     eye->x = sEye.x;
     eye->y = sEye.y;
@@ -361,7 +361,7 @@ void Practice_FreeCam_Update(void) {
     }
 }
 
-void Practice_FreeCam_DrawMarkers(void) {
+void Practice_FreeCam_DrawMarkers_PakImpl(void) {
     Vec3f marker;
     u8 markerR, markerG, markerB;
 
