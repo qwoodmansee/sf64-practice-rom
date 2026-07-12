@@ -194,6 +194,11 @@ extern OSThread gAudioThread; //8013B1F0
 
 #define FAULT_MESG_BREAK 1
 #define FAULT_MESG_FAULT 2
+/* PRENMI is redirected to the fault thread (sys_main.c) so the reset button
+ * dumps all thread contexts over IS-Viewer even during a silent hang. */
+#define FAULT_MESG_PRENMI 3
+
+extern FaultMgr gFaultMgr;
 
 #define TASK_MESG_1 1
 #define TASK_MESG_2 2

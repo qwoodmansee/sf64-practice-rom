@@ -323,7 +323,20 @@ void Main_InitMesgQueues(void) {
     osViSetEvent(&gMainThreadMesgQueue, (OSMesg) EVENT_MESG_VI, 1);
     osSetEventMesg(OS_EVENT_SP, &gMainThreadMesgQueue, (OSMesg) EVENT_MESG_SP);
     osSetEventMesg(OS_EVENT_DP, &gMainThreadMesgQueue, (OSMesg) EVENT_MESG_DP);
+#ifdef PRACTICE_ROM
+    /* PERMANENT: route PRENMI to the fault thread instead of the main
+     * thread. During a silent full-CPU hang (e.g. an RDP wedge starving
+     * every thread) the main thread never drains its queue, so the stock
+     * gStartNMI path is useless; the fault thread runs at priority 127 and
+     * can still dump every thread's pc/ra over IS-Viewer in the ~0.5s
+     * before the NMI lands. The fault thread sets gStartNMI itself before
+     * dumping, preserving the vanilla EEPROM-write guard on healthy resets.
+     * This dump is how the 2026-07-11 scene-window/z-buffer overlap (Katt
+     * freeze) was diagnosed; keep it. */
+    osSetEventMesg(OS_EVENT_PRENMI, &gFaultMgr.mesgQueue, (OSMesg) FAULT_MESG_PRENMI);
+#else
     osSetEventMesg(OS_EVENT_PRENMI, &gMainThreadMesgQueue, (OSMesg) EVENT_MESG_PRENMI);
+#endif
     osCreateMesgQueue(&gTimerTaskMesgQueue, sTimerTaskMsgBuff, ARRAY_COUNT(sTimerTaskMsgBuff));
     osCreateMesgQueue(&gTimerWaitMesgQueue, sTimerWaitMsgBuff, ARRAY_COUNT(sTimerWaitMsgBuff));
     osCreateMesgQueue(&gSerialThreadMesgQueue, sSerialThreadMsgBuff, ARRAY_COUNT(sSerialThreadMsgBuff));
@@ -526,7 +539,27 @@ void Idle_ThreadEntry(void* arg0) {
     for (;;) {}
 }
 
+#ifdef PRACTICE_ROM
+extern u8 main_BSS_END[];
+extern u8 practice_late_core_BSS_START[];
+extern u8 practice_late_core_BSS_END[];
+#endif
+
 void bootproc(void) {
+#ifdef PRACTICE_ROM
+    /* ROOT-CAUSE FIX (2026-07-10): entry.s clears exactly 0x9B1F0 bytes of
+     * BSS from gControllerHold -- the RETAIL game's main BSS size, hardcoded
+     * in the handwritten boot stub. The practice ROM's main BSS extends far
+     * past that, and the uncleared tail (~5.6 KB: FatFs statics, slot
+     * manager, UI state, gDmaTable) boots as RDRAM power-on noise on COLD
+     * boots. Warm resets retain the previous session's zeros, which is why
+     * every symptom (FatFs[0] garbage -> f_mount TLB crash or PI-wedge
+     * freeze, garbage overlay build-id cache, phantom xbld mismatches) was
+     * intermittent. Clear the tail before anything reads it. Must stay
+     * FIRST: even ISViewer/boot prints may touch late main BSS. */
+    bzero((u8 *) gControllerHold + 0x9B1F0,
+          (s32) (main_BSS_END - ((u8 *) gControllerHold + 0x9B1F0)));
+#endif
 #if MODS_ISVIEWER == 1
     /* Init IS-Viewer FIRST so osSyncPrintf works for every later stage.
      * PI bus is functional immediately after IPL3; no other init required. */
@@ -540,6 +573,16 @@ void bootproc(void) {
     osSyncPrintf("[boot] 04 osInitialize enter\n");
     osInitialize();
     osSyncPrintf("[boot] 05 osInitialize exit (osMemSize=0x%08x)\n", (u32) osMemSize);
+#ifdef PRACTICE_ROM
+    /* Same fix for the Pak-only .practice_late_core_bss (NOLOAD): nothing
+     * ever cleared it, so iodev/sd_host statics booted as RDRAM noise on
+     * cold boot. Needs osMemSize (Expansion Pak detection), hence after
+     * osInitialize and before any practice/iodev code runs. */
+    if (osMemSize >= 0x00800000U) {
+        bzero(practice_late_core_BSS_START,
+              (s32) (practice_late_core_BSS_END - practice_late_core_BSS_START));
+    }
+#endif
     osSyncPrintf("[boot] 06 Main_Initialize enter\n");
     Main_Initialize();
     osSyncPrintf("[boot] 07 Main_Initialize exit\n");

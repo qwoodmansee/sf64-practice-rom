@@ -1,5 +1,6 @@
 #include "sys.h"
 #include "PR/os_internal.h"
+#include "PR/rcp.h"
 #include "mods.h"
 
 FaultMgr gFaultMgr;
@@ -205,6 +206,60 @@ void Fault_DisplayDebugInfo(OSThread* thread) {
     osViSwapBuffer(gFaultMgr.fb);
 }
 
+/* Dump the faulted thread's context over IS-Viewer the moment the fault
+ * thread catches it. Without this, a hardware crash is silent: the stock
+ * handler waits for a button code before drawing anything and never prints.
+ * Runs post-crash only, so the "no osSyncPrintf during gameplay" rule does
+ * not apply. Keep each line short: ISViewer_Write flushes at most 512 bytes
+ * per call. */
+void Fault_IsvDump(OSThread* thread) {
+    __OSThreadContext* context = &thread->context;
+    s16 causeIndex = CAUSE_INDEX(context->cause);
+    u32 sp = (u32) context->sp;
+    s32 i;
+
+    if (causeIndex == CAUSE_INDEX(EXC_WATCH)) {
+        causeIndex = 16;
+    }
+    if (causeIndex == CAUSE_INDEX(EXC_VCED)) {
+        causeIndex = 17;
+    }
+
+    /* The sc64deployer host suppresses "garbage bursts" dominated by a single
+     * byte; %08x register lines full of '0' padding trip that heuristic and
+     * vanish. Keep every line letter-dense: unpadded %x, and carry pc/va/ra
+     * on the cause line (whose exception-name text has survived every crash
+     * so far). pc is also repeated on its own line for redundancy. */
+    osSyncPrintf("[fault] thread=%d cause=%x (%s) pc=%x va=%x ra=%x\n", thread->id, (u32) context->cause,
+                 sFaultCauses[causeIndex], (u32) context->pc, (u32) context->badvaddr, (u32) context->ra);
+    osSyncPrintf("[fault] again pc=%x sr=%x va=%x fpcsr=%x\n", (u32) context->pc, (u32) context->sr,
+                 (u32) context->badvaddr, (u32) context->fpcsr);
+    osSyncPrintf("[fault] regs ra=%x sp=%x gp=%x\n", (u32) context->ra, sp, (u32) context->gp);
+    osSyncPrintf("[fault] regs at=%x v0=%x v1=%x\n", (u32) context->at, (u32) context->v0, (u32) context->v1);
+    osSyncPrintf("[fault] regs a0=%x a1=%x a2=%x a3=%x\n", (u32) context->a0, (u32) context->a1,
+                 (u32) context->a2, (u32) context->a3);
+    osSyncPrintf("[fault] regs t0=%x t1=%x t2=%x t3=%x\n", (u32) context->t0, (u32) context->t1,
+                 (u32) context->t2, (u32) context->t3);
+    osSyncPrintf("[fault] regs t4=%x t5=%x t6=%x t7=%x\n", (u32) context->t4, (u32) context->t5,
+                 (u32) context->t6, (u32) context->t7);
+    osSyncPrintf("[fault] regs t8=%x t9=%x s8=%x\n", (u32) context->t8, (u32) context->t9, (u32) context->s8);
+    osSyncPrintf("[fault] regs s0=%x s1=%x s2=%x s3=%x\n", (u32) context->s0, (u32) context->s1,
+                 (u32) context->s2, (u32) context->s3);
+    osSyncPrintf("[fault] regs s4=%x s5=%x s6=%x s7=%x\n", (u32) context->s4, (u32) context->s5,
+                 (u32) context->s6, (u32) context->s7);
+
+    /* Stack window: return addresses in here recover the call chain via the
+     * .map file. Only read if sp points into mapped RDRAM. */
+    sp &= ~3;
+    if ((sp >= 0x80000000U) && (sp < (0x80000000U + osMemSize - 0x80U))) {
+        for (i = 0; i < 0x80; i += 0x10) {
+            u32* w = (u32*) (sp + i);
+
+            osSyncPrintf("[fault] stack sp+%x: %x %x %x %x\n", i, w[0], w[1], w[2], w[3]);
+        }
+    }
+}
+
 OSThread* func_80007CEC(void) {
     OSThread* queue = __osGetActiveQueue();
 
@@ -215,6 +270,69 @@ OSThread* func_80007CEC(void) {
         queue = queue->tlnext;
     }
     return NULL;
+}
+
+/* PERMANENT: on PRENMI (reset button) dump every thread's saved context
+ * over IS-Viewer. During a silent full-CPU hang no exception fires and
+ * nothing prints; pressing reset gives ~0.5s in which this handler (fault
+ * thread, priority 127, preempts everything) reveals where each thread is
+ * stuck: spinning pc in audio code vs blocked on a PI queue etc. All
+ * threads except this one were preempted, so their contexts are saved and
+ * pc/ra are meaningful. Diagnosed the 2026-07-11 Katt freeze (RDP wedge). */
+void Fault_DumpAllThreads(void) {
+    OSThread* t = __osGetActiveQueue();
+    u32 sp;
+    s32 i;
+
+    osSyncPrintf("[prenmi] reset pressed: thread dump\n");
+    /* RCP state first: the 2026-07-10 Katt freeze left every CPU thread
+     * healthy but waiting on an RSP/RDP task that never completed. SP/DPC
+     * status say which unit is stuck; DPC_CURRENT points INTO the command
+     * stream the RDP choked on (resolve against the gfx pool / DL data).
+     * gCurrentTask type: 1 = gfx, 2 = audio. */
+    osSyncPrintf("[prenmi] rcp SPst=%x DPCst=%x DPCstart=%x DPCcur=%x DPCend=%x\n", IO_READ(SP_STATUS_REG),
+                 IO_READ(DPC_STATUS_REG), IO_READ(DPC_START_REG), IO_READ(DPC_CURRENT_REG), IO_READ(DPC_END_REG));
+    if (gCurrentTask != NULL) {
+        osSyncPrintf("[prenmi] task cur=%x type=%d state=%d dl=%x\n", (u32)(uintptr_t) gCurrentTask,
+                     (s32) gCurrentTask->task.t.type, (s32) gCurrentTask->state,
+                     (u32)(uintptr_t) gCurrentTask->task.t.data_ptr);
+    } else {
+        osSyncPrintf("[prenmi] task cur=null\n");
+    }
+    /* Hexdump the RDP FIFO around DPC_CURRENT: these are the literal RDP
+     * commands (8 bytes each) the pipe is stuck on. A texture/image command
+     * carrying a garbage address here names the wedge's cause directly. */
+    {
+        u32 cur = IO_READ(DPC_CURRENT_REG);
+
+        if ((cur >= 0x400U) && (cur < (u32) osMemSize)) {
+            u32 base = (cur - 0x180U) & ~0xFU;
+            u32* w = (u32*) (0x80000000U | base);
+
+            for (i = 0; i < 0x200; i += 0x10) {
+                osSyncPrintf("[prenmi] fifo %x: %x %x %x %x\n", base + (u32) i, w[0], w[1], w[2], w[3]);
+                w += 4;
+            }
+        }
+    }
+    while (t->priority != -1) {
+        osSyncPrintf("[prenmi] id=%d pri=%d state=%x pc=%x ra=%x sp=%x\n", t->id, t->priority, t->state,
+                     (u32) t->context.pc, (u32) t->context.ra, (u32) t->context.sp);
+        /* a0 of a thread blocked in osRecvMesg is the queue it waits on;
+         * the stack window recovers the caller chain via the .map. */
+        osSyncPrintf("[prenmi]  a0=%x a1=%x s0=%x s1=%x s2=%x\n", (u32) t->context.a0, (u32) t->context.a1,
+                     (u32) t->context.s0, (u32) t->context.s1, (u32) t->context.s2);
+        sp = (u32) t->context.sp & ~3;
+        if ((sp >= 0x80000000U) && (sp < (0x80000000U + osMemSize - 0x60U))) {
+            for (i = 0; i < 0x60; i += 0x10) {
+                u32* w = (u32*) (sp + i);
+
+                osSyncPrintf("[prenmi]  stk+%x: %x %x %x %x\n", i, w[0], w[1], w[2], w[3]);
+            }
+        }
+        t = t->tlnext;
+    }
+    osSyncPrintf("[prenmi] dump done\n");
 }
 
 void Fault_ThreadEntry(void* arg) {
@@ -235,8 +353,20 @@ void Fault_ThreadEntry(void* arg) {
     faultedThread = NULL;
     while (faultedThread == NULL) {
         MQ_WAIT_FOR_MESG(&gFaultMgr.mesgQueue, &dummy);
+        if (dummy == (OSMesg) FAULT_MESG_PRENMI) {
+            /* Preserve the vanilla PRENMI contract first: gStartNMI gates
+             * EEPROM I/O (sys_joybus.c) so a reset never lands mid-write.
+             * The stock path sets it from the main thread's queue, which is
+             * dead during a full-CPU hang; setting it here covers both the
+             * healthy-reset and hung-reset cases before the dump runs. */
+            gStartNMI = 1;
+            Fault_DumpAllThreads();
+            continue;
+        }
         faultedThread = func_80007CEC();
     }
+
+    Fault_IsvDump(faultedThread);
 
     Fault_Printf(300, 10, "-");
     gControllerPlugged[0] = true;
