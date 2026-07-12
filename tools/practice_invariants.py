@@ -1426,6 +1426,32 @@ def check_practice_pool_placement():
         )
 
 
+def check_linker_patcher_selfheal():
+    """Run the linker patcher's self-heal simulation suite.
+
+    The other linker checks validate the ARTIFACT (the current .ld/.map);
+    they cannot see the patcher's behavior on degraded inputs -- a
+    splat-fresh .ld, a stale or truncated block -- because those heal
+    paths never execute in a green checkout. The suite in
+    tools/test_patch_linker_script.py reconstructs each degraded input
+    from the current canonical .ld and asserts the patcher converges on
+    the canonical layout or stops loudly without touching the file.
+    Pure Python, <1s, no emulator.
+    """
+    try:
+        import test_patch_linker_script as tp
+    except ImportError as e:
+        error(f"tools/test_patch_linker_script.py not importable: {e} "
+              "(check_linker_patcher_selfheal)")
+        return
+    failures = tp.run_all()
+    if failures is None:
+        return  # .ld not generated yet (pre-extract checkout)
+    for f in failures:
+        error(f"linker-patcher self-heal suite: {f} "
+              "(check_linker_patcher_selfheal)")
+
+
 def check_practice_pool_no_overlay_overlap():
     """Phase 3: practice BSS sections must not overlap the overlay load window.
 
@@ -3090,6 +3116,7 @@ def main():
     check_save_init_clears_sd_cross_state()
     check_phase3_ram_detection()
     check_practice_pool_placement()
+    check_linker_patcher_selfheal()
     check_practice_pool_no_overlay_overlap()
     check_sd_host()
     check_slot_manager_atomic_write()
