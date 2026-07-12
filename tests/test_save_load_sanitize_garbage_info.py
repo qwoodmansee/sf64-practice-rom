@@ -39,7 +39,10 @@ SC_DPAD_DOWN = 22   # 's'  -> frame-advance pause toggle (D_JPAD down)
 
 ACTOR_SIZE = 0x2F4       # include/sf64object.h: Actor size
 ACTOR_COUNT = 60
+SCENERY_SIZE = 0x80      # include/sf64object.h: Scenery size
+SCENERY_COUNT = 50
 OFF_OBJ_STATUS = 0x00    # u8
+OFF_INFO_DRAW = 0x1C     # obj (0x1C) + ObjectInfo.draw/dList (0x00)
 OFF_INFO_HITBOX = 0x28   # obj (0x1C) + ObjectInfo.hitbox (0x0C)
 
 OBJ_FREE = 0
@@ -56,6 +59,20 @@ def _read_u8(h, addr):
     word = h.read32(addr & ~3)
     shift = 8 * (3 - (addr & 3))
     return (word >> shift) & 0xFF
+
+
+def _live_scenery(h, S):
+    """(count, one live index with a segmented dList draw or -1)."""
+    base = S["gScenery"]
+    count = 0
+    seg_idx = -1
+    for i in range(SCENERY_COUNT):
+        if _read_u8(h, base + i * SCENERY_SIZE + OFF_OBJ_STATUS) != OBJ_FREE:
+            count += 1
+            draw = h.read32(base + i * SCENERY_SIZE + OFF_INFO_DRAW)
+            if seg_idx < 0 and 0x01000000 <= draw < 0x10000000:
+                seg_idx = i
+    return count, seg_idx
 
 
 def _is_paused(ctx, h, S):
@@ -88,8 +105,15 @@ def run(ctx):
     if not ok:
         return
 
-    # Let the level settle so some actors are live.
+    # Let the level settle so some actors are live, and keep flying until
+    # dList-drawn scenery exists (Corneria's opening seconds have an empty
+    # gScenery array; the city buildings spawn as the level scrolls in).
     h.advance(180)
+    for _ in range(15):
+        count, seg_idx = _live_scenery(h, S)
+        if count > 0 and seg_idx >= 0:
+            break
+        h.advance(120)
 
     if "gPracticeSaveDisabled" in S:
         save_disabled = ctx.read_s32(S["gPracticeSaveDisabled"])
@@ -121,6 +145,15 @@ def run(ctx):
     print(f"  poisoned gActors[{victim}].info.hitbox = {GARBAGE_PTR:#010x} "
           f"(paused; orig {orig_hitbox:#010x})")
 
+    # Baseline for the over-aggressive-sanitizer regression (2026-07-11:
+    # segmented dList draws like 0x06024ac0 were being treated as garbage
+    # and every dList-drawn entity got freed on load). Captured under
+    # pause, so the snapshot must restore exactly this population.
+    scenery_at_save, seg_scenery = _live_scenery(h, S)
+    print(f"  live scenery at save: {scenery_at_save} "
+          f"(segmented-draw example idx {seg_scenery})")
+    ctx.assert_true(scenery_at_save > 0, "live scenery present at save time")
+
     # --- Save: D-Left (snapshot captures the garbage pointer) ---
     _press(h, SC_DPAD_LEFT, hold=4, release=2)
     h.advance(4)
@@ -150,7 +183,15 @@ def run(ctx):
 
     sanitized = ctx.read_s32(S["gPracticeSnapSanitized"])
     print(f"  gPracticeSnapSanitized={sanitized}")
-    ctx.assert_true(sanitized >= 1, "apply-side sanitizer dropped the poisoned actor")
+    # EXACTLY 1: the poisoned actor and nothing else. The 2026-07-11
+    # regression sanitized every dList-drawn entity (segmented draw
+    # pointers), which shows up here as sanitized >> 1.
+    ctx.assert_eq(sanitized, 1, "sanitizer dropped ONLY the poisoned actor")
+
+    scenery_after_load, _ = _live_scenery(h, S)
+    print(f"  live scenery after load: {scenery_after_load}")
+    ctx.assert_eq(scenery_after_load, scenery_at_save,
+                  "dList-drawn scenery survived the load (segmented draw pointers are sane)")
 
     # The poisoned slot must not be live with the garbage pointer.
     status = _read_u8(h, victim_addr + OFF_OBJ_STATUS)

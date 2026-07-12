@@ -240,17 +240,31 @@ typedef char PracticeSnapshotFitsScratch[(sizeof(PracticeSnapshot) <= MAX_STATE_
 s32 gPracticeSnapSanitized;   /* entities dropped by the last apply */
 s32 gPracticeSnapDirtyAtSave; /* entities with insane info at last slot save */
 
-/* NULL is fine; otherwise require a 4-aligned KSEG0 RDRAM pointer. Both
- * data (hitbox arrays, display lists) and code (draw/action) live there.
- * Anything else TLB-faults or FPEs the moment the engine touches it. */
-static bool Snapshot_PtrSane(const void *p) {
+/* Per-field pointer rules, matching what Object_SetInfo actually leaves in a
+ * live entity (fox_enmy.c: `*info = gObjectInfo[objId]` then ONLY hitbox goes
+ * through SEGMENTED_TO_VIRTUAL):
+ *   - action: NULL or a 4-aligned KSEG0 function pointer (CPU-called).
+ *   - hitbox: NULL or a 4-aligned KSEG0 data pointer (CPU-dereferenced;
+ *     converted from segmented at spawn).
+ *   - draw:   drawType != 0 -> KSEG0 function pointer (CPU-called);
+ *     drawType == 0 -> the dList union member, which legitimately STAYS
+ *     SEGMENTED (e.g. aZoRockDL = 0x06024ac0) because the RSP resolves it
+ *     through the segment table at draw time.
+ * 2026-07-11 regression lesson: the first version of this check required
+ * KSEG0 for all three fields, which silently freed every dList-drawn
+ * entity (scenery/sprites/some actors) on every load. */
+static bool Snapshot_PtrSane(const void *p, bool allowSegmented) {
     u32 v = (u32)(uintptr_t)p;
+    u32 seg = v >> 24;
 
     if (v == 0) {
         return true;
     }
     if ((v & 3) != 0) {
         return false;
+    }
+    if (allowSegmented && (seg >= 0x01) && (seg <= 0x0F)) {
+        return true;
     }
     if (v < 0x80000000U) {
         return false;
@@ -262,8 +276,9 @@ static bool Snapshot_PtrSane(const void *p) {
 }
 
 static bool Snapshot_InfoPtrsSane(const ObjectInfo *info) {
-    return Snapshot_PtrSane((const void *)info->draw) && Snapshot_PtrSane((const void *)info->action) &&
-           Snapshot_PtrSane((const void *)info->hitbox);
+    return Snapshot_PtrSane((const void *)info->draw, info->drawType == 0) &&
+           Snapshot_PtrSane((const void *)info->action, false) &&
+           Snapshot_PtrSane((const void *)info->hitbox, false);
 }
 
 #define SNAP_SANITIZE_PRINT_CAP 6
