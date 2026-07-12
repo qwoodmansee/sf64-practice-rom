@@ -112,15 +112,19 @@ PRACTICE_LATE_CORE_PRACTICE_OBJS = [
     "practice_logo_tex",  # HIT64 logo, level-select only (Practice_Logo_Draw, Pak-gated)
     "practice_owl_tex",   # owl, level-select only (Practice_Owl_Draw, Pak-gated)
 ]
-# NOTE: the live canonical .ld ALSO carries practice_save.o(.text/.data/.rodata)
-# inside .practice_late_core (between sd_host.o and practice_logo_tex.o) from a
-# hand-applied PRACTICE_SAVE_TRACE budget fix; practice_save.o(.bss) stays in
-# .main_bss (engine references gPracticeActiveSlot etc.). It is deliberately
-# NOT listed here: listing it would make strip_late_core_objs_from_main remove
-# the main .bss line and park engine-referenced globals in Pak RAM. A fresh
-# `make extract` therefore loses the placement -- if you ever regenerate the
-# .ld from scratch, re-add practice_save.o's .text/.data/.rodata to the
-# late_core block by hand and keep its .bss in .main_bss.
+# SPLIT-placement objects: .text/.data/.rodata live in .practice_late_core,
+# but .bss STAYS in .main_bss. practice_save.o is here because engine code
+# references its globals (gPracticeActiveSlot, gPracticeSaveDisabled, ...)
+# unconditionally and stock 4 MB must be able to read the save-disabled
+# state, while its code/rodata was moved to late_core for main ROM budget
+# headroom (the hand-applied PRACTICE_SAVE_TRACE fix, now modeled here so a
+# fresh `make extract` reproduces it). Emitted between sd_host.o and the
+# PRACTICE_LATE_CORE_PRACTICE_OBJS entries to match the canonical layout
+# byte-for-byte -- late_core's internal layout is SD-timing sensitive
+# (see CLAUDE.md).
+PRACTICE_LATE_CORE_SPLIT_PRACTICE_OBJS = [
+    "practice_save",
+]
 
 # ---------------------------------------------------------------------------
 # .practice_late_pak: the bulk of the practice feature code, resident in
@@ -218,7 +222,7 @@ PRACTICE_MACRO_SNAP_SECTION = """\
 
 
 def emit_practice_late_core_segment(iodev_objs, lib_objs, sd_host_objs,
-                                    practice_objs=()):
+                                    practice_objs=(), split_practice_objs=()):
     """Emit the .practice_late_core (LOAD) + .practice_late_core_bss (NOLOAD)
     block as a single linker-script snippet.
 
@@ -245,6 +249,10 @@ def emit_practice_late_core_segment(iodev_objs, lib_objs, sd_host_objs,
             lines.append(f"        build/lib/{obj}.o({section});")
         for obj in sd_host_objs:
             lines.append(f"        build/lib/sd_host/{obj}.o({section});")
+        if section != ".bss":
+            # Split-placement objects: their .bss stays in .main_bss.
+            for obj in split_practice_objs:
+                lines.append(f"        build/src/practice/{obj}.o({section});")
         for obj in practice_objs:
             lines.append(f"        build/src/practice/{obj}.o({section});")
 
@@ -396,7 +404,7 @@ def strip_late_pak_objs_from_main(content, practice_objs, lib_objs,
 
 def strip_late_core_objs_from_main(content,
                                    iodev_objs, lib_objs, sd_host_objs,
-                                   practice_objs=()):
+                                   practice_objs=(), split_practice_objs=()):
     """Phase 1 migration scrubber: when .practice_late_core is injected
     with non-empty member sublists, the same object names may also still
     appear inside .main from prior patcher runs (the canonical .ld
@@ -420,8 +428,11 @@ def strip_late_core_objs_from_main(content,
         targets.append(f"build/lib/sd_host/{obj}")
     for obj in practice_objs:
         targets.append(f"build/src/practice/{obj}")
+    # Split-placement objects only migrate .text/.data/.rodata; their .bss
+    # line must SURVIVE in .main_bss (engine-referenced globals, stock-safe).
+    split_targets = [f"build/src/practice/{obj}" for obj in split_practice_objs]
 
-    if not targets:
+    if not (targets or split_targets):
         return content
 
     # The late_core block is contiguous and starts with the "/* practice_late_core"
@@ -444,6 +455,12 @@ def strip_late_core_objs_from_main(content,
 
     for target in targets:
         for section in [".text", ".data", ".rodata", ".bss"]:
+            line = f"        {target}.o({section});\n"
+            before_late = before_late.replace(line, "")
+            after_late = after_late.replace(line, "")
+
+    for target in split_targets:
+        for section in [".text", ".data", ".rodata"]:
             line = f"        {target}.o({section});\n"
             before_late = before_late.replace(line, "")
             after_late = after_late.replace(line, "")
@@ -853,6 +870,7 @@ def patch():
                     [f"build/lib/iodev/{o}.o" for o in PRACTICE_LATE_CORE_IODEV_OBJS]
                     + [f"build/lib/{o}.o" for o in PRACTICE_LATE_CORE_LIB_OBJS]
                     + [f"build/lib/sd_host/{o}.o" for o in PRACTICE_LATE_CORE_SD_HOST_OBJS]
+                    + [f"build/src/practice/{o}.o" for o in PRACTICE_LATE_CORE_SPLIT_PRACTICE_OBJS]
                     + [f"build/src/practice/{o}.o" for o in PRACTICE_LATE_CORE_PRACTICE_OBJS]
                 )
                 for obj_path in configured_late_objs:
@@ -882,6 +900,7 @@ def patch():
             PRACTICE_LATE_CORE_LIB_OBJS,
             PRACTICE_LATE_CORE_SD_HOST_OBJS,
             PRACTICE_LATE_CORE_PRACTICE_OBJS,
+            PRACTICE_LATE_CORE_SPLIT_PRACTICE_OBJS,
         )
         replacement = anchor_line + "\n\n" + segment_text
         new_content = content.replace(needle, replacement, 1)
@@ -903,6 +922,7 @@ def patch():
         PRACTICE_LATE_CORE_LIB_OBJS,
         PRACTICE_LATE_CORE_SD_HOST_OBJS,
         PRACTICE_LATE_CORE_PRACTICE_OBJS,
+        PRACTICE_LATE_CORE_SPLIT_PRACTICE_OBJS,
     )
 
     # Inject .practice_late_pak (LOAD) + .practice_late_pak_bss (NOLOAD)

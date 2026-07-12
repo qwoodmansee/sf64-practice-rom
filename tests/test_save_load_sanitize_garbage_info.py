@@ -30,6 +30,12 @@ will hang the harness rather than fail an assert -- loud either way.
 
 HW_FAULT_PTR = 0x2484BB18   # historical: the wild pointer from the HW dump
 GARBAGE_PTR = 0x80300001    # misaligned KSEG0: sanitizer-invalid (align check)
+# Aligned KSEG0 garbage INSIDE the fixed buffers segment (gZBuffer /
+# framebuffer land, >= 0x80281000). Alignment- and osMemSize-range-checks
+# both pass this; only the SNAPSHOT_PTR_CEILING bound rejects it. No
+# legitimate entity pointer targets the buffers segment (all engine
+# code/data and scene assets live below 0x80281000).
+ALIGNED_GARBAGE_PTR = 0x802F0010
 
 # SDL scancodes (match the m64p harness keymap / existing tests)
 SC_A_BUTTON = 27    # 'x'
@@ -128,22 +134,33 @@ def run(ctx):
     if not paused:
         return
 
-    # --- Find a live actor and poison its info.hitbox (engine is gated) ---
+    # --- Find live actors and poison their info.hitbox (engine is gated) ---
+    # Two poison flavors: misaligned KSEG0 (align check) and ALIGNED garbage
+    # inside the buffers segment (only the SNAPSHOT_PTR_CEILING bound catches
+    # it -- the 2026-07-11 review gap). Degrade to one victim if the level
+    # only has a single live actor right now.
     actors = S["gActors"]
-    victim = -1
-    for i in range(ACTOR_COUNT):
-        if _read_u8(h, actors + i * ACTOR_SIZE + OFF_OBJ_STATUS) != OBJ_FREE:
-            victim = i
-            break
-    ctx.assert_true(victim >= 0, "found a live actor to poison")
-    if victim < 0:
+    live = [i for i in range(ACTOR_COUNT)
+            if _read_u8(h, actors + i * ACTOR_SIZE + OFF_OBJ_STATUS) != OBJ_FREE]
+    ctx.assert_true(len(live) >= 1, "found a live actor to poison")
+    if not live:
         return
 
-    victim_addr = actors + victim * ACTOR_SIZE
-    orig_hitbox = h.read32(victim_addr + OFF_INFO_HITBOX)
-    h.write32(victim_addr + OFF_INFO_HITBOX, GARBAGE_PTR)
-    print(f"  poisoned gActors[{victim}].info.hitbox = {GARBAGE_PTR:#010x} "
-          f"(paused; orig {orig_hitbox:#010x})")
+    poisons = [(live[0], GARBAGE_PTR)]
+    if len(live) >= 2:
+        poisons.append((live[1], ALIGNED_GARBAGE_PTR))
+    else:
+        print("  only one live actor; skipping aligned-garbage victim")
+
+    victims = []   # (index, addr, orig_hitbox, poison)
+    for idx, poison in poisons:
+        addr = actors + idx * ACTOR_SIZE
+        orig = h.read32(addr + OFF_INFO_HITBOX)
+        h.write32(addr + OFF_INFO_HITBOX, poison)
+        victims.append((idx, addr, orig, poison))
+        print(f"  poisoned gActors[{idx}].info.hitbox = {poison:#010x} "
+              f"(paused; orig {orig:#010x})")
+    expected_bad = len(victims)
 
     # Baseline for the over-aggressive-sanitizer regression (2026-07-11:
     # segmented dList draws like 0x06024ac0 were being treated as garbage
@@ -164,13 +181,15 @@ def run(ctx):
 
     dirty = ctx.read_s32(S["gPracticeSnapDirtyAtSave"])
     print(f"  gPracticeSnapDirtyAtSave={dirty}")
-    ctx.assert_true(dirty >= 1, "save-side probe counted the poisoned actor")
+    ctx.assert_true(dirty >= expected_bad,
+                    f"save-side probe counted the poisoned actors ({dirty}/{expected_bad})")
 
-    # --- Heal the live actor with its ORIGINAL pointer, then unpause ---
+    # --- Heal the live actors with their ORIGINAL pointers, then unpause ---
     # (Healing with NULL is itself a wild deref for a live actor: the
     # engine reads info.hitbox[0] every frame and NULL is KUSEG -- that
     # wedged mupen on this test's first runs.)
-    h.write32(victim_addr + OFF_INFO_HITBOX, orig_hitbox)
+    for _, addr, orig, _poison in victims:
+        h.write32(addr + OFF_INFO_HITBOX, orig)
     _press(h, SC_DPAD_DOWN, hold=4, release=2)
     h.advance(30)
 
@@ -183,22 +202,26 @@ def run(ctx):
 
     sanitized = ctx.read_s32(S["gPracticeSnapSanitized"])
     print(f"  gPracticeSnapSanitized={sanitized}")
-    # EXACTLY 1: the poisoned actor and nothing else. The 2026-07-11
+    # EXACTLY the poisoned actors and nothing else. The 2026-07-11
     # regression sanitized every dList-drawn entity (segmented draw
-    # pointers), which shows up here as sanitized >> 1.
-    ctx.assert_eq(sanitized, 1, "sanitizer dropped ONLY the poisoned actor")
+    # pointers), which shows up here as sanitized >> expected_bad. A
+    # sanitizer missing the SNAPSHOT_PTR_CEILING bound shows up as
+    # sanitized < expected_bad (the aligned-garbage actor restored live).
+    ctx.assert_eq(sanitized, expected_bad,
+                  "sanitizer dropped ONLY the poisoned actors")
 
     scenery_after_load, _ = _live_scenery(h, S)
     print(f"  live scenery after load: {scenery_after_load}")
     ctx.assert_eq(scenery_after_load, scenery_at_save,
                   "dList-drawn scenery survived the load (segmented draw pointers are sane)")
 
-    # The poisoned slot must not be live with the garbage pointer.
-    status = _read_u8(h, victim_addr + OFF_OBJ_STATUS)
-    hitbox = h.read32(victim_addr + OFF_INFO_HITBOX)
-    print(f"  post-load gActors[{victim}]: status={status} hitbox={hitbox:#010x}")
-    ctx.assert_true(not (status != OBJ_FREE and hitbox == GARBAGE_PTR),
-                    "poisoned actor not restored live with garbage hitbox")
+    # The poisoned slots must not be live with their garbage pointers.
+    for idx, addr, _orig, poison in victims:
+        status = _read_u8(h, addr + OFF_OBJ_STATUS)
+        hitbox = h.read32(addr + OFF_INFO_HITBOX)
+        print(f"  post-load gActors[{idx}]: status={status} hitbox={hitbox:#010x}")
+        ctx.assert_true(not (status != OBJ_FREE and hitbox == poison),
+                        f"poisoned actor {idx} not restored live with garbage hitbox")
 
     # The state was saved while paused, so the load restores the paused
     # flag; unpause before the survival check so the engine actually runs.

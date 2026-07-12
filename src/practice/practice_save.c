@@ -253,6 +253,21 @@ s32 gPracticeSnapDirtyAtSave; /* entities with insane info at last slot save */
  * 2026-07-11 regression lesson: the first version of this check required
  * KSEG0 for all three fields, which silently freed every dList-drawn
  * entity (scenery/sprites/some actors) on every load. */
+
+/* Ceiling for CPU-dereferenced entity pointers: the fixed `buffers` segment
+ * (gDramStack, gZBuffer, framebuffers, gAudioHeap; see
+ * check_scene_stack_fits_buffers). Every legitimate target -- main
+ * .text/.data/.rodata, the floating overlay+scene-asset window, and
+ * SEGMENTED_TO_VIRTUAL results -- lives BELOW this line; nothing an entity's
+ * action/draw/hitbox may point at lives at or above it. This rejects aligned
+ * garbage into stacks/Z-buffer/framebuffers/Pak that a bare
+ * "inside osMemSize" bound would wave through. Do NOT re-derive info from
+ * gObjectInfo[obj.id] instead: the engine legitimately mutates info.action/
+ * draw/hitbox after spawn (fox_ka.c, fox_enmy2.c, 80+ hitbox sites), so an
+ * exact-match check would free live entities (same failure mode as the
+ * 2026-07-11 KSEG0-only regression above). */
+#define SNAPSHOT_PTR_CEILING 0x80281000U
+
 static bool Snapshot_PtrSane(const void *p, bool allowSegmented) {
     u32 v = (u32)(uintptr_t)p;
     u32 seg = v >> 24;
@@ -269,7 +284,7 @@ static bool Snapshot_PtrSane(const void *p, bool allowSegmented) {
     if (v < 0x80000000U) {
         return false;
     }
-    if (v >= (0x80000000U + (u32)osMemSize)) {
+    if (v >= SNAPSHOT_PTR_CEILING) {
         return false;
     }
     return true;

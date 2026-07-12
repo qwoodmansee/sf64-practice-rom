@@ -211,7 +211,23 @@ void Fault_DisplayDebugInfo(OSThread* thread) {
  * handler waits for a button code before drawing anything and never prints.
  * Runs post-crash only, so the "no osSyncPrintf during gameplay" rule does
  * not apply. Keep each line short: ISViewer_Write flushes at most 512 bytes
- * per call. */
+ * per call.
+ *
+ * This dump (and Fault_DumpAllThreads below) deliberately lives in main,
+ * not a Pak segment: crash/reset diagnostics must work on stock 4 MB and
+ * when the Pak segment load itself is what failed -- gating them behind
+ * Practice_PakReady() would blind them exactly when they're needed. The
+ * cost is ~1.2 KB of .text plus format strings, inside the ~22 KB
+ * worst-case scene-window margin enforced every build by
+ * check_scene_stack_fits_buffers.
+ *
+ * PI-bus safety: ISViewer_Write serializes against in-flight PI DMA via
+ * __osPiGetAccess, bounds its host-drain wait, and self-disables after
+ * repeated failures (see isviewer.c). Residual risk -- a fault inside the
+ * thread currently HOLDING PI access deadlocks the dump -- is shared by
+ * every osSyncPrintf call site and only costs the diagnostic itself; on
+ * the PRENMI path the hardware NMI proceeds regardless. Hardware-validated
+ * 2026-07-11 (diagnosed the Katt freeze RDP wedge). */
 void Fault_IsvDump(OSThread* thread) {
     __OSThreadContext* context = &thread->context;
     s16 causeIndex = CAUSE_INDEX(context->cause);
@@ -307,7 +323,16 @@ void Fault_DumpAllThreads(void) {
 
         if ((cur >= 0x400U) && (cur < (u32) osMemSize)) {
             u32 base = (cur - 0x180U) & ~0xFU;
-            u32* w = (u32*) (0x80000000U | base);
+            u32* w;
+
+            /* Keep the whole 0x200 window inside mapped RDRAM: DPC_CURRENT
+             * can sit near the top of RAM (framebuffers live there), and a
+             * read past osMemSize is a bus error that would turn this reset
+             * diagnostic into its own fault. */
+            if (base > ((u32) osMemSize - 0x200U)) {
+                base = (u32) osMemSize - 0x200U;
+            }
+            w = (u32*) (0x80000000U | base);
 
             for (i = 0; i < 0x200; i += 0x10) {
                 osSyncPrintf("[prenmi] fifo %x: %x %x %x %x\n", base + (u32) i, w[0], w[1], w[2], w[3]);

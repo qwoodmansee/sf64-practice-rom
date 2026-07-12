@@ -311,6 +311,16 @@ def check_fault_isv_dump():
     if entry is None or "Fault_IsvDump(faultedThread)" not in entry:
         error("Fault_ThreadEntry must call Fault_IsvDump(faultedThread) before waiting for the debug button code")
 
+    # The PRENMI RDP-FIFO hexdump reads a 0x200 window around DPC_CURRENT,
+    # which can sit near the top of RDRAM (framebuffers). Without clamping
+    # the window below osMemSize the reset diagnostic itself bus-errors.
+    dump = find_c_function(fault, "Fault_DumpAllThreads")
+    if dump is None:
+        error("sys_fault.c must define Fault_DumpAllThreads (PRENMI thread dump)")
+    elif not re.search(r"base\s*>\s*\(\(u32\)\s*osMemSize\s*-\s*0x200U?\)", dump):
+        error("Fault_DumpAllThreads must clamp the DPC FIFO hexdump window to "
+              "osMemSize - 0x200 (reads past mapped RDRAM bus-error on hardware)")
+
 
 def check_iodev_sc64():
     """SC64 iodev backend must preserve hard-won SC64 protocol invariants.
@@ -1038,6 +1048,17 @@ def check_snapshot_apply_sanitizes_entities():
     for counter in ("gPracticeSnapSanitized", "gPracticeSnapDirtyAtSave"):
         if not re.search(rf"^s32 {counter};", save, re.MULTILINE):
             error(f"practice_save.c must define test-visible counter {counter}")
+    # CPU-dereferenced entity pointers must be bounded by the fixed buffers
+    # line, not osMemSize: aligned garbage into stacks/gZBuffer/framebuffers/
+    # Pak passes an osMemSize bound and gets invoked/dereferenced by the
+    # engine after load. Every legit target lives below 0x80281000.
+    if not re.search(r"#define\s+SNAPSHOT_PTR_CEILING\s+0x80281000U?", save):
+        error("practice_save.c must define SNAPSHOT_PTR_CEILING 0x80281000 "
+              "(fixed buffers line; see check_scene_stack_fits_buffers)")
+    ptr_fn = find_c_function(save, "Snapshot_PtrSane")
+    if ptr_fn is None or "SNAPSHOT_PTR_CEILING" not in ptr_fn:
+        error("Snapshot_PtrSane must bound KSEG0 pointers by "
+              "SNAPSHOT_PTR_CEILING, not osMemSize")
 
 
 def check_snapshot_gplayers_use_cam_count():
@@ -1376,6 +1397,34 @@ def check_practice_pool_placement():
                 "practice_save_slotpool.o(.bss) (check_practice_pool_placement)"
             )
 
+    # practice_save.o is SPLIT: .text/.data/.rodata belong inside the
+    # .practice_late_core block (main ROM budget headroom), never in .main.
+    # Modeled in the patcher via PRACTICE_LATE_CORE_SPLIT_PRACTICE_OBJS; this
+    # guards against a regenerated .ld silently reverting the split.
+    lc_start = ld.find("/* practice_late_core:")
+    lc_end = ld.find("practice_late_core_VRAM_END = .;", lc_start) if lc_start >= 0 else -1
+    if lc_start >= 0 and lc_end >= 0:
+        lc_block = ld[lc_start:lc_end]
+        outside = ld[:lc_start] + ld[lc_end:]
+        for sec in (".text", ".data", ".rodata"):
+            line = f"build/src/practice/practice_save.o({sec});"
+            if line not in lc_block:
+                error(
+                    f"{linker}: practice_save.o({sec}) must be inside "
+                    ".practice_late_core (check_practice_pool_placement)"
+                )
+            if line in outside:
+                error(
+                    f"{linker}: practice_save.o({sec}) also listed outside "
+                    ".practice_late_core -- duplicate placement grows main "
+                    "(check_practice_pool_placement)"
+                )
+    else:
+        error(
+            f"{linker}: .practice_late_core block not found while checking "
+            "practice_save.o split placement (check_practice_pool_placement)"
+        )
+
 
 def check_practice_pool_no_overlay_overlap():
     """Phase 3: practice BSS sections must not overlap the overlay load window.
@@ -1712,7 +1761,12 @@ def check_late_pak_segment():
         )
 
     core_bss_end = sym("practice_late_core_BSS_END")
-    if core_bss_end is not None and vram < core_bss_end:
+    if core_bss_end is None:
+        error(
+            f"{map_path}: practice_late_core_BSS_END not found -- cannot "
+            "verify late_pak does not overlap late_core (check_late_pak_segment)"
+        )
+    elif vram < core_bss_end:
         error(
             f"{map_path}: practice_late_pak_VRAM 0x{vram:08X} overlaps "
             f"practice_late_core (BSS end 0x{core_bss_end:08X}) "
@@ -1730,6 +1784,14 @@ def check_late_pak_segment():
 
     core_rom_end = sym("practice_late_core_ROM_END")
     pak_rom_start = sym("practice_late_pak_ROM_START")
+    for name, val in (("practice_late_core_ROM_END", core_rom_end),
+                      ("practice_late_pak_ROM_START", pak_rom_start)):
+        if val is None:
+            error(
+                f"{map_path}: {name} not found -- cannot verify late_pak ROM "
+                "placement (SD timing invariant unenforced) "
+                "(check_late_pak_segment)"
+            )
     if core_rom_end is not None and pak_rom_start is not None and pak_rom_start < core_rom_end:
         error(
             f"{map_path}: practice_late_pak_ROM_START 0x{pak_rom_start:X} is "
@@ -2235,6 +2297,54 @@ def check_hit64_logo():
     h_src = read(INCLUDE_PRACTICE)
     if "Practice_Logo_Draw" not in h_src:
         error(f"{INCLUDE_PRACTICE}: Practice_Logo_Draw not declared")
+
+
+def check_input_display_safe_margins():
+    """Input-display panel must stay >=10px off the left/bottom screen edges.
+
+    Screen is 320x240. CRT overscan can clip several percent off any edge, so
+    HUD panels hugging x<10 or y>230 risk being cropped on real hardware even
+    though they render fine on emulators. See the 2026-07-11 practice-CLAUDE
+    scene-window writeup for the broader "hardware sees things emulators
+    don't" lesson; this is the display-geometry analog of that lesson.
+    """
+    disp_c = os.path.join(SRC_PRACTICE, "practice_input_display.c")
+    src = read(disp_c)
+
+    x_match = re.search(r"#define\s+INPUT_DISP_X\s+(-?\d+)", src)
+    y_match = re.search(r"#define\s+INPUT_DISP_Y\s+(-?\d+)", src)
+    if not x_match or not y_match:
+        error(f"{disp_c}: INPUT_DISP_X/INPUT_DISP_Y defines not found")
+        return
+
+    base_x = int(x_match.group(1))
+    base_y = int(y_match.group(1))
+
+    # Panel geometry from Practice_InputDisplay_Draw's Practice_DrawBox call:
+    # (baseX - 4, baseY - 14, 118, 38).
+    panel_left = base_x - 4
+    panel_right = panel_left + 118
+    panel_top = base_y - 14
+    panel_bottom = panel_top + 38
+
+    SAFE_MARGIN = 10
+    if panel_left < SAFE_MARGIN:
+        error(
+            f"{disp_c}: input display panel left edge at x={panel_left} is "
+            f"within {SAFE_MARGIN}px of the screen edge (overscan risk); "
+            "increase INPUT_DISP_X"
+        )
+    if (240 - panel_bottom) < SAFE_MARGIN:
+        error(
+            f"{disp_c}: input display panel bottom edge at y={panel_bottom} "
+            f"is within {SAFE_MARGIN}px of the screen edge (overscan risk); "
+            "decrease INPUT_DISP_Y"
+        )
+    if panel_top < 0 or panel_right > 320:
+        error(
+            f"{disp_c}: input display panel ({panel_left},{panel_top})-"
+            f"({panel_right},{panel_bottom}) exceeds the 320x240 screen bounds"
+        )
 
 
 def check_minimap_boss():
@@ -3004,6 +3114,7 @@ def main():
     check_macro_buf_section()
     check_cs_tap_slot_baseline()
     check_hit64_logo()
+    check_input_display_safe_margins()
     check_owl_logo()
     check_minimap_boss()
     check_xbld_load_zeros_entities()

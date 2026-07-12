@@ -17,21 +17,15 @@ bool Practice_PakReady(void) {
     return sPakSegmentsLoaded;
 }
 
-static void LoadCoreSegment(void) {
-    Lib_DmaRead(SEGMENT_ROM_START(practice_late_core),
-                SEGMENT_VRAM_START(practice_late_core),
-                SEGMENT_ROM_SIZE(practice_late_core));
-    bzero(SEGMENT_BSS_START(practice_late_core),
-          SEGMENT_BSS_SIZE(practice_late_core));
-}
-
-static void LoadPakSegment(void) {
-    Lib_DmaRead(SEGMENT_ROM_START(practice_late_pak),
-                SEGMENT_VRAM_START(practice_late_pak),
-                SEGMENT_ROM_SIZE(practice_late_pak));
-    bzero(SEGMENT_BSS_START(practice_late_pak),
-          SEGMENT_BSS_SIZE(practice_late_pak));
-}
+/* One definition of "load a practice segment": DMA the ROM image to its
+ * VRAM home, then zero its BSS. Token-pasted (SEGMENT_* macros take the
+ * segment name) so both segments cannot drift apart. */
+#define LOAD_PRACTICE_SEGMENT(name)                                     \
+    do {                                                                \
+        Lib_DmaRead(SEGMENT_ROM_START(name), SEGMENT_VRAM_START(name),  \
+                    SEGMENT_ROM_SIZE(name));                            \
+        bzero(SEGMENT_BSS_START(name), SEGMENT_BSS_SIZE(name));         \
+    } while (0)
 
 void Practice_Late_Init(void) {
     /* practice_late_core / practice_late_pak live at 0x80720000+ (Pak
@@ -41,8 +35,8 @@ void Practice_Late_Init(void) {
     if (osMemSize < 0x800000U) {
         return;
     }
-    LoadCoreSegment();
-    LoadPakSegment();
+    LOAD_PRACTICE_SEGMENT(practice_late_core);
+    LOAD_PRACTICE_SEGMENT(practice_late_pak);
     sPakSegmentsLoaded = true;
 
 #ifdef PRACTICE_LATE_PROBE
