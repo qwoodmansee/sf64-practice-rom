@@ -19,47 +19,35 @@ import sys
 
 LINKER_SCRIPT = "linker_scripts/us/rev1/starfox64.ld"
 
+# Main-resident practice objects ONLY. The 2026-07-11 scene-window/z-buffer
+# overlap (Katt freeze) proved main can hold at most ~43 KB of practice
+# code/data before big levels' asset stacks cross the fixed buffers segment
+# at 0x80281000 (see check_scene_stack_fits_buffers and
+# docs/superpowers/specs/2026-07-11-scene-window-zbuffer-overlap.md).
+# Everything that CAN live in Pak RAM lives in PRACTICE_LATE_PAK_* below;
+# what stays here is only:
+#   - the boot loader and the Practice_Init/Update/Draw dispatch gate,
+#   - objects whose symbols engine/sys code references unconditionally
+#     (practice_shim's hook globals + engine-called shims, the per-frame
+#     hook helpers in charge_shot/frame_advance/input/macro/cheats),
+#   - Pak-pinned-BSS twins (slotpool, macro_buf, macro_snap) whose tiny
+#     .text must stay reachable,
+#   - practice_icon_tex (hardware-proven 2026-07-09 to break SD save/load
+#     when co-located with the SD stack in .practice_late_core).
 PRACTICE_OBJS = [
     "practice_main",
-    "practice_draw",
+    "practice_shim",        # Hook globals + Pak-gated shims for engine-called fns
     "practice_input",
-    "practice_level",
-    "practice_state",
-    "practice_menu",
-    "practice_audio",
-    "practice_save",
+    "practice_save",        # .text is in .practice_late_core; .bss stays in main
     "practice_save_slotpool",  # Pak-only BSS; must follow practice_save for patch anchors
-    "practice_overlay",     # Phase 4: LevelId -> ovl_iN region map (Wave 1: stubs)
-    "practice_input_display",
-    "practice_hud",
     "practice_charge_shot",
     "practice_cheats",
-    "practice_hitbox",
-    "practice_minimap",
-    "practice_freecam",
-    # practice_icon_tex: hardware-confirmed 2026-07-09 that co-locating it in
-    # .practice_late_core with the SD/iodev objects (iodev_sc64.o etc.) broke
-    # SD save/load and reintroduced the Zoness crash on real hardware -- an
-    # A/B test (icon_tex in main vs. in late-core, everything else held
-    # constant) isolated it cleanly. Kept in main permanently; the
-    # PRACTICE_SD_TRACE gating + SD path string dedup below reclaimed far
-    # more ROM budget than icon_tex's ~700 bytes needed anyway (main_ROM_END
-    # landed ~297 KB under the 0xFC000 cap with icon_tex back in main).
     "practice_icon_tex",
-    # practice_logo_tex / practice_owl_tex moved to
-    # PRACTICE_LATE_CORE_PRACTICE_OBJS (2026-06-07): level-select-only
-    # textures were pushing the vanilla audio tables at the top of main past the
-    # IPL boot-staging boundary, freezing Macbeth on hardware. See
-    # check_boot_main_rom_budget.
-    "practice_test_fatfs",  # Phase 2: gated by IODEV_DIAG_FATFS, otherwise empty .o
-    "practice_sd",          # Phase 6: OSK + file browser rendering and glue
     "practice_frame_advance",  # Frame advance / pause feature
-    "practice_boss_test",   # Boss test stage: data table + launch API
     "practice_macro",       # Macro recording / playback logic
     "practice_macro_buf",   # Macro frame buffer -- Pak-only BSS in .practice_macro_pak
     "practice_macro_snap",  # Macro snapshot buffer -- Pak-only BSS in .practice_macro_snap_pak
-    "practice_enemy_health",  # Enemy/boss health HUD overlay
-    "late/loader",          # Phase 1: .practice_late_core loader (Practice_Late_Init)
+    "late/loader",          # Loads .practice_late_core + .practice_late_pak at boot
 ]
 
 # Phase 1: every lib/iodev/* file moved into .practice_late_core via
@@ -72,35 +60,24 @@ LIB_IODEV_OBJS = []
 # Phase 1: every lib/* (not under lib/iodev/) file moved into
 # .practice_late_core via PRACTICE_LATE_CORE_LIB_OBJS below. Empty for
 # the same reason as LIB_IODEV_OBJS.
-# NOTE: slot_manager and crc32 must stay in main ROM (not .practice_late_core)
-# because they're called during gameplay and .practice_late_core is not
-# accessible from gameplay on real hardware (regression fix from #17).
-LIB_TOP_OBJS = [
-    "slot_manager",  # Must stay in main ROM; called during gameplay save/load
-    "crc32",         # Used by slot_manager and practice code during gameplay
-]
+# HISTORY: slot_manager/crc32 lived here with a note that "late_core is not
+# accessible from gameplay on real hardware" (regression #17). That was
+# observed when late_core sat at 0x801F4000 -- which the 2026-07-11
+# scene-window analysis proved is INSIDE the floating level-asset window, so
+# level loads were DMA-ing over the segment. At a real Pak address (0x807xxxxx)
+# the limitation does not exist; both now live in PRACTICE_LATE_PAK_LIB_OBJS.
+LIB_TOP_OBJS = []
 
 # Phase 1: lib/sd_host/sd_host.o moved into .practice_late_core via
 # PRACTICE_LATE_CORE_SD_HOST_OBJS below. Empty for the same reason as
 # LIB_IODEV_OBJS.
 LIB_SD_HOST_OBJS = []
 
-# lib/fatfs/* objects. Anchored on the last LIB_SD_HOST entry; each subsequent
-# entry anchors on the previous LIB_FATFS entry. ff_libc supplies memset/
-# memcmp shims for FatFs (the project's libultra doesn't expose them).
-LIB_FATFS_OBJS = [
-    "ff",            # Phase 2: FatFs core
-    "ffunicode",     # Phase 2: FatFs Unicode tables (mostly empty for cp437)
-    "ff_libc",       # Phase 2: memset/memcmp shims for FatFs
-    "diskio",        # Phase 2: FatFs<->iodev glue
-]
-
-# lib/ui/* objects. Anchored on the last LIB_FATFS entry; each subsequent
-# entry anchors on the previous LIB_UI entry.
-LIB_UI_OBJS = [
-    "osk",          # Phase 6: on-screen keyboard state machine
-    "file_browser", # Phase 6: SD file picker state machine
-]
+# lib/fatfs/* and lib/ui/* moved into .practice_late_pak (2026-07-11 scene
+# window fix). Kept as empty lists for anchor-chain integrity, same as
+# LIB_IODEV_OBJS.
+LIB_FATFS_OBJS = []
+LIB_UI_OBJS = []
 
 # Files that live in the .practice_late_core LOAD segment (RAM 0x801F4000).
 # Loaded at boot by Practice_Late_Init via Lib_DmaRead. See spec at
@@ -134,6 +111,62 @@ PRACTICE_LATE_CORE_SD_HOST_OBJS = [
 PRACTICE_LATE_CORE_PRACTICE_OBJS = [
     "practice_logo_tex",  # HIT64 logo, level-select only (Practice_Logo_Draw, Pak-gated)
     "practice_owl_tex",   # owl, level-select only (Practice_Owl_Draw, Pak-gated)
+]
+# NOTE: the live canonical .ld ALSO carries practice_save.o(.text/.data/.rodata)
+# inside .practice_late_core (between sd_host.o and practice_logo_tex.o) from a
+# hand-applied PRACTICE_SAVE_TRACE budget fix; practice_save.o(.bss) stays in
+# .main_bss (engine references gPracticeActiveSlot etc.). It is deliberately
+# NOT listed here: listing it would make strip_late_core_objs_from_main remove
+# the main .bss line and park engine-referenced globals in Pak RAM. A fresh
+# `make extract` therefore loses the placement -- if you ever regenerate the
+# .ld from scratch, re-add practice_save.o's .text/.data/.rodata to the
+# late_core block by hand and keep its .bss in .main_bss.
+
+# ---------------------------------------------------------------------------
+# .practice_late_pak: the bulk of the practice feature code, resident in
+# Expansion Pak RAM at 0x80730000 (after .practice_late_core, which ends
+# ~0x8072b000; Pak ceiling 0x80800000). Added 2026-07-11: the scene asset
+# window floats after `main`, the buffers segment (gZBuffer et al.) is fixed
+# at 0x80281000, and vanilla leaves only ~43 KB of headroom -- so practice
+# code CANNOT live in main and there is NO free stock-RAM region (anything
+# in [ovl_i1_VRAM, 0x80281000) gets DMA'd over by big levels). See
+# docs/superpowers/specs/2026-07-11-scene-window-zbuffer-overlap.md.
+#
+# Everything here is Pak-only: loaded at boot by Practice_Late_Init, and
+# every entry point is reached only through the Practice_PakReady() gates in
+# practice_main.c / practice_shim.c. Engine/sys code must never reference
+# these objects' symbols directly -- engine-called functions get shims in
+# practice_shim.c (main), engine-written globals live there too.
+PRACTICE_LATE_PAK_PRACTICE_OBJS = [
+    "practice_draw",
+    "practice_level",
+    "practice_state",
+    "practice_menu",
+    "practice_audio",
+    "practice_overlay",
+    "practice_input_display",
+    "practice_hud",
+    "practice_hitbox",
+    "practice_minimap",
+    "practice_freecam",
+    "practice_test_fatfs",
+    "practice_sd",
+    "practice_boss_test",
+    "practice_enemy_health",
+]
+PRACTICE_LATE_PAK_LIB_OBJS = [
+    "slot_manager",
+    "crc32",
+]
+PRACTICE_LATE_PAK_FATFS_OBJS = [
+    "ff",
+    "ffunicode",
+    "ff_libc",
+    "diskio",
+]
+PRACTICE_LATE_PAK_UI_OBJS = [
+    "osk",
+    "file_browser",
 ]
 
 ANCHOR = "build/src/engine/fox_save.o"
@@ -255,6 +288,110 @@ def emit_practice_late_core_segment(iodev_objs, lib_objs, sd_host_objs,
     lines.append("    practice_late_core_ROM_END = __romPos;")
     lines.append("    practice_late_core_VRAM_END = .;")
     return "\n".join(lines) + "\n"
+
+
+def emit_practice_late_pak_segment(practice_objs, lib_objs, fatfs_objs, ui_objs):
+    """Emit the .practice_late_pak (LOAD) + .practice_late_pak_bss (NOLOAD)
+    block, mirroring emit_practice_late_core_segment's shape so the
+    DECLARE_SEGMENT macro chain and downstream tools treat both alike.
+
+    ROM-placed immediately AFTER .practice_late_core so late_core's ROM
+    offset and internal layout stay byte-identical (the SD stack's timing
+    is tuned against that layout; see CLAUDE.md).
+    """
+    lines = []
+
+    def emit_section(section):
+        for obj in practice_objs:
+            lines.append(f"        build/src/practice/{obj}.o({section});")
+        for obj in lib_objs:
+            lines.append(f"        build/lib/{obj}.o({section});")
+        for obj in fatfs_objs:
+            lines.append(f"        build/lib/fatfs/{obj}.o({section});")
+        for obj in ui_objs:
+            lines.append(f"        build/lib/ui/{obj}.o({section});")
+
+    lines.append("    /* practice_late_pak: bulk practice feature code (RAM 0x80730000, Pak")
+    lines.append("     * only). Added 2026-07-11: main can hold ~43 KB of practice code before")
+    lines.append("     * big levels' asset stacks cross the fixed buffers segment at 0x80281000")
+    lines.append("     * and get shredded by the Z-buffer (the Katt freeze). Loaded at boot by")
+    lines.append("     * Practice_Late_Init, gated by osMemSize + Practice_PakReady().")
+    lines.append("     */")
+    lines.append("    practice_late_pak_ROM_START = __romPos;")
+    lines.append("    practice_late_pak_VRAM = 0x80730000;")
+    lines.append("    .practice_late_pak 0x80730000 : AT(practice_late_pak_ROM_START) SUBALIGN(16)")
+    lines.append("    {")
+    lines.append("        FILL(0x00000000);")
+    lines.append("        practice_late_pak_VRAM_START = .;")
+    lines.append("        practice_late_pak_TEXT_START = .;")
+    emit_section(".text")
+    lines.append("        . = ALIGN(., 16);")
+    lines.append("        practice_late_pak_TEXT_END = .;")
+    lines.append("        practice_late_pak_DATA_START = .;")
+    emit_section(".data")
+    lines.append("        practice_late_pak_DATA_END = .;")
+    lines.append("        practice_late_pak_RODATA_START = .;")
+    emit_section(".rodata")
+    lines.append("        . = ALIGN(., 16);")
+    lines.append("        practice_late_pak_RODATA_END = .;")
+    lines.append("    }")
+    lines.append("    practice_late_pak_bss_VRAM = ADDR(.practice_late_pak_bss);")
+    lines.append("    .practice_late_pak_bss (NOLOAD) : SUBALIGN(16)")
+    lines.append("    {")
+    lines.append("        FILL(0x00000000);")
+    lines.append("        practice_late_pak_BSS_START = .;")
+    emit_section(".bss")
+    lines.append("        . = ALIGN(., 16);")
+    lines.append("        practice_late_pak_BSS_END = .;")
+    lines.append("        practice_late_pak_BSS_SIZE = ABSOLUTE(practice_late_pak_BSS_END - practice_late_pak_BSS_START);")
+    lines.append("    }")
+    lines.append("    __romPos += SIZEOF(.practice_late_pak);")
+    lines.append("    __romPos = ALIGN(__romPos, 16);")
+    lines.append("    . = ALIGN(., 16);")
+    lines.append("    practice_late_pak_ROM_END = __romPos;")
+    lines.append("    practice_late_pak_VRAM_END = .;")
+    return "\n".join(lines) + "\n"
+
+
+def strip_late_pak_objs_from_main(content, practice_objs, lib_objs,
+                                  fatfs_objs, ui_objs):
+    """Remove late_pak member object lines that appear OUTSIDE the
+    .practice_late_pak / _bss blocks (i.e. stale entries left in .main by
+    prior patcher runs). Mirror of strip_late_core_objs_from_main.
+    Idempotent."""
+    targets = []
+    for obj in practice_objs:
+        targets.append(f"build/src/practice/{obj}")
+    for obj in lib_objs:
+        targets.append(f"build/lib/{obj}")
+    for obj in fatfs_objs:
+        targets.append(f"build/lib/fatfs/{obj}")
+    for obj in ui_objs:
+        targets.append(f"build/lib/ui/{obj}")
+
+    if not targets:
+        return content
+
+    pak_start = content.find("/* practice_late_pak:")
+    if pak_start < 0:
+        return content
+    pak_end_marker = "practice_late_pak_VRAM_END = .;"
+    pak_end_pos = content.find(pak_end_marker, pak_start)
+    if pak_end_pos < 0:
+        return content
+    pak_end = pak_end_pos + len(pak_end_marker)
+
+    before_pak = content[:pak_start]
+    pak_block = content[pak_start:pak_end]
+    after_pak = content[pak_end:]
+
+    for target in targets:
+        for section in [".text", ".data", ".rodata", ".bss"]:
+            line = f"        {target}.o({section});\n"
+            before_pak = before_pak.replace(line, "")
+            after_pak = after_pak.replace(line, "")
+
+    return before_pak + pak_block + after_pak
 
 
 def strip_late_core_objs_from_main(content,
@@ -766,6 +903,86 @@ def patch():
         PRACTICE_LATE_CORE_LIB_OBJS,
         PRACTICE_LATE_CORE_SD_HOST_OBJS,
         PRACTICE_LATE_CORE_PRACTICE_OBJS,
+    )
+
+    # Inject .practice_late_pak (LOAD) + .practice_late_pak_bss (NOLOAD)
+    # immediately after the .practice_late_core block so ROM order is
+    # main -> ... -> late_core -> late_pak and late_core's ROM offset never
+    # moves (SD timing tuned against its layout; see CLAUDE.md). Same
+    # stale-block self-heal as late_core: wrong VRAM or missing configured
+    # member -> excise and re-emit.
+    PRACTICE_LATE_PAK_EXPECTED_VRAM = "practice_late_pak_VRAM = 0x80730000;"
+
+    def _find_late_pak_block(text):
+        start = text.find("/* practice_late_pak:")
+        if start < 0:
+            return None
+        end_marker = "practice_late_pak_VRAM_END = .;"
+        end_pos = text.find(end_marker, start)
+        if end_pos < 0:
+            return None
+        return text[start:end_pos + len(end_marker)]
+
+    late_pak_stale = False
+    if ".practice_late_pak" in content:
+        if PRACTICE_LATE_PAK_EXPECTED_VRAM not in content:
+            late_pak_stale = True
+        else:
+            existing_pak_block = _find_late_pak_block(content)
+            if existing_pak_block is None:
+                late_pak_stale = True
+            else:
+                configured_pak_objs = (
+                    [f"build/src/practice/{o}.o" for o in PRACTICE_LATE_PAK_PRACTICE_OBJS]
+                    + [f"build/lib/{o}.o" for o in PRACTICE_LATE_PAK_LIB_OBJS]
+                    + [f"build/lib/fatfs/{o}.o" for o in PRACTICE_LATE_PAK_FATFS_OBJS]
+                    + [f"build/lib/ui/{o}.o" for o in PRACTICE_LATE_PAK_UI_OBJS]
+                )
+                for obj_path in configured_pak_objs:
+                    if obj_path not in existing_pak_block:
+                        late_pak_stale = True
+                        break
+
+    if late_pak_stale:
+        stale_pak_block = re.compile(
+            r"[ \t]*/\* practice_late_pak:.*?practice_late_pak_VRAM_END = \.;\n",
+            re.DOTALL,
+        )
+        new_content, n = stale_pak_block.subn("", content, count=1)
+        if n != 1:
+            raise RuntimeError(
+                "Linker patcher: stale .practice_late_pak block detected but "
+                "could not be excised. Manual repair required."
+            )
+        content = new_content
+
+    if ".practice_late_pak" not in content:
+        anchor_marker = "    practice_late_core_VRAM_END = .;"
+        needle = anchor_marker + "\n"
+        pak_segment_text = emit_practice_late_pak_segment(
+            PRACTICE_LATE_PAK_PRACTICE_OBJS,
+            PRACTICE_LATE_PAK_LIB_OBJS,
+            PRACTICE_LATE_PAK_FATFS_OBJS,
+            PRACTICE_LATE_PAK_UI_OBJS,
+        )
+        replacement = anchor_marker + "\n\n" + pak_segment_text
+        new_content = content.replace(needle, replacement, 1)
+        if new_content == content:
+            raise RuntimeError(
+                "Linker patcher: practice_late_core_VRAM_END anchor not found "
+                "for .practice_late_pak injection."
+            )
+        content = new_content
+        inject_count += 1
+
+    # Strip late_pak members' stale lines from .main (they lived there before
+    # the 2026-07-11 migration). Idempotent.
+    content = strip_late_pak_objs_from_main(
+        content,
+        PRACTICE_LATE_PAK_PRACTICE_OBJS,
+        PRACTICE_LATE_PAK_LIB_OBJS,
+        PRACTICE_LATE_PAK_FATFS_OBJS,
+        PRACTICE_LATE_PAK_UI_OBJS,
     )
 
     dirty = (content != initial_content) or inject_count != 0

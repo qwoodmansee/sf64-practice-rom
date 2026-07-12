@@ -229,7 +229,7 @@ static void Hitbox_DrawSpawnZones(void) {
     }
 }
 
-void Practice_Hitbox_Draw(void) {
+void Practice_Hitbox_Draw_PakImpl(void) {
     s32 i;
     f32 dx, dy, dz, distSq;
     Player* player;

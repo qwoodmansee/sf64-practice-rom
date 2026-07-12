@@ -243,7 +243,7 @@ void Practice_Menu_OpenFrozen(void) {
     sStartHoldTimer = 0;
 }
 
-void Practice_Menu_Close(void) {
+void Practice_Menu_Close_PakImpl(void) {
     gPracticeMenuState = PMENU_CLOSED;
 }
 

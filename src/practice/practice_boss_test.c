@@ -2,7 +2,8 @@
 
 #ifdef PRACTICE_ROM
 
-bool gPracticeForceCarrier = false;
+/* gPracticeForceCarrier moved to practice_shim.c: engine hooks read it and
+ * this object is Pak-resident (.practice_late_pak). */
 
 typedef struct {
     const char* name;

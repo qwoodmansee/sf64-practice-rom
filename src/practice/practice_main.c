@@ -94,22 +94,23 @@ void Practice_Init(void) {
     }
     Lib_DebugFillScreen(0x803F);
 
-    Practice_Save_Init();
-    Lib_DebugFillScreen(0xF83F);
-    /* Practice_Sd_Init touches several .practice_late_core symbols
-     * (iodev_*, slot_manager_set_sd_scratch) and Practice_Save_ScratchBase()
-     * which lives in the Pak-only slot pool. Skip on stock 4MB. */
-    if (osMemSize >= 0x800000U) {
+    /* Everything below lives in .practice_late_core / .practice_late_pak
+     * (Expansion Pak RAM). Without a Pak those segments were never DMA'd
+     * and the addresses are unmapped -- Practice_PakReady() is false and
+     * the practice feature set stays off (Practice_Draw shows a notice). */
+    if (Practice_PakReady()) {
+        Practice_Save_Init();
+        Lib_DebugFillScreen(0xF83F);
         Practice_Sd_Init();
-    }
-    Lib_DebugFillScreen(0x07DF);
-    practice_overlay_prime_build_ids();
+        Lib_DebugFillScreen(0x07DF);
+        practice_overlay_prime_build_ids();
 
 #ifdef IODEV_DIAG_FATFS
-    /* Phase 2 hardware verification probe. Build with IODEV_DIAG_FATFS=1
-     * and follow docs/superpowers/plans/HW_VERIFY_phase2.md. */
-    Practice_TestFatfs();
+        /* Phase 2 hardware verification probe. Build with IODEV_DIAG_FATFS=1
+         * and follow docs/superpowers/plans/HW_VERIFY_phase2.md. */
+        Practice_TestFatfs();
 #endif
+    }
     Practice_Macro_Init();
 }
 
@@ -120,6 +121,11 @@ void Practice_Update(void) {
      * internally; this call-site check makes the dependency obvious here. */
     if (osMemSize >= 0x00800000U) {
         Practice_Macro_Update();
+    }
+
+    /* Everything below calls into .practice_late_pak / .practice_late_core. */
+    if (!Practice_PakReady()) {
+        return;
     }
 
     if (Practice_Sd_IsActive()) {
@@ -154,6 +160,16 @@ void Practice_Update(void) {
 }
 
 void Practice_Draw(void) {
+    /* All drawing code lives in .practice_late_pak. Without an Expansion
+     * Pak, say so with the engine's own text renderer (main-resident) and
+     * let the vanilla game run. */
+    if (!Practice_PakReady()) {
+        RCP_SetupDL(&gMasterDisp, SETUPDL_83);
+        gDPSetPrimColor(gMasterDisp++, 0, 0, 255, 96, 96, 255);
+        Graphics_DisplaySmallText(48, 8, 1.0f, 1.0f, "PRACTICE NEEDS EXPANSION PAK");
+        return;
+    }
+
     switch (gPracticeScreen) {
         case PSCREEN_LEVEL_SELECT:
             Practice_LevelSelect_Draw();
