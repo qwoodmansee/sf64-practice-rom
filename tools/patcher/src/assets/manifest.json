@@ -7,8 +7,8 @@
   },
   "patch": {
     "fileName": "sf64-practice-v0.7.0.bps",
-    "size": 3499812,
-    "sha256": "1333c884a0dfac0f1b0dd794ba97ac8646504f766915072ba7bfacc3edb552fc"
+    "size": 3484208,
+    "sha256": "48e28ef18193653e697226c51e0101a2d288a616be0f54fc144bca96d0d696d3"
   },
   "source": {
     "description": "Star Fox 64 US Rev 1.1",
@@ -19,8 +19,8 @@
   },
   "target": {
     "byteOrder": "z64",
-    "md5": "ebb17be84a9b2131a6d73ffc7acaeefd",
-    "sha256": "d6823bf9b71e7f144f6bd81606c4123b5b15106a122afa682a88d8cd2ae012f0",
-    "size": 15873360
+    "md5": "12a1a14a44d30edf8808e93e252786cb",
+    "sha256": "123e04278eb156452a24d437891335c604885e44c0472b06596af2115489312e",
+    "size": 15878800
   }
 }
