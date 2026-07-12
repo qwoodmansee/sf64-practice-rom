@@ -103,6 +103,29 @@ class _Patcher:
         return "did not raise RuntimeError"
 
 
+def _must_edit(text, old, new):
+    """Scenario constructor: replace `old` with `new`, requiring exactly one
+    occurrence. A plain .replace() that silently no-ops when the canonical
+    layout drifts (an object moves segments, leaves the split list, ...)
+    would quietly degrade its heal scenario into a vacuous idempotency
+    check -- green output, nothing tested. Fail the construction instead."""
+    n = text.count(old)
+    if n != 1:
+        raise RuntimeError(
+            f"scenario anchor occurs {n}x (expected exactly 1): {old!r}")
+    return text.replace(old, new, 1)
+
+
+def _edit_main_bss(text, old, new):
+    """Apply _must_edit within the .main_bss region only, splicing by index
+    so the edit can never land on a lookalike line elsewhere in the file."""
+    a = text.find(".main_bss")
+    b = text.find("main_VRAM_END", a)
+    if a < 0 or b < 0:
+        raise RuntimeError("scenario constructor: .main_bss region not found")
+    return text[:a] + _must_edit(text[a:b], old, new) + text[b:]
+
+
 def _derive_fresh(canonical):
     """Approximate a splat-fresh (unpatched) .ld by removing every practice
     injection from the canonical one: the five injected section blocks,
@@ -176,11 +199,15 @@ def run_all():
             # Stale block wrongly carrying the split object's .bss (engine
             # globals in unmapped Pak RAM on stock 4 MB), with the .main_bss
             # line also gone: heal must re-emit and re-home the .bss.
-            bad = canonical.replace(
+            bad = _must_edit(
+                canonical,
                 "        build/lib/sd_host/sd_host.o(.bss);\n",
-                "        build/lib/sd_host/sd_host.o(.bss);\n" + SAVE_BSS, 1)
-            mb = _main_bss(bad)
-            bad = bad.replace(mb, mb.replace(SAVE_BSS, ""), 1)
+                "        build/lib/sd_host/sd_host.o(.bss);\n" + SAVE_BSS)
+            bad = _edit_main_bss(bad, SAVE_BSS, "")
+            check("stale-bss: construction planted .bss in late_core",
+                  SAVE_BSS in _late_core(bad))
+            check("stale-bss: construction removed .bss from .main_bss",
+                  SAVE_BSS not in _main_bss(bad))
             out = pt.run(bad)
             check("stale-bss: late_core healed", _late_core(out) == c_core)
             check("stale-bss: .bss restored to .main_bss",
@@ -189,31 +216,34 @@ def run_all():
                   SAVE_BSS not in _late_core(out))
             check("stale-bss: late_pak untouched", _late_pak(out) == c_pak)
 
-            # Stale block missing one section line, each block.
-            bad = canonical.replace(
-                "        build/src/practice/practice_save.o(.rodata);\n", "", 1)
+            # Stale block missing one section line, each block. (practice_save
+            # is a split member -- its section lines are unique file-wide since
+            # .bss lives in .main_bss; ff.o is a full late_pak member.)
+            bad = _must_edit(
+                canonical,
+                "        build/src/practice/practice_save.o(.rodata);\n", "")
             out = pt.run(bad)
             check("stale-core-section: healed", _late_core(out) == c_core)
             check("stale-core-section: exactly one late_core block",
                   out.count(".practice_late_core 0x80720000 :") == 1)
             check("stale-core-section: result idempotent", pt.run(out) == out)
-            bad = canonical.replace(
-                "        build/lib/fatfs/ff.o(.rodata);\n", "", 1)
+            bad = _must_edit(
+                canonical, "        build/lib/fatfs/ff.o(.rodata);\n", "")
             out = pt.run(bad)
             check("stale-pak-section: healed", _late_pak(out) == c_pak)
 
             # Truncated / decapitated remnants: stop loudly, file untouched,
             # never a duplicate block next to the remnant.
             head = c_core[:c_core.find("practice_late_core_ROM_START")]
-            err = pt.expect_untouched_error(canonical.replace(c_core, head, 1))
+            err = pt.expect_untouched_error(_must_edit(canonical, c_core, head))
             check(f"truncated late_core stops loudly ({err})", err is None)
 
             head = c_pak[:c_pak.find("practice_late_pak_ROM_START")]
-            err = pt.expect_untouched_error(canonical.replace(c_pak, head, 1))
+            err = pt.expect_untouched_error(_must_edit(canonical, c_pak, head))
             check(f"truncated late_pak stops loudly ({err})", err is None)
 
             decap = c_core.split("\n", 1)[1]  # drop the comment-marker line
-            err = pt.expect_untouched_error(canonical.replace(c_core, decap, 1))
+            err = pt.expect_untouched_error(_must_edit(canonical, c_core, decap))
             check(f"decapitated late_core stops loudly ({err})", err is None)
     finally:
         p.LINKER_SCRIPT = saved_path
