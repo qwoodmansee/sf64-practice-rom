@@ -925,10 +925,16 @@ def patch():
                                                  full_late_objs,
                                                  split_late_objs)):
             late_core_stale = True
-    elif "practice_late_core_VRAM =" in content:
-        # Segment symbols present without a well-formed block (comment
-        # marker or VRAM_END anchor missing) -- let the excise below fail
-        # loudly rather than injecting a duplicate.
+    elif ("/* practice_late_core:" in content
+          or "practice_late_core_VRAM" in content
+          or ".practice_late_core 0x" in content):
+        # Block remnants present without a well-formed block: the comment
+        # marker, any practice_late_core_VRAM* symbol, or the section
+        # header survived a truncation that lost the other markers. Let
+        # the excise below fail loudly rather than injecting a second
+        # block next to the remnant (duplicate/ambiguous placement).
+        # (These probes cannot false-match the .main placement comments,
+        # which only say "moved to .practice_late_core".)
         late_core_stale = True
 
     if late_core_stale:
@@ -1016,7 +1022,11 @@ def patch():
                 or not _block_membership_current(existing_pak_block,
                                                  configured_pak_objs)):
             late_pak_stale = True
-    elif "practice_late_pak_VRAM =" in content:
+    elif ("/* practice_late_pak:" in content
+          or "practice_late_pak_VRAM" in content
+          or ".practice_late_pak 0x" in content):
+        # Same remnant detection as late_core above: stop loudly on a
+        # truncated block instead of emitting a duplicate.
         late_pak_stale = True
 
     if late_pak_stale:
